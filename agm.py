@@ -7,9 +7,9 @@ import os
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-from FlexQuery import FlexQuery
+from helpers.FlexQuery import FlexQuery
 
-from GoogleDrive import GoogleDrive
+from helpers.GoogleDrive import GoogleDrive
 
 class AGM:
     
@@ -25,8 +25,6 @@ class AGM:
 
         flexQuery = FlexQuery()
 
-        """# Fetch reports from IBKR"""
-
         # Get necessary data for request
         queryIds = ['732383', '734782', '742588']
         agmToken = "t=949768708375319238802665"
@@ -34,20 +32,12 @@ class AGM:
         print('Fetching Flex Query Service...')
 
         for queryId in queryIds:
-            file_name = queryId
-
             flex_query_df = flexQuery.getFlexQuery(agmToken, queryId)
 
             if not flex_query_df.empty:
-                print('')
+                print(flex_query_df)
             else:
                 print('Flex Query Empty')
-
-            """# Upload fetched reports to batch"""
-
-        # Get all files inside batch folder
-        path_batch = '/content/gdrive/Shareddrives/ETL/batch/'
-        batch_files = os.listdir(path_batch)
 
         # Get Batch folder ID
         etl_folder_info = self.Drive.getSharedDriveInfo('ETL')
@@ -70,22 +60,16 @@ class AGM:
                 'mimeType': 'text/csv'
             }
 
-            if (f not in batch_files):
+            # Create the new file in batch folder
+            created_file = (
+                self.Drive.service.files().create(
+                supportsAllDrives=True,
+                body=file_metadata,
+                media_body=media,
+                fields='id'
+                )).execute()
 
-                # Create the new file in batch folder
-                created_file = (
-                    self.Drive.service.files().create(
-                    supportsAllDrives=True,
-                    body=file_metadata,
-                    media_body=media,
-                    fields='id'
-                    )).execute()
-
-                print('Stored file in batch:', f)
-
-            else:
-
-                print('File already in batch. Try agian.')
+            print('Stored file in batch:', f)
 
 if __name__ == '__main__':
     AGM = AGM()
