@@ -1,31 +1,14 @@
-import pandas as pd
-import json
-import csv
 from datetime import datetime
-import os
-
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
 
 from helpers.FlexQuery import FlexQuery
-
 from helpers.GoogleDrive import GoogleDrive
-
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-
-import base64
-from email.message import EmailMessage
-import pandas as pd
-
-from datetime import datetime
-import pytz
 
 class AGM:
     
     def __init__(self):
 
         self.Drive = GoogleDrive()
+        print(self.Drive.service)
 
     def fetchReports(self, queryIds):
 

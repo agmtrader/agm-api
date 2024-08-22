@@ -1,14 +1,17 @@
 from googleapiclient.discovery import build
 
+from google.oauth2.credentials import Credentials
+
 class GoogleDrive:
   
-  def init(self):
+  def __init__(self):
     self.service = self.authenticateGoogleDrive()
-    return self.service
 
-  def authenticateGoogleDrive():
-    # Find a shared drive's info
-    service = build('drive', 'v3')
+  def authenticateGoogleDrive(self):
+
+    SCOPES = ["https://www.googleapis.com/auth/drive"]
+    creds = Credentials.from_authorized_user_file("creds/AAAuthedToken.json", SCOPES)
+    service = build('drive', 'v3', credentials=creds)
     return service
 
   def getSharedDriveInfo(self, drive_name):
