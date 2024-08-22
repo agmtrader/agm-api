@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
 
 import pandas as pd
@@ -13,9 +13,10 @@ app.config['CORS_HEADERS'] = 'Content-Type'
 
 AGM = AGM()
 
-@app.route('/', methods=['POST'])
+@app.route('/fetchReports', methods=['POST'])
 async def fetchReports():
-    response = AGM.runETL()
+    body = request.get_json(force=True)
+    response = AGM.fetchReports(queryIds=body['queryIds'])
     return response
 
 debug = True
