@@ -34,31 +34,13 @@ class TWSApp(EWrapper, EClient):
         pass
 
     """Price Data"""
-    def tickGeneric(self, reqId: int, tickType: int, value: float):
-        dataType = TickTypeEnum.to_str(tickType)
-        #print('Implied volatility:', {'ticker': Tickers(reqId).name, "impVolatilty": value})
             
     def tickPrice(self, reqId: int, tickType: int, price: float, attrib: TickAttrib):
         dataType = TickTypeEnum.to_str(tickType)
         if dataType == 'MARK_PRICE':
             print('Latest price:', {'latestPrice':price})
 
-    def tickOptionComputation(self, reqId: int, tickType: int, tickAttrib: int, impliedVol: float, delta: float, optPrice: float, pvDividend: float, gamma: float, vega: float, theta: float, undPrice: float):
-        dataType = TickTypeEnum.to_str(tickType)
-        print('Option data:', {'type':dataType, 'price':optPrice, 'underlying_px':undPrice,'greeks':{'delta':delta, 'gamma':gamma, 'vega':vega, 'theta':theta}, 'impliedVol':impliedVol})
-
-    def securityDefinitionOptionParameter(self, reqId: int, exchange: str, underlyingConId: int, tradingClass: str, multiplier: str, expirations: SetOfString, strikes: SetOfFloat):
-        print('Exchange option data:', {'reqId': reqId, "exchange":exchange, "underlyingConId": underlyingConId, "tradingclass": tradingClass, "multiplier": multiplier, "expirations":expirations, 'strikes':strikes})
-    
     """Executions"""
-    def openOrder(self, orderId: OrderId, contract: Contract, order: Order, orderState: OrderState):
-        print('Open order:', {'orderId':orderId, 'ticker':contract.symbol, 'type':order.orderType,  'orderState':orderState.status})
-
-    def openOrderEnd(self):
-        print("No more open orders")
-
-    def orderBound(self, orderId: int, apiClientId: int, apiOrderId: int):
-        print("Order Bound:.", "OrderId:", intMaxString(orderId), "ApiClientId:", intMaxString(apiClientId), "ApiOrderId:", intMaxString(apiOrderId))
 
     def orderStatus(self, orderId: OrderId, status: str, filled: Decimal, remaining: Decimal, avgFillPrice: float, permId: int, parentId: int, lastFillPrice: float, clientId: int, whyHeld: str, mktCapPrice: float):
         super().orderStatus(orderId, status, filled, remaining, avgFillPrice, permId, parentId, lastFillPrice, clientId, whyHeld, mktCapPrice)
@@ -81,7 +63,7 @@ class AGMAgent:
     def __init__(self):
 
         self.orderId = 1
-        self.currentAccount = "DU8492179"
+        self.currentAccount = "U2877774"
 
         # Initialize Auto Trader
         print(colored(f'Using account {self.currentAccount}', "blue"))
@@ -91,8 +73,7 @@ class AGMAgent:
         time.sleep(1)
 
         # Initialize variables
-        paper = True
-        self.params = {}
+        paper = False
 
         self.app = TWSApp(self)
         self.app.connect('127.0.0.1', 7497 if paper else 7496, clientId=0)
@@ -107,7 +88,7 @@ class AGMAgent:
         time.sleep(1)
 
         print('\n')
-        print(colored('Connection successful. Building Auto Trader...\n', "white"))
+        print(colored('Connection successful. Requesting data from IBKR...\n', "white"))
         time.sleep(1)
 
         # Subscribe to data
@@ -115,26 +96,15 @@ class AGMAgent:
         time.sleep(1)
 
         # Request positions
-        self.app.reqPositions()
+        #self.app.reqPositions()
         time.sleep(1)
 
-        # Request market data
-        marketDataType = MarketDataType.DELAYED.value
-        self.app.reqMarketDataType(marketDataType)
-        time.sleep(1)
-        for ticker in Tickers:
-            self.params[ticker.name] = {}
-            self.getMarketData(ticker.name)
-            time.sleep(1)
-
-        print('\n')
-        print(colored(f'Build successful.', "light_blue"))
+        print(colored(f'Fetching successful. Starting TWS API', "light_blue"))
         print('\n')
 
         time.sleep(1)
         while True:
             print(colored(f"Ping.", "red", attrs=["bold"]))
-            print('Params', self.params)
             time.sleep(1)
     
     def getMarketData(self, ticker):
@@ -146,6 +116,9 @@ class AGMAgent:
     def getExecutionUpdates(self):
         
         self.app.reqAutoOpenOrders(True)
+        execution = ExecutionFilter()
+        execution.acctCode = self.currentAccount
+        self.app.reqExecutions(self.orderId, execution)
         time.sleep(1)
 
 
@@ -158,14 +131,6 @@ class AGMAgent:
         contract.currency = "USD"
 
         return contract
-
-    def createOrder(self, action):
-        order = Order()
-        order.totalQuantity = 1
-        order.action = action
-        tif = 'DAY'
-        order.orderType = 'MKT'
-        return order
 
 Agent = AGMAgent()
 TWSApp(Agent)
