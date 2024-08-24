@@ -6,13 +6,11 @@ from io import BytesIO
 debug = True
 if debug:
     url = 'http://127.0.0.1:5000'
-else:
-    url = 'https://laserfocus-api.onrender.com'
 
 message = 'Enter a choice or press enter to exit: '
 print(
 """
-1. Fetch reports
+1. Generate ACOBO trade ticket
 """
 )
 choice = input(message)
@@ -20,12 +18,17 @@ print('\n')
 
 match choice:
     case '1':
-        flex_query_ids = input('Enter Flex Query Ids separated by commas: ')
-        flex_query_ids = flex_query_ids.split(',')
-        dictToSend = {'queryIds': flex_query_ids}
-        response = rq.post(url + '/fetchReports', json=dictToSend)
+        response = rq.post(url + '/fetchReports', json={'queryId':['986431']})
         print('Fetching reports. Please wait 1 minute.')
-        response = response.json()
+        tradeTicket = response.json()[0]
+
+        tradeData = rq.post(url + '/processTradeTicket', json={'indices':'0', 'tradeTicket':tradeTicket})
+        tradeData = tradeData.json()
+        print(tradeData)
+
+        response = rq.post(url + '/sendTradeTicketEmail', json={'tradeData':tradeData})
+
+
     case '':
         print('Exiting...')
     case _:

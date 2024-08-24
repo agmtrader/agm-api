@@ -16,7 +16,22 @@ AGM = AGM()
 @app.route('/fetchReports', methods=['POST'])
 async def fetchReports():
     body = request.get_json(force=True)
-    response = AGM.fetchReports(queryIds=body['queryIds'])
+    response = AGM.fetchReports(queryIds=body['queryId'])
+    return response
+
+@app.route('/processTradeTicket', methods=['POST'])
+async def processTradeTicket():
+    body = request.get_json(force=True)
+    indices = body['indices'].split(',')
+    indices = [int(index) for index in indices]
+    response = AGM.processTradeTicket(indices=indices, flex_query=body['tradeTicket'])
+    return response
+
+@app.route('/sendTradeTicketEmail', methods=['POST'])
+async def sendTradeTicketEmail():
+    body = request.get_json(force=True)
+    tradeData = body['tradeData']
+    response = AGM.sendTradeTicketEmail(tradeData=tradeData)
     return response
 
 debug = True

@@ -18,7 +18,7 @@ from datetime import datetime
 class FlexQuery:
 
   def __init__(self):
-     pass
+     return
 
   def getFlexQuery(self, token, queryId):
 
@@ -65,9 +65,8 @@ class FlexQuery:
     now = datetime.now()
     now = now.strftime('%Y%m%d%H%M%S')
 
-    csv_file_path = self.binaryXMLtoCSV(xml_data, queryId)
-
-    df = pd.read_csv(csv_file_path)
+    df = self.binaryXMLtoDF(xml_data)
+    print(df)
 
     return df
 
@@ -76,13 +75,26 @@ class FlexQuery:
       xml_data = binaryXMLData.decode('ascii')
       reader = csv.reader(xml_data.splitlines(), skipinitialspace=True)
 
-      with open('csv/' + file_name + '.csv',  'w') as out_file:
+      with open('backups/acobo/' + file_name + '.csv',  'w') as out_file:
           writer = csv.writer(out_file)
           for row in reader:
             if ('BOA' not in row) and ('BOF' not in row) and ('BOS' not in row) and ('EOS' not in row) and ('EOA' not in row) and ('EOF' not in row):
               writer.writerow(row)
 
-      return 'csv/' + file_name + '.csv'
+      return 'backups/acobo/' + file_name + '.csv'
+
+  def binaryXMLtoDF(self, binaryXMLData):
+      xml_data = binaryXMLData.decode('ascii')
+      reader = csv.reader(xml_data.splitlines(), skipinitialspace=True)
+
+      rows = []
+
+      for row in reader:
+        if ('BOA' not in row) and ('BOF' not in row) and ('BOS' not in row) and ('EOS' not in row) and ('EOA' not in row) and ('EOF' not in row):
+          rows.append(row)
+      
+      df = pd.DataFrame(rows[1:], columns=rows[0])
+      return df
 
 if __name__ == '__main__':
   print('')

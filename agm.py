@@ -1,15 +1,16 @@
 from datetime import datetime
 
+import pandas as pd
+
 from helpers.FlexQuery import FlexQuery
 from helpers.GoogleDrive import GoogleDrive
 
 class AGM:
     
     def __init__(self):
+        pass
 
-        self.Drive = GoogleDrive()
-        print(self.Drive.service)
-
+    # Returns a df of the flex query
     def fetchReports(self, queryIds):
 
         flexQuery = FlexQuery()
@@ -25,11 +26,119 @@ class AGM:
             flex_query_df = flexQuery.getFlexQuery(agmToken, queryId)
 
             if not flex_query_df.empty:
-                flex_queries.append(flex_query_df)
+                flex_queries.append(flex_query_df.to_dict(orient='records'))
             else:
                 print('Flex Query Empty')
         
         return flex_queries
+
+    # Returns a dictionary of trade data
+    def processTradeTicket(self, flex_query, indices):
+        
+        flex_query_df = pd.DataFrame(flex_query)
+
+        # Create dataframe with indexed rows only
+        df_indexed = flex_query_df.iloc[indices].copy()
+
+        # Get relevant conid
+
+        # Process each trade first
+        # Add Coupon, and Maturity
+
+        df_indexed['Coupon'] = 0.0  # Placeholder
+        df_indexed['Maturity'] = ''  # Placeholder
+
+        # Absolute value
+        df_indexed.loc[:,'Quantity'] = df_indexed['Quantity'].astype(float).abs()
+        df_indexed.loc[:,'AccruedInterest'] = df_indexed['AccruedInterest'].astype(float).abs()
+
+        df_indexed.loc[:,'NetCash'] = df_indexed['NetCash'].astype(float).abs()
+        df_indexed.loc[:,'Amount'] = df_indexed['NetCash'].astype(float).abs()
+
+        # Apply formulas to each trade
+        try:
+            df_indexed.loc[:,'Accrued (Days)'] = round((df_indexed['AccruedInterest'].astype(float)) / (df_indexed['Coupon'].astype(float)/100 * df_indexed['Quantity'].astype(float)) * 360).astype(float)
+        except:
+            df_indexed.loc[:,'Accrued (Days)'] = 0
+
+        df_indexed.loc[:,'TotalAmount'] = round(df_indexed['AccruedInterest'] + df_indexed['NetCash'], 2)
+        df_indexed.loc[:,'Price (including Commissions)'] = round((df_indexed['NetCash']/df_indexed['Quantity']) * 100, 4)
+
+        # Process a single consolidated trade confirmation
+
+        # TODO fix this
+        df_consolidated = df_indexed.iloc[0:1].copy()
+
+        if (len(df_indexed) > 1):
+
+            # Replace info with new info
+            df_consolidated.loc[:, 'Quantity'] = df_indexed['Quantity'].sum()
+
+            df_consolidated.loc[:, 'AccruedInterest'] = df_indexed['AccruedInterest'].sum()
+
+            df_consolidated.loc[:, 'NetCash'] = df_indexed['NetCash'].sum()
+            df_consolidated.loc[:, 'Amount'] = df_indexed['NetCash'].sum()
+
+            df_consolidated.loc[:, 'Price'] = df_indexed['Price'].sum()/len(df_indexed)
+
+            df_consolidated.loc[:, 'Exchange'] = ''
+
+            df_consolidated.loc[:,'Accrued (Days)'] = round((df_consolidated['AccruedInterest'].astype(float)) / (df_consolidated['Coupon'].astype(float)/100 * df_consolidated['Quantity'].astype(float)) * 360).astype(float)
+            df_consolidated.loc[:,'TotalAmount'] = round(df_consolidated['AccruedInterest'] + df_consolidated['NetCash'], 2)
+            df_consolidated.loc[:,'Price (including Commissions)'] = round((df_consolidated['NetCash']/df_consolidated['Quantity']) * 100, 4)
+
+        # Generate email message
+        trade_confirmation_columns = [
+        "ClientAccountID",
+        "AccountAlias",
+        "CurrencyPrimary",
+
+        "AssetClass",
+        "Symbol",
+        "Description",
+        "Conid",
+        "SecurityID",
+        "SecurityIDType",
+        "CUSIP",
+        "ISIN",
+        "FIGI",
+        "Issuer",
+        "Maturity",
+
+        "Buy/Sell",
+        "SettleDate",
+        "TradeDate",
+        "Exchange",
+        "Quantity",
+        "AccruedInterest",
+        "Accrued (Days)",
+        "Price",
+        "Price (including Commissions)",
+        "Amount",
+        "SettleDate",
+        "TradeDate",
+        "TotalAmount"
+        ]
+
+        # Fill dictionary with trade data
+        tradeData = {}
+
+        for key in trade_confirmation_columns:
+            tradeData[key] = df_consolidated.iloc[0][key]
+
+        return tradeData
+
+    def sendTradeTicketEmail(self, tradeData):
+        # Create message from dictionary
+        message = ''
+        skips = ['FIGI', 'CurrencyPrimary',' Maturity']
+
+        for key, value in tradeData.items():
+            message += str(str(key) + ': ' + str(value) + '\n')
+            if (key in skips):
+                message += '\n'
+
+        return {'message':message}
 
 if __name__ == '__main__':
     AGM = AGM()
