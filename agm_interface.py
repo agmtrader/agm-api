@@ -22,16 +22,18 @@ match choice:
         print('Fetching reports. Please wait 1 minute.')
         tradeTicket = response.json()[0]
 
-        tradeData = rq.post(url + '/processTradeTicket', json={'indices':'0', 'tradeTicket':tradeTicket})
-        tradeData = tradeData.json()
-        print(tradeData)
+        response = rq.post(url + '/processTradeTicket', json={'indices':'0', 'tradeTicket':tradeTicket})
+        tradeData = response.json()
 
-        response = rq.post(url + '/sendTradeTicketEmail', json={'tradeData':tradeData})
+        response = rq.post(url + '/generateTradeTicketEmail', json={'tradeData':tradeData})
+        message = response.json()['message']
+        print('Email message:\n', message)
 
+        response = rq.post(url + '/sendClientEmail', json={'message':message, 'clientEmail':'aa@agmtechnology.com', 'subject':'Test'})
+        print('Email sent.', response.json())
 
     case '':
         print('Exiting...')
+
     case _:
         print('Invalid choice')
-
-print('API Response:', response)

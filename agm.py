@@ -3,12 +3,12 @@ from datetime import datetime
 import pandas as pd
 
 from helpers.FlexQuery import FlexQuery
-from helpers.GoogleDrive import GoogleDrive
+from helpers.Google import Google
 
 class AGM:
     
     def __init__(self):
-        pass
+        self.Email = Google().Gmail
 
     # Returns a df of the flex query
     def fetchReports(self, queryIds):
@@ -61,12 +61,12 @@ class AGM:
         except:
             df_indexed.loc[:,'Accrued (Days)'] = 0
 
-        df_indexed.loc[:,'TotalAmount'] = round(df_indexed['AccruedInterest'] + df_indexed['NetCash'], 2)
-        df_indexed.loc[:,'Price (including Commissions)'] = round((df_indexed['NetCash']/df_indexed['Quantity']) * 100, 4)
+        df_indexed.loc[:,'TotalAmount'] = round(df_indexed['AccruedInterest'] + df_indexed['NetCash'], 2).astype(float)
+        df_indexed.loc[:,'Price (including Commissions)'] = round((df_indexed['NetCash']/df_indexed['Quantity']) * 100, 4).astype(float)
+
+        df_indexed['Price'] = df_indexed['Price'].astype(float)
 
         # Process a single consolidated trade confirmation
-
-        # TODO fix this
         df_consolidated = df_indexed.iloc[0:1].copy()
 
         if (len(df_indexed) > 1):
@@ -79,13 +79,13 @@ class AGM:
             df_consolidated.loc[:, 'NetCash'] = df_indexed['NetCash'].sum()
             df_consolidated.loc[:, 'Amount'] = df_indexed['NetCash'].sum()
 
-            df_consolidated.loc[:, 'Price'] = df_indexed['Price'].sum()/len(df_indexed)
+            df_consolidated.loc[:, 'Price'] = df_indexed['Price'].sum()/len(df_indexed).astype(float)
 
             df_consolidated.loc[:, 'Exchange'] = ''
 
             df_consolidated.loc[:,'Accrued (Days)'] = round((df_consolidated['AccruedInterest'].astype(float)) / (df_consolidated['Coupon'].astype(float)/100 * df_consolidated['Quantity'].astype(float)) * 360).astype(float)
-            df_consolidated.loc[:,'TotalAmount'] = round(df_consolidated['AccruedInterest'] + df_consolidated['NetCash'], 2)
-            df_consolidated.loc[:,'Price (including Commissions)'] = round((df_consolidated['NetCash']/df_consolidated['Quantity']) * 100, 4)
+            df_consolidated.loc[:,'TotalAmount'] = round(df_consolidated['AccruedInterest'] + df_consolidated['NetCash'], 2).astype(float)
+            df_consolidated.loc[:,'Price (including Commissions)'] = round((df_consolidated['NetCash']/df_consolidated['Quantity']) * 100, 4).astype(float)
 
         # Generate email message
         trade_confirmation_columns = [
@@ -123,12 +123,16 @@ class AGM:
         # Fill dictionary with trade data
         tradeData = {}
 
+        df_consolidated.fillna('', inplace=True)
+
         for key in trade_confirmation_columns:
             tradeData[key] = df_consolidated.iloc[0][key]
 
         return tradeData
 
-    def sendTradeTicketEmail(self, tradeData):
+    # Returns a string of the email message
+    def generateTradeTicketEmail(self, tradeData):
+
         # Create message from dictionary
         message = ''
         skips = ['FIGI', 'CurrencyPrimary',' Maturity']

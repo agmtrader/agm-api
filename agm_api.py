@@ -27,11 +27,20 @@ async def processTradeTicket():
     response = AGM.processTradeTicket(indices=indices, flex_query=body['tradeTicket'])
     return response
 
-@app.route('/sendTradeTicketEmail', methods=['POST'])
-async def sendTradeTicketEmail():
+@app.route('/generateTradeTicketEmail', methods=['POST'])
+async def generateTradeTicketEmail():
     body = request.get_json(force=True)
     tradeData = body['tradeData']
-    response = AGM.sendTradeTicketEmail(tradeData=tradeData)
+    response = AGM.generateTradeTicketEmail(tradeData=tradeData)
+    return response
+
+@app.route('/sendClientEmail', methods=['POST'])
+async def sendClientEmail():
+    body = request.get_json(force=True)
+    message = body['message']
+    clientEmail = body['clientEmail']
+    subject = body['subject']
+    response = AGM.Email.sendClientEmail(message, clientEmail, subject)
     return response
 
 debug = True
