@@ -9,7 +9,6 @@ import threading
 import time
 
 from agm import AGM
-from tws.dictionaries import Tickers, MarketDataType
 
 class TWSApp(EWrapper, EClient):
 

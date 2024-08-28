@@ -15,10 +15,10 @@ AGM = AGM()
 
 # Reports
 
-@app.route('/fetchReports', methods=['POST'])
-async def fetchReports():
+@app.route('/fetchFlexQueries', methods=['POST'])
+async def fetchFlexQueries():
     body = request.get_json(force=True)
-    response = AGM.fetchReports(queryIds=body['queryIds'])
+    response = AGM.fetchFlexQueries(queryIds=body['queryIds'])
     return response
 
 # Trade Ticket
@@ -44,30 +44,6 @@ async def sendClientEmail():
     clientEmail = body['clientEmail']
     subject = body['subject']
     response = AGM.Email.sendClientEmail(message, clientEmail, subject)
-    return response
-
-# Drive
-@app.route('/getSharedDriveInfo', methods=['POST'])
-async def getSharedDriveInfo():
-    body = request.get_json(force=True)
-    driveName = body['driveName']
-    response = AGM.Drive.getSharedDriveInfo(driveName)
-    return response
-
-@app.route('/getFolderInfo', methods=['POST'])
-async def getFolderInfo():
-    body = request.get_json(force=True)
-    parentId = body['parentId']
-    folderName = body['folderName']
-    response = AGM.Drive.getFolderInfo(parentId, folderName)
-    return response
-
-@app.route('/uploadCSVFiles', methods=['POST'])
-async def uploadCSVFiles():
-    body = request.get_json(force=True)
-    files = body['files']
-    parentId = body['parentId']
-    response = AGM.Drive.uploadCSVFiles(files, parentId)
     return response
 
 # Database

@@ -48,21 +48,6 @@ match choice:
         value = input('Enter the value: ')
         response = rq.post(url + '/queryDocumentsFromCollection', json={'path':path, 'key':key, 'value':value})
         print(response.json())
-        
-    case '4':
-
-        response = rq.post(url + '/fetchReports', json={'queryIds':['732383', '734782', '742588']})
-        print('Generating reports. Please wait.')
-        flex_queries = response.json()
-
-        response = rq.post(url + '/getSharedDriveInfo', json={'driveName':'ETL'})
-        etl_id = response.json()['id']
-
-        response = rq.post(url + '/getFolderInfo', json={'parentId':etl_id, 'folderName':'batch'})
-        batch_folder_id = response.json()['id']
-
-        response = rq.post(url + '/uploadCSVFiles', json={'files':flex_queries, 'parentId':batch_folder_id})
-        print(response.json())
 
     case '':
         print('Exiting...')

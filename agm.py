@@ -1,4 +1,4 @@
-from datetime import datetime
+import time
 
 import pandas as pd
 
@@ -11,27 +11,23 @@ class AGM:
         self.Email = Google().Gmail()
         self.Drive = Google().GoogleDrive()
         self.Database = Google().Firebase()
+        self.FlexQuery = FlexQuery()
         
     # Returns a df of the flex query
-    def fetchReports(self, queryIds):
-
-        flexQuery = FlexQuery()
+    def fetchFlexQueries(self, queryIds):
 
         # Get necessary data for request
         agmToken = "t=949768708375319238802665"
 
-        print('Fetching Flex Query Service...')
-
-        flex_queries = []
+        flex_queries = {}
 
         for index, queryId in enumerate(queryIds):
-            flex_query_df = flexQuery.getFlexQuery(agmToken, queryId)
+            flex_query_df = self.FlexQuery.getFlexQuery(agmToken, queryId)
+            flex_query_df['file_name'] = queryId
 
             if not flex_query_df.empty:
-                flex_query_dict = flex_query_df.to_dict(orient='records')[0]
-                flex_query_dict['name'] = queryId
-                flex_query_dict['index'] = index
-                flex_queries.append(flex_query_dict)
+                flex_query_dict = flex_query_df.to_dict(orient='records')
+                flex_queries[queryId] = flex_query_dict
             else:
                 print(f'Flex Query Empty for index {index}')
         

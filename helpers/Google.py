@@ -12,10 +12,6 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 
-from datetime import datetime
-import pytz
-from pandas.tseries.offsets import BDay
-
 import time
 
 import pandas as pd
@@ -50,7 +46,7 @@ class Google:
               supportsAllDrives=True,
               includeItemsFromAllDrives=True,
               q=f"name = '{folder_name}' and '{parent_id}' in parents",
-              fields="nextPageToken, files(id, name)",
+              fields="nextPageToken, files(id, name, parents)",
           ).execute())['files']
 
       return folders[0]
@@ -63,7 +59,7 @@ class Google:
               supportsAllDrives=True,
               includeItemsFromAllDrives=True,
               q=f"name = '{file_name}' and '{parent_id}' in parents",
-              fields="nextPageToken, files(id, name)",
+              fields="nextPageToken, files(id, name, parents)",
           ).execute())['files']
 
       return f[0]
@@ -76,17 +72,22 @@ class Google:
               supportsAllDrives=True,
               includeItemsFromAllDrives=True,
               q=f"'{parent_id}' in parents and trashed = false",
-              fields="nextPageToken, files(id, name)",
+              fields="nextPageToken, files(id, name, parents)",
           ).execute())['files']
       
       return files
 
     def uploadCSVFiles(self, files, parent_id):
 
-      # Upload each report
-      for f in files:
+      print(f'Uploading files: {list(files.keys())}')
+      print('\n')
 
-          df = pd.DataFrame([f])
+      # Upload each report
+      for file_name in list(files.keys()):
+          
+          print(file_name, files[file_name])
+
+          df = pd.DataFrame(files[file_name])
           df.to_csv('temp.csv', index=False)
 
           # Upload batch file contents to server for new file
@@ -94,7 +95,7 @@ class Google:
 
           # Create new file metadata with properties of original file and new destination
           file_metadata = {
-              'name': f['name'],
+              'name': file_name,
               'parents': [parent_id],
               'mimeType': 'text/csv'
           }
@@ -107,41 +108,19 @@ class Google:
               supportsAllDrives=True,
               body=file_metadata,
               media_body=media,
-              fields='id'
+              fields='id, name, parents'
             )).execute()
 
-          print('Stored file in batch:', f['name'])
+          print(f'Stored file: {created_file}')
+          print('\n')
 
       return {'status':'success'}
     
     def renameFiles(self, files):
 
-      # Get the current time in CST
-      cst = pytz.timezone('America/Costa_Rica')
-      cst_time = datetime.now(cst)
+      print('Renaming files: ', files)
 
-      today_date = cst_time.strftime('%Y%m%d%H%M')
-      yesterday_date = (cst_time - BDay(1)).strftime('%Y%m%d')
-      first_date = cst_time.replace(day=1).strftime('%Y%m%d')
-      
-      # Add new name to each file
       for f in files:
-        print(f)
-        match f['name']:
-          case '742588':
-            f['new_name'] = ('742588_' + yesterday_date + '.csv')
-          case '734782':
-              f['new_name'] = ('734782_' + yesterday_date + '.csv')
-          case '732383':
-              f['new_name'] = ('732383_' + first_date + '_' + yesterday_date + '.csv')
-          case 'clients':
-              f['new_name'] = ('clients ' + today_date + ' agmtech212' + '.xls')
-          case 'tasks_for_subaccounts':
-              f['new_name'] = ('tasks_for_subaccounts ' + today_date + ' agmtech212' + '.csv')
-          case 'ContactListSummary':
-              f['new_name'] = ('ContactListSummary ' + today_date + ' agmtech212' + '.csv')
-          case _:
-            f['new_name'] = f['name']
 
         file_metadata = {
           'name': f['new_name']
@@ -153,9 +132,24 @@ class Google:
             body=file_metadata,
             supportsAllDrives=True,
         )).execute()
+        
+      print('Done.')
+      return files
 
-      return {'status':'success'}
+    def moveFile(self, f, new_parent_id):
+        
+        print('Moving file:', f)
+        
+        # Use the update method to move the file
+        updated_file = self.service.files().update(
+            fileId=f['id'],
+            removeParents=f['parents'][0],
+            addParents=new_parent_id,
+            fields='id, parents, name',
+            supportsAllDrives=True
+        ).execute()
 
+        return updated_file
 
   class Gmail:
 
