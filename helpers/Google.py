@@ -64,6 +64,19 @@ class Google:
 
       return f[0]
     
+    def getFilesInFolder(self, parent_id):
+
+      files = (
+          self.service.files()
+          .list(
+              supportsAllDrives=True,
+              includeItemsFromAllDrives=True,
+              q=f"'{parent_id}' in parents and trashed = false",
+              fields="nextPageToken, files(id, name)",
+          ).execute())['files']
+      
+      return files
+
     def uploadCSVFiles(self, files, parent_id):
 
       # Upload each report
