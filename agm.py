@@ -8,8 +8,10 @@ from helpers.Google import Google
 class AGM:
     
     def __init__(self):
-        self.Email = Google().Gmail
-
+        self.Email = Google().Gmail()
+        self.Drive = Google().GoogleDrive()
+        self.Database = Google().Firebase()
+        
     # Returns a df of the flex query
     def fetchReports(self, queryIds):
 
@@ -22,13 +24,16 @@ class AGM:
 
         flex_queries = []
 
-        for queryId in queryIds:
+        for index, queryId in enumerate(queryIds):
             flex_query_df = flexQuery.getFlexQuery(agmToken, queryId)
 
             if not flex_query_df.empty:
-                flex_queries.append(flex_query_df.to_dict(orient='records'))
+                flex_query_dict = flex_query_df.to_dict(orient='records')[0]
+                flex_query_dict['name'] = queryId
+                flex_query_dict['index'] = index
+                flex_queries.append(flex_query_dict)
             else:
-                print('Flex Query Empty')
+                print(f'Flex Query Empty for index {index}')
         
         return flex_queries
 
@@ -143,6 +148,3 @@ class AGM:
                 message += '\n'
 
         return {'message':message}
-
-if __name__ == '__main__':
-    AGM = AGM()

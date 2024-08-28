@@ -1,0 +1,2 @@
+AccountAlias,AssetClass,Buy/Sell,ClientAccountID,CurrencyPrimary,Date,Description,Exchange,ExecID,Expense,ExpenseInBase,ExpenseIndicator,Expiration,FXRateToBase,Fee Type,LevelOfDetail,Model,Multiplier,Net,NetInBase,Proceeds,Put/Call,Quantity,Revenue,RevenueInBase,SecurityID,SettleDate,Strike,Symbol,TradeID,TradePrice,UnderlyingSecurityID,UnderlyingSymbol,index,name
+U3079071 Alter Castro,,,U3079071,CAD,,,,,-33.42,-24.3839004,Default,,,Commissions,SUMMARY,,,435.656,317.86333072,,,,469.076,342.24723112,,,,,,,,,0,732383

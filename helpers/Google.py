@@ -5,23 +5,26 @@ from google.oauth2.credentials import Credentials
 import base64
 from email.message import EmailMessage
 
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import firestore
+
+import time
+
+import pandas as pd
+
 class Google:
-
-  def __init__(self):
-    self.Drive = self.GoogleDrive()
-    self.Gmail = self.Gmail()
-
+  
   class GoogleDrive:
     
     def __init__(self):
-      self.service = self.authenticateGoogleDrive()
-
-    def authenticateGoogleDrive(self):
-
+      
       SCOPES = ["https://www.googleapis.com/auth/drive"]
       creds = Credentials.from_authorized_user_file("creds/AAAuthedToken.json", SCOPES)
-      service = build('drive', 'v3', credentials=creds)
-      return service
+      self.service = build('drive', 'v3', credentials=creds)
 
     def getSharedDriveInfo(self, drive_name):
 
@@ -61,6 +64,39 @@ class Google:
 
       return f[0]
     
+    def uploadCSVFiles(self, files, parent_id):
+
+      # Upload each report
+      for f in files:
+
+          df = pd.DataFrame([f])
+          df.to_csv('temp.csv', index=False)
+
+          # Upload batch file contents to server for new file
+          media = MediaFileUpload('temp.csv', mimetype='text/csv')
+
+          # Create new file metadata with properties of original file and new destination
+          file_metadata = {
+              'name': f['name'],
+              'parents': [parent_id],
+              'mimeType': 'text/csv'
+          }
+
+          # Check if file already exists
+
+          # Create the new file in batch folder
+          created_file = (
+              self.service.files().create(
+              supportsAllDrives=True,
+              body=file_metadata,
+              media_body=media,
+              fields='id'
+            )).execute()
+
+          print('Stored file in batch:', f['name'])
+
+      return {'status':'success'}
+
   class Gmail:
 
     def __init__(self):
@@ -92,3 +128,72 @@ class Google:
       )
 
       return {'emailId':send_message["id"]}
+
+  class Firebase:
+
+    def __init__(self):
+
+      # Authenticate Firebase Credentials
+      cred = credentials.Certificate('creds/FirebaseAdminSDK.json')
+
+      try:
+        firebase_admin.initialize_app(cred)
+        print('Initialized Firebase connection.')
+      except:
+        print('App already exists.')
+
+      # Secure connection to Firestore
+      self.db = firestore.client()
+
+    def getDocumentsFromCollection(self, path):
+
+      # Read database
+      users_ref = self.db.collection(path)
+      docs = users_ref.stream()
+
+      # Load data into dataframe
+      clients = []
+
+      for doc in docs:
+        clients.append(doc.to_dict())
+
+      return clients
+    
+    def addDataframeToCollection(self, df, path):
+
+      for index, row in df.iterrows():
+        info_dict = row.to_dict()
+        self.addDocument(info_dict, path, f'{index}')
+
+        if index == 0:
+          print(f'Adding new collection.')
+
+        elif index % 100 == 0:
+          print(f'Added {index} documents.')
+
+      print(f'Added {index} total documents.')
+
+    def queryDocumentsFromCollection(self, path, key, value):
+
+      # Read database
+      ref = self.db.collection(path)
+
+      # Create a query against the collection
+      query = ref.where(filter=firestore.FieldFilter(key, "==", value))
+
+      return query.stream()
+    
+    # TODO work on dependencies
+    def deleteDocumentsFromCollection(self, path):
+      users_ref = self.db.collection(path)
+      docs = users_ref.stream()
+
+      counter = 0
+      for index, doc in enumerate(docs):
+        self.db.collection(path).document(doc.id).delete()
+        if index % 100 == 0:
+          print(f'Deleted {index} documents.')
+    
+    def addDocument(self, data, path, id):
+
+      self.db.collection(path).document(id).set(data)

@@ -13,12 +13,15 @@ app.config['CORS_HEADERS'] = 'Content-Type'
 
 AGM = AGM()
 
+# Reports
+
 @app.route('/fetchReports', methods=['POST'])
 async def fetchReports():
     body = request.get_json(force=True)
-    response = AGM.fetchReports(queryIds=body['queryId'])
+    response = AGM.fetchReports(queryIds=body['queryIds'])
     return response
 
+# Trade Ticket
 @app.route('/processTradeTicket', methods=['POST'])
 async def processTradeTicket():
     body = request.get_json(force=True)
@@ -43,10 +46,48 @@ async def sendClientEmail():
     response = AGM.Email.sendClientEmail(message, clientEmail, subject)
     return response
 
-debug = True
-if debug:
+# Drive
+@app.route('/getSharedDriveInfo', methods=['POST'])
+async def getSharedDriveInfo():
+    body = request.get_json(force=True)
+    driveName = body['driveName']
+    response = AGM.Drive.getSharedDriveInfo(driveName)
+    return response
 
-    if __name__ == "__main__": 
-        app.run(debug=True)
-        
-    print('Service live.')
+@app.route('/getFolderInfo', methods=['POST'])
+async def getFolderInfo():
+    body = request.get_json(force=True)
+    parentId = body['parentId']
+    folderName = body['folderName']
+    response = AGM.Drive.getFolderInfo(parentId, folderName)
+    return response
+
+@app.route('/uploadCSVFiles', methods=['POST'])
+async def uploadCSVFiles():
+    body = request.get_json(force=True)
+    files = body['files']
+    parentId = body['parentId']
+    response = AGM.Drive.uploadCSVFiles(files, parentId)
+    return response
+
+# Database
+@app.route('/getDocumentsFromCollection', methods=['POST'])
+async def getDocumentsFromCollection():
+    body = request.get_json(force=True)
+    path = body['path']
+    response = AGM.Database.getDocumentsFromCollection(path)
+    return response
+
+@app.route('/queryDocumentsFromCollection', methods=['POST'])
+async def queryDocumentsFromCollection():
+    body = request.get_json(force=True)
+    path = body['path']
+    key = body['key']
+    value = body['value']
+    response = AGM.Database.queryDocumentsFromCollection(path, key, value)
+    return response
+
+
+if __name__ == '__main__':
+    debug = True
+    app.run(debug=debug)
