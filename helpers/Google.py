@@ -12,6 +12,10 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 
+from datetime import datetime
+import pytz
+from pandas.tseries.offsets import BDay
+
 import time
 
 import pandas as pd
@@ -110,11 +114,46 @@ class Google:
 
       return {'status':'success'}
     
-    def renameFiles(self, new_name, file_id):
-      file_metadata = {
-        'name': new_name
-      }
-      self.service.files().update(fileId=file_id, body=file_metadata).execute()
+    def renameFiles(self, files):
+
+      # Get the current time in CST
+      cst = pytz.timezone('America/Costa_Rica')
+      cst_time = datetime.now(cst)
+
+      today_date = cst_time.strftime('%Y%m%d%H%M')
+      yesterday_date = (cst_time - BDay(1)).strftime('%Y%m%d')
+      first_date = cst_time.replace(day=1).strftime('%Y%m%d')
+      
+      # Add new name to each file
+      for f in files:
+        print(f)
+        match f['name']:
+          case '742588':
+            f['new_name'] = ('742588_' + yesterday_date + '.csv')
+          case '734782':
+              f['new_name'] = ('734782_' + yesterday_date + '.csv')
+          case '732383':
+              f['new_name'] = ('732383_' + first_date + '_' + yesterday_date + '.csv')
+          case 'clients':
+              f['new_name'] = ('clients ' + today_date + ' agmtech212' + '.xls')
+          case 'tasks_for_subaccounts':
+              f['new_name'] = ('tasks_for_subaccounts ' + today_date + ' agmtech212' + '.csv')
+          case 'ContactListSummary':
+              f['new_name'] = ('ContactListSummary ' + today_date + ' agmtech212' + '.csv')
+          case _:
+            f['new_name'] = f['name']
+
+        file_metadata = {
+          'name': f['new_name']
+        }
+
+        renamedFile = (
+          self.service.files().update(
+            fileId=f['id'],
+            body=file_metadata,
+            supportsAllDrives=True,
+        )).execute()
+
       return {'status':'success'}
 
 

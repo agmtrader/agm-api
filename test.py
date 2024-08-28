@@ -1,18 +1,4 @@
-from datetime import datetime
-import pytz
-
-from pandas.tseries.offsets import BDay
-
 from agm import AGM
-
-cst = pytz.timezone('America/Costa_Rica')
-
-# Get the current time in CST
-cst_time = datetime.now(cst)
-
-today_date = cst_time.strftime('%Y%m%d%H%M')
-yesterday_date = (cst_time - BDay(1)).strftime('%Y%m%d')
-first_date = cst_time.replace(day=1).strftime('%Y%m%d')
 
 Drive = AGM().Drive
 
@@ -22,257 +8,217 @@ batch_folder_id = Drive.getFolderInfo(etl_id, 'batch')['id']
 
 # Use Google API to get all files inside batch folder
 files = Drive.getFilesInFolder(batch_folder_id)
-#files = [{'id': file['id']} for file in files]
+print(files)
 
-# Loop through each file
-for f in files:
-  print(f)
-  # Rename directly using Google API
+# Rename files in batch folder
+status = Drive.renameFiles(files)
+print(status)
 
+import os
+
+# Get all files inside batch folder
+path_batch = '/content/gdrive/Shareddrives/ETL/batch/'
+
+batch_files = os.listdir(path_batch)
+#print('Batch files: ', batch_files)
+
+# Get ETL folder ID
 """
-for batch_file in batch_files:
+etl_folder_info = get_shared_drive_info('ETL')
+#print(etl_folder_info)
 
-  renamed_file = ''
+# Get batch and backups folder ID
+batch_folder_info = get_folder_info(etl_folder_info['id'], 'batch')
+#print(batch_folder_info)
 
-  if '742588' in batch_file:
+# Get all files inside batch folder
+batch_files_info = []
+for f in batch_files:
+  file_info = get_file_info(batch_folder_info['id'], f)
+  batch_files_info.append(file_info)
 
-    renamed_file = ('742588_' + yesterday_date + '.csv')
+print('Files in batch: ', batch_files_info)
 
-  elif '734782' in batch_file:
+# Get IDs for each folder inside Queries
 
-    renamed_file = ('734782_' + yesterday_date + '.csv')
+# Get current year to backup files to correct folder
 
-  elif '732383' in batch_file:
+current_year = datetime.date.today().year
 
-    renamed_file = ('732383_' + first_date + '_' + yesterday_date + '.csv')
+# Get Interactive Brokers Shared Drive ID
 
-  elif 'clients' in batch_file:
+ibkr_folder_info = get_shared_drive_info('Interactive Brokers')
+#print(ibkr_folder_info)
 
-    # Check if file sheet name contains I285407 (Panama ID)
+# Get Queries folder ID
 
-    if (pd.ExcelFile(path_batch + batch_file).sheet_names[0] == 'I285407'):
-      renamed_file = ('clients ' + today_date + ' herca757' + '.xls')
-    else:
-      renamed_file = ('clients ' + today_date + ' agmtech212' + '.xls')
+queries_folder_info = get_folder_info(ibkr_folder_info['id'], 'Queries')
+#print(queries_folder_info)
 
-  elif 'tasks_for_subaccounts' in batch_file:
+# Get Parent Contact List Summary folder ID
 
-    # Check if file contains account with Account Number F10740574 (BVI)
+parent_subaccounts_folder_info = get_folder_info(queries_folder_info['id'], 'Tasks For Sub Accounts')
+#print(parent_subaccounts_folder_info)
 
-    df1 = pd.read_csv(path_batch + batch_file)
+# Get this year's Contact List Summary folder ID
 
-    if (len(df1[df1['IB Account ID'] == 'F10740574']) == 0):
-      renamed_file = ('tasks_for_subaccounts ' + today_date + ' herca757' + '.csv')
-    else:
-      renamed_file = ('tasks_for_subaccounts ' + today_date + ' agmtech212' + '.csv')
+subaccounts_folder_info = get_folder_info(parent_subaccounts_folder_info['id'], f'tasks_for_sub_accounts_{current_year}')
+#print(subaccounts_folder_info)
 
-  elif 'ContactListSummary' in batch_file:
+# Get Parent Contact List Summary folder ID
 
-    # Check if file contains Andres Aguilar Account
-    # Find new fix
+parent_contacts_folder_info = get_folder_info(queries_folder_info['id'], 'Contact List Summary')
+#print(parent_contacts_folder_info)
 
-    df1 = pd.read_csv(path_batch + batch_file)
+# Get this year's Contact List Summary folder ID
 
-    if (len(df1[df1['Account Number'] == 'U13926601']) != 0):
-      renamed_file = ('ContactListSummary ' + today_date + ' agmtech212' + '.csv')
-    else:
-      renamed_file = ('ContactListSummary ' + today_date + ' herca757' + '.csv')
+contacts_folder_info = get_folder_info(parent_contacts_folder_info['id'], f'Contact List Summary {current_year}')
+#print(contacts_folder_info)
 
-  # RTD
+# Get Parent RTD folder ID
+
+parent_rtd_folder_info = get_folder_info(queries_folder_info['id'], 'RTD')
+#print(parent_rtd_folder_info)
+
+# Get this year's RTD folder ID
+
+rtd_folder_info = get_folder_info(parent_rtd_folder_info['id'], f'RTD_{current_year}')
+#print(rtd_folder_info)
+
+# Get Clients folder ID
+
+clients_folder_info = get_folder_info(queries_folder_info['id'], 'Clients')
+#print(clients_folder_info)
+
+# Get Open Positions folder ID
+
+open_positions_folder_info = get_folder_info(queries_folder_info['id'], 'Open Positions')
+#print(open_positions_folder_info)
+
+# Get this year's 742588 folder ID
+
+parent_742588_folder_info = get_folder_info(open_positions_folder_info['id'], '742588')
+#print(parent_742588_folder_info)
+
+# Get this year's 742588 folder ID
+
+folder_742588_info = get_folder_info(parent_742588_folder_info['id'], f'742588_{current_year}')
+#print(folder_742588_info)
+
+# Get NAV in Base folder ID
+
+nav_folder_info = get_folder_info(queries_folder_info['id'], 'NAV in Base')
+#print(nav_folder_info)
+
+# Get this year's 734782 folder ID
+
+parent_734782_folder_info = get_folder_info(nav_folder_info['id'], '734782')
+#print(parent_734782_folder_info)
+
+# Get this year's 734782 folder ID
+
+folder_734782_info = get_folder_info(parent_734782_folder_info['id'], f'734782_{current_year}')
+#print(folder_734782_info)
+
+# Get Client Fees folder ID
+client_fees_folder_info = get_folder_info(queries_folder_info['id'], 'Client Fees')
+#print(client_fees_folder_info)
+
+# Get this year's 734782 folder ID
+parent_732383_folder_info = get_folder_info(client_fees_folder_info['id'], '732383')
+#print(parent_732383_folder_info)
+
+# Get this year's 734782 folder ID
+folder_732383_info = get_folder_info(parent_732383_folder_info['id'], f'732383_{current_year}')
+#print(folder_732383_info)
+
+# Move files to respective folder in backups
+
+# Get info from one file in batch
+
+for batch_file in batch_files_info:
+
+  f = (
+      service.files()
+      .get(
+          supportsAllDrives=True,
+          fileId = batch_file['id']
+      )).execute()
+
+  # Upload batch file contents to server for new file
+
+  media = MediaFileUpload(path_batch + f['name'], mimetype=f['mimeType'])
+
+  # Set new file's destination
+
+  if 'clients' in f['name']:
+
+    file_parent = clients_folder_info['id']
+
+  elif 'ContactListSummary' in f['name']:
+
+    file_parent = contacts_folder_info['id']
+
+  elif 'tasks_for_subaccounts' in f['name']:
+
+    file_parent = subaccounts_folder_info['id']
+
+  elif 'RTD' in f['name']:
+
+    file_parent = rtd_folder_info['id']
+
+  elif '742588' in f['name']:
+
+    file_parent = folder_742588_info['id']
+
+  elif '734782' in f['name']:
+
+    file_parent = folder_734782_info['id']
+
+  elif '732383' in f['name']:
+
+    file_parent = folder_732383_info['id']
+
   else:
-    renamed_file = batch_file
 
-  renamed_files.append(renamed_file)
-  os.rename(path_batch + batch_file, path_batch + renamed_file)
+    file_parent = etl_folder_info['id']
 
-print('Original files: ', batch_files)
-print('Renamed files: ', renamed_files)
+  # Create new file metadata with properties of original file and new destination
 
-import os
-import shutil
+  file_metadata = {
+    'name': f['name'],
+    'parents': [file_parent],
+    'mimeType': f['mimeType']
+  }
 
-from datetime import datetime
-import pytz
+  # Create the new file in its respective folder
 
-from pandas.tseries.offsets import BDay
-import pandas as pd
+  if True: # fix
+    created_file = (
+        service.files().create(
+          supportsAllDrives=True,
+          body=file_metadata,
+          media_body=media,
+          fields='id'
+        )).execute()
 
-import gspread
-from google.colab import drive
-from google.auth import default
+    print('Created file in backups:', f['name'])
 
-# Mount GoogleDrive
-#from google.colab import drive
-#drive.mount('/content/gdrive')
-
-# Authorize Google Sheets
-creds, _ = default()
-gs = gspread.authorize(creds)
-
-cst = pytz.timezone('America/Costa_Rica')
-
-# Get the current time in CST
-cst_time = datetime.now(cst)
-
-today_date = cst_time.strftime('%Y%m%d%H%M')
-yesterday_date = (cst_time - BDay(1)).strftime('%Y%m%d')
-first_date = cst_time.replace(day=1).strftime('%Y%m%d')
-
-path_batch = '/content/gdrive/Shareddrives/ETL/batch/'
-batch_files = os.listdir(path_batch)
-renamed_files = []
-
-df1 = pd.DataFrame()
-
-for batch_file in batch_files:
-
-  renamed_file = ''
-
-  if '742588' in batch_file:
-
-    renamed_file = ('742588_' + yesterday_date + '.csv')
-
-  elif '734782' in batch_file:
-
-    renamed_file = ('734782_' + yesterday_date + '.csv')
-
-  elif '732383' in batch_file:
-
-    renamed_file = ('732383_' + first_date + '_' + yesterday_date + '.csv')
-
-  elif 'clients' in batch_file:
-
-    # Check if file sheet name contains I285407 (Panama ID)
-
-    if (pd.ExcelFile(path_batch + batch_file).sheet_names[0] == 'I285407'):
-      renamed_file = ('clients ' + today_date + ' herca757' + '.xls')
-    else:
-      renamed_file = ('clients ' + today_date + ' agmtech212' + '.xls')
-
-  elif 'tasks_for_subaccounts' in batch_file:
-
-    # Check if file contains account with Account Number F10740574 (BVI)
-
-    df1 = pd.read_csv(path_batch + batch_file)
-
-    if (len(df1[df1['IB Account ID'] == 'F10740574']) == 0):
-      renamed_file = ('tasks_for_subaccounts ' + today_date + ' herca757' + '.csv')
-    else:
-      renamed_file = ('tasks_for_subaccounts ' + today_date + ' agmtech212' + '.csv')
-
-  elif 'ContactListSummary' in batch_file:
-
-    # Check if file contains Andres Aguilar Account
-    # Find new fix
-
-    df1 = pd.read_csv(path_batch + batch_file)
-
-    if (len(df1[df1['Account Number'] == 'U13926601']) != 0):
-      renamed_file = ('ContactListSummary ' + today_date + ' agmtech212' + '.csv')
-    else:
-      renamed_file = ('ContactListSummary ' + today_date + ' herca757' + '.csv')
-
-  # RTD
   else:
-    renamed_file = batch_file
 
-  renamed_files.append(renamed_file)
-  os.rename(path_batch + batch_file, path_batch + renamed_file)
+    print('File already exists in backups.')
 
-print('Original files: ', batch_files)
-print('Renamed files: ', renamed_files)
+    # Delete files from batch | fix permissions
 
-import os
-import shutil
+body_value = {'trashed': True}
 
-from datetime import datetime
-import pytz
+for batch_file in batch_files_info:
 
-from pandas.tseries.offsets import BDay
-import pandas as pd
+    response = (service.files().update(
+      supportsAllDrives=True,
+      fileId = batch_file['id'],
+      body = body_value
+    )).execute()
 
-import gspread
-from google.colab import drive
-from google.auth import default
-
-# Mount GoogleDrive
-#from google.colab import drive
-#drive.mount('/content/gdrive')
-
-# Authorize Google Sheets
-creds, _ = default()
-gs = gspread.authorize(creds)
-
-cst = pytz.timezone('America/Costa_Rica')
-
-# Get the current time in CST
-cst_time = datetime.now(cst)
-
-today_date = cst_time.strftime('%Y%m%d%H%M')
-yesterday_date = (cst_time - BDay(1)).strftime('%Y%m%d')
-first_date = cst_time.replace(day=1).strftime('%Y%m%d')
-
-path_batch = '/content/gdrive/Shareddrives/ETL/batch/'
-batch_files = os.listdir(path_batch)
-renamed_files = []
-
-df1 = pd.DataFrame()
-
-for batch_file in batch_files:
-
-  renamed_file = ''
-
-  if '742588' in batch_file:
-
-    renamed_file = ('742588_' + yesterday_date + '.csv')
-
-  elif '734782' in batch_file:
-
-    renamed_file = ('734782_' + yesterday_date + '.csv')
-
-  elif '732383' in batch_file:
-
-    renamed_file = ('732383_' + first_date + '_' + yesterday_date + '.csv')
-
-  elif 'clients' in batch_file:
-
-    # Check if file sheet name contains I285407 (Panama ID)
-
-    if (pd.ExcelFile(path_batch + batch_file).sheet_names[0] == 'I285407'):
-      renamed_file = ('clients ' + today_date + ' herca757' + '.xls')
-    else:
-      renamed_file = ('clients ' + today_date + ' agmtech212' + '.xls')
-
-  elif 'tasks_for_subaccounts' in batch_file:
-
-    # Check if file contains account with Account Number F10740574 (BVI)
-
-    df1 = pd.read_csv(path_batch + batch_file)
-
-    if (len(df1[df1['IB Account ID'] == 'F10740574']) == 0):
-      renamed_file = ('tasks_for_subaccounts ' + today_date + ' herca757' + '.csv')
-    else:
-      renamed_file = ('tasks_for_subaccounts ' + today_date + ' agmtech212' + '.csv')
-
-  elif 'ContactListSummary' in batch_file:
-
-    # Check if file contains Andres Aguilar Account
-    # Find new fix
-
-    df1 = pd.read_csv(path_batch + batch_file)
-
-    if (len(df1[df1['Account Number'] == 'U13926601']) != 0):
-      renamed_file = ('ContactListSummary ' + today_date + ' agmtech212' + '.csv')
-    else:
-      renamed_file = ('ContactListSummary ' + today_date + ' herca757' + '.csv')
-
-  # RTD
-  else:
-    renamed_file = batch_file
-
-  renamed_files.append(renamed_file)
-  os.rename(path_batch + batch_file, path_batch + renamed_file)
-
-print('Original files: ', batch_files)
-print('Renamed files: ', renamed_files)
+print('Cleared batch.')
 """

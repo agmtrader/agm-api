@@ -14,7 +14,11 @@ import yfinance as yf
 
 import pandas as pd
 
+from agm import AGM
+
 from dictionaries import Tickers, MarketDataType
+
+AGM = AGM()
 
 class TWSApp(EWrapper, EClient):
 
@@ -49,7 +53,10 @@ class TWSApp(EWrapper, EClient):
         print('Completed order:', {orderId, contract, order, orderState})
 
     def execDetails(self, reqId: int, contract: Contract, execution: Execution):
-        print('Execution:', {'conid':contract.conId, "symbol": contract.symbol, "type":contract.secType, "currency": contract.currency, 'account': execution.acctNumber, 'time':execution.time, 'side':execution.side, 'avgPrice':execution.avgPrice})
+        execution = {'conid':contract.conId, "symbol": contract.symbol, "type":contract.secType, "currency": contract.currency, 'account': execution.acctNumber, 'time':execution.time, 'side':execution.side, 'avgPrice':execution.avgPrice}
+        print('Execution:', execution)
+        # If execution belongs to self.currentAccount AND
+        # If execution is not in params['executions'], push to array
 
     def commissionReport(self, commissionReport: CommissionReport):
         print('Commission:', {"commission": commissionReport})
@@ -63,9 +70,11 @@ class AGMAgent:
     def __init__(self):
 
         self.orderId = 1
-        self.currentAccount = "U2877774"
+        self.currentAccount = "U7906488"
 
-        # Initialize Auto Trader
+        self.params = {'executions':[]}
+
+        # Initialize AGM Agent
         print(colored(f'Using account {self.currentAccount}', "blue"))
 
         # Intialize an IBKR API connection
@@ -104,8 +113,9 @@ class AGMAgent:
 
         time.sleep(1)
         while True:
+            # Create a function to push to database using API sending params['executions'] to db/temp/executions
             print(colored(f"Ping.", "red", attrs=["bold"]))
-            time.sleep(1)
+            time.sleep(500)
     
     def getMarketData(self, ticker):
 
@@ -121,7 +131,6 @@ class AGMAgent:
         self.app.reqExecutions(self.orderId, execution)
         time.sleep(1)
 
-
     def createContract(self, ticker, secType, strike=None, right=None, date=None):
 
         contract = Contract()
@@ -133,4 +142,3 @@ class AGMAgent:
         return contract
 
 Agent = AGMAgent()
-TWSApp(Agent)
