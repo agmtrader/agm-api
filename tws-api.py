@@ -5,20 +5,11 @@ from ibapi.order import Order
 
 from termcolor import colored
 
-from datetime import datetime
-
 import threading
 import time
 
-import yfinance as yf
-
-import pandas as pd
-
 from agm import AGM
-
-from dictionaries import Tickers, MarketDataType
-
-AGM = AGM()
+from tws.dictionaries import Tickers, MarketDataType
 
 class TWSApp(EWrapper, EClient):
 
@@ -141,4 +132,5 @@ class AGMAgent:
 
         return contract
 
+AGM = AGM()
 Agent = AGMAgent()
