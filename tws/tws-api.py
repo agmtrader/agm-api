@@ -55,8 +55,8 @@ class TWSApp(EWrapper, EClient):
     def execDetails(self, reqId: int, contract: Contract, execution: Execution):
         execution = {'conid':contract.conId, "symbol": contract.symbol, "type":contract.secType, "currency": contract.currency, 'account': execution.acctNumber, 'time':execution.time, 'side':execution.side, 'avgPrice':execution.avgPrice}
         print('Execution:', execution)
-        # If execution belongs to self.currentAccount AND
-        # If execution is not in params['executions'], push to array
+        # TODO If execution belongs to self.currentAccount AND
+        # TODO If execution is not in params['executions'], push to array
 
     def commissionReport(self, commissionReport: CommissionReport):
         print('Commission:', {"commission": commissionReport})
@@ -113,7 +113,7 @@ class AGMAgent:
 
         time.sleep(1)
         while True:
-            # Create a function to push to database using API sending params['executions'] to db/temp/executions
+            # TODO Create a function to push to database using API sending params['executions'] to db/temp/executions
             print(colored(f"Ping.", "red", attrs=["bold"]))
             time.sleep(500)
     
