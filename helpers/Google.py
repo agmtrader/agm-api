@@ -109,6 +109,14 @@ class Google:
           print('Stored file in batch:', f['name'])
 
       return {'status':'success'}
+    
+    def renameFiles(self, new_name, file_id):
+      file_metadata = {
+        'name': new_name
+      }
+      self.service.files().update(fileId=file_id, body=file_metadata).execute()
+      return {'status':'success'}
+
 
   class Gmail:
 
