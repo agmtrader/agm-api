@@ -48,6 +48,11 @@ match choice:
         value = input('Enter the value: ')
         response = rq.post(url + '/queryDocumentsFromCollection', json={'path':path, 'key':key, 'value':value})
         print(response.json())
+    
+    case '4':
+
+        response = rq.post(url + '/ETL')
+        print(response.json())
 
     case '':
         print('Exiting...')

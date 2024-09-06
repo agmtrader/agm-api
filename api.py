@@ -3,7 +3,7 @@ from flask_cors import CORS
 
 import pandas as pd
 
-from agm import AGM
+from agm import AGM, Reporting
 
 import requests as rq
 
@@ -20,6 +20,11 @@ async def fetchFlexQueries():
     body = request.get_json(force=True)
     response = AGM.fetchFlexQueries(queryIds=body['queryIds'])
     return response
+
+@app.route('/ETL', methods=['POST'])
+async def ETL():
+    Reporting().ETL()
+    return {'status': 'success'}
 
 # Trade Ticket
 @app.route('/processTradeTicket', methods=['POST'])
