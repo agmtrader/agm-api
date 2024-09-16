@@ -8,8 +8,6 @@ from termcolor import colored
 import threading
 import time
 
-from agm import AGM
-
 class TWSApp(EWrapper, EClient):
 
     def __init__(self, AutoTrader):
