@@ -1,34 +1,36 @@
-from googleapiclient.discovery import build
-
-from google.oauth2.credentials import Credentials
-
+import os
+import io
 import base64
-from email.message import EmailMessage
-
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+import pandas as pd
 
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 
-import pandas as pd
-
 from app.helpers.logger import logger
 from app.helpers.response import Response
 
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from google.oauth2.credentials import Credentials
+from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload, MediaIoBaseUpload
+
+from email.message import EmailMessage
 
 class GoogleDrive:
   
   def __init__(self):
+    logger.info('Initializing GoogleDrive connection.')
     try:
       SCOPES = ["https://www.googleapis.com/auth/drive"]
       creds = Credentials.from_authorized_user_file("app/creds/AAAuthedToken.json", SCOPES)
       self.service = build('drive', 'v3', credentials=creds)
+      logger.success('Initialized GoogleDrive connection.')
     except Exception as e:
       logger.error(f"Error initializing GoogleDrive: {str(e)}")
 
   def getSharedDriveInfo(self, drive_name):
+    logger.info(f'Getting shared drive info for drive: {drive_name}')
     try:
       shared_drive = (
         self.service.drives()
@@ -38,13 +40,16 @@ class GoogleDrive:
       ).execute())['drives']
 
       if not shared_drive:
+        logger.error(f"No shared drive found with name '{drive_name}'")
         return Response.error(f"No shared drive found with name '{drive_name}'")
+      logger.success(f"Shared drive found with name '{drive_name}'")
       return Response.success(shared_drive[0])
     except Exception as e:
+      logger.error(f"Error retrieving shared drive info: {str(e)}")
       return Response.error(f"Error retrieving shared drive info: {str(e)}")
 
-  # Find folder's info using a parent's folder ID
   def getFolderInfo(self, parent_id, folder_name):
+    logger.info(f'Getting folder info for folder: {folder_name} in parent: {parent_id}')
     try:
       folders = (
           self.service.files()
@@ -56,13 +61,16 @@ class GoogleDrive:
           ).execute())['files']
 
       if not folders:
+        logger.error(f"No folder found with name '{folder_name}' in parent '{parent_id}'")
         return Response.error(f"No folder found with name '{folder_name}' in parent '{parent_id}'")
+      logger.success(f"Folder found with name '{folder_name}' in parent '{parent_id}'")
       return Response.success(folders[0])
     except Exception as e:
+      logger.error(f"Error retrieving folder info: {str(e)}")
       return Response.error(f"Error retrieving folder info: {str(e)}")
 
-  # Find file's info using its file name and it's parent folder
   def getFileInfo(self, parent_id, file_name):
+    logger.info(f'Getting file info for file: {file_name} in parent: {parent_id}')
     try:
       f = (
           self.service.files()
@@ -74,12 +82,16 @@ class GoogleDrive:
           ).execute())['files']
 
       if not f:
+        logger.error(f"No file found with name '{file_name}' in parent '{parent_id}'")
         return Response.error(f"No file found with name '{file_name}' in parent '{parent_id}'")
+      logger.success(f"File found with name '{file_name}' in parent '{parent_id}'")
       return Response.success(f[0])
     except Exception as e:
+      logger.error(f"Error retrieving file info: {str(e)}")
       return Response.error(f"Error retrieving file info: {str(e)}")
   
   def getFilesInFolder(self, parent_id):
+    logger.info(f'Getting files in folder: {parent_id}')
     try:
       files = (
           self.service.files()
@@ -87,21 +99,23 @@ class GoogleDrive:
               supportsAllDrives=True,
               includeItemsFromAllDrives=True,
               q=f"'{parent_id}' in parents and trashed = false",
-              fields="nextPageToken, files(id, name, parents)",
+              fields="nextPageToken, files(id, name, parents, mimeType, size, modifiedTime, createdTime)",
           ).execute())['files']
       
+      logger.success(f'Files found in folder: {parent_id}')
       return Response.success(files)
     except Exception as e:
+      logger.error(f"Error retrieving files in folder: {str(e)}")
       return Response.error(f"Error retrieving files in folder: {str(e)}")
 
   def uploadCSVFiles(self, files, parent_id):
+    logger.info(f'Uploading files: {list(files.keys())} to folder: {parent_id}')
     try:
-      logger.info(f'Uploading files: {list(files.keys())}')
 
       for file_name in list(files.keys()):
         df = pd.DataFrame(files[file_name])
+        
         df.to_csv('cache/temp.csv', index=False)
-
         media = MediaFileUpload('cache/temp.csv', mimetype='text/csv')
 
         file_metadata = {
@@ -120,15 +134,19 @@ class GoogleDrive:
 
         logger.success(f'Stored file: {created_file}')
 
+      logger.success('Files uploaded successfully')
       return Response.success('Files uploaded successfully')
+    
     except Exception as e:
+      logger.error(f"Error uploading CSV files: {str(e)}")
       return Response.error(f"Error uploading CSV files: {str(e)}")
   
   def renameFiles(self, files):
     try:
-      print('Renaming files: ', files)
 
       for f in files:
+
+        logger.info(f'Renaming file: {f}')
         file_metadata = {
           'name': f['new_name']
         }
@@ -139,15 +157,18 @@ class GoogleDrive:
             body=file_metadata,
             supportsAllDrives=True,
         )).execute()
+
+        logger.success(f'Successfully renamed file: {f}')
         
-      print('Done.')
+      logger.success('Successfully renamed files.')
       return Response.success(files)
     except Exception as e:
+      logger.error(f"Error renaming files: {str(e)}")
       return Response.error(f"Error renaming files: {str(e)}")
 
   def moveFile(self, f, new_parent_id):
+    logger.info(f'Moving file: {f} to new parent: {new_parent_id}')
     try:
-      print('Moving file:', f)
       
       updated_file = self.service.files().update(
           fileId=f['id'],
@@ -157,16 +178,112 @@ class GoogleDrive:
           supportsAllDrives=True
       ).execute()
 
+      logger.success(f'Successfully moved file: {f}')
       return Response.success(updated_file)
     except Exception as e:
+      logger.error(f"Error moving file: {str(e)}")
       return Response.error(f"Error moving file: {str(e)}")
+
+  def createFolder(self, folderName, parentFolderId):
+
+      logger.info(f"Creating folder: {folderName} in folder: {parentFolderId}")
+
+      fileMetadata = {
+          'name': folderName,
+          'mimeType': 'application/vnd.google-apps.folder'
+      }
+      if parentFolderId is not None:
+          fileMetadata['parents'] = [parentFolderId]
+      else:
+          logger.error("No parent folder ID provided.")
+          return Response.error('No parent folder ID provided.')
+      
+      folder = self.service.files().create(body=fileMetadata, fields='id, name, parents, mimeType, size, modifiedTime, createdTime').execute()
+      logger.success(f"Successfully created folder: {folderName} in folder: {parentFolderId}")
+      return Response.success(folder)
+
+  def uploadFileWithPath(self, filePath, parentFolderId):
+      logger.info(f"Uploading file: {filePath} to folder: {parentFolderId}")
+      fileMetadata = {'name': os.path.basename(filePath)}
+
+      if parentFolderId is not None:
+          fileMetadata['parents'] = [parentFolderId]
+      else:
+          logger.error("No parent folder ID provided.")
+          return Response.error('No parent folder ID provided.')
+      
+      media = MediaFileUpload(filePath, resumable=True)
+      f = self.service.files().create(body=fileMetadata, media_body=media, fields='id, name, parents, mimeType, size, modifiedTime').execute()
+      logger.success(f"Successfully uploaded file: {filePath} to folder: {parentFolderId}")
+      return Response.success(f)
+
+  def uploadFile(self, fileName, rawFile, parentFolderId):
+      logger.info(f"Uploading file: {fileName} to folder: {parentFolderId}")
+      fileMetadata = {'name': fileName}
+
+      if parentFolderId is not None:
+          fileMetadata['parents'] = [parentFolderId]
+      else:
+          logger.error("No parent folder ID provided.")
+          return Response.error('No parent folder ID provided.')
+      try:
+          media = MediaIoBaseUpload(rawFile, resumable=True)
+          f = self.service.files().create(body=fileMetadata, media_body=media, fields='id, name, parents, mimeType, size, modifiedTime').execute()
+          logger.success(f"Successfully uploaded file: {fileName} to folder: {parentFolderId}")
+          return Response.success(f)
+      except Exception as e:
+          logger.error(f"Error uploading file: {fileName}. Error: {str(e)}")
+          return Response.error(f'Error uploading file: {str(e)}')
+
+  def deleteFiles(self, file_ids):
+
+      logger.info(f"Deleting files with IDs: {file_ids}")
+
+      results = []
+      for file_id in file_ids:
+          try:
+              response = self.service.files().delete(fileId=file_id).execute()
+              logger.success(f"Successfully deleted file with ID: {file_id}")
+              results.append(Response.success({'content': response, 'file_id': file_id}))
+          except Exception as e:
+              logger.error(f"Error deleting file with ID: {file_id}. Error: {str(e)}")
+              results.append(Response.error({'content': f'Error deleting file: {str(e)}', 'file_id': file_id}))
+
+      logger.success(f"Deletion process completed for {len(file_ids)} files.")
+      return results  
+
+  def downloadFile(self, fileId):
+
+      logger.info(f"Downloading file with ID: {fileId}")
+
+      try:
+          request = self.service.files().get_media(fileId=fileId)
+          downloaded_file = io.BytesIO()
+          downloader = MediaIoBaseDownload(downloaded_file, request)
+          done = False
+          while done is False:
+              status, done = downloader.next_chunk()
+              logger.info(f"Download {int(status.progress() * 100)}.")
+
+      except HttpError as error:
+          logger.error(f"An error occurred: {error}")
+          return Response.error(error)
+      
+      except:
+          logger.error("Error downloading file.")
+          return Response.error('Error downloading file.')
+      
+      logger.success("Successfully downloaded file.")
+      return Response.success(downloaded_file.getvalue())
 
 class Gmail:
 
   def __init__(self):
+    logger.info('Initializing Gmail connection.')
     try:
-      creds = Credentials.from_authorized_user_file('creds/GmailAuthedTokenInfo.json')
+      creds = Credentials.from_authorized_user_file('app/creds/GmailAuthedTokenInfo.json')
       self.service = build("gmail", "v1", credentials=creds)
+      logger.success('Initialized Gmail connection.')
     except Exception as e:
       logger.error(f"Error initializing Gmail: {str(e)}")
 
@@ -196,18 +313,20 @@ class Gmail:
 class Firebase:
 
   def __init__(self):
+    logger.info('Initializing Firebase connection.')
     try:
-      cred = credentials.Certificate('creds/FirebaseAdminSDK.json')
+      cred = credentials.Certificate('app/creds/FirebaseAdminSDK.json')
       firebase_admin.initialize_app(cred)
-      print('Initialized Firebase connection.')
+      logger.success('Initialized Firebase connection.')
       self.db = firestore.client()
     except ValueError:
-      print('App already exists.')
+      logger.info('App already exists.')
       self.db = firestore.client()
     except Exception as e:
       logger.error(f"Error initializing Firebase: {str(e)}")
 
-  def getDocumentsFromCollection(self, path):
+  def getDocumentsInCollection(self, path):
+    logger.info(f'Getting documents in collection: {path}')
     try:
       users_ref = self.db.collection(path)
       docs = users_ref.stream()
@@ -216,52 +335,74 @@ class Firebase:
       for doc in docs:
         clients.append(doc.to_dict())
 
+      logger.success(f'Successfully got documents from collection: {path}')
       return Response.success(clients)
     except Exception as e:
+      logger.error(f"Error getting documents from collection: {str(e)}")
       return Response.error(f"Error getting documents from collection: {str(e)}")
   
   def addDataframeToCollection(self, df, path):
+    logger.info(f'Adding dataframe to collection: {path}')
     try:
       for index, row in df.iterrows():
         info_dict = row.to_dict()
         self.addDocument(info_dict, path, f'{index}')
 
         if index == 0:
-          print(f'Adding new collection.')
+          logger.info(f'Adding new collection.')
         elif index % 100 == 0:
-          print(f'Added {index} documents.')
+          logger.info(f'Added {index} documents.')
 
-      print(f'Added {index} total documents.')
+      logger.info(f'Added {index} total documents.')
       return Response.success(f'Added {index} total documents.')
     except Exception as e:
+      logger.error(f"Error adding dataframe to collection: {str(e)}")
       return Response.error(f"Error adding dataframe to collection: {str(e)}")
 
-  def queryDocumentsInCollection(self, path, key, value):
+  def read(self, path, key, value):
+    logger.info(f'Querying documents in collection: {path} with key: {key} and value: {value}')
     try:
       ref = self.db.collection(path)
       query = ref.where(filter=firestore.FieldFilter(key, "==", value))
+      logger.success(f'Successfully queried documents.')
       return Response.success(query.stream())
     except Exception as e:
+      logger.error(f"Error querying documents from collection: {str(e)}")
       return Response.error(f"Error querying documents from collection: {str(e)}")
   
-  def deleteDocumentsFromCollection(self, path):
+  def delete(self, path):
+    logger.info(f'Deleting documents in collection: {path}')
     try:
       users_ref = self.db.collection(path)
       docs = users_ref.stream()
 
-      counter = 0
       for index, doc in enumerate(docs):
         self.db.collection(path).document(doc.id).delete()
         if index % 100 == 0:
-          print(f'Deleted {index} documents.')
+          logger.info(f'Deleted {index} documents.')
       
+      logger.info(f'Deleted {index} documents.')
       return Response.success(f'Deleted {index} documents.')
     except Exception as e:
+      logger.error(f"Error deleting documents from collection: {str(e)}")
       return Response.error(f"Error deleting documents from collection: {str(e)}")
-  
-  def addDocument(self, data, path, id):
+
+  def update(self, path, key, value):
+    logger.info(f'Updating document in collection: {path} with key: {key} and value: {value}')
+    try:
+      self.db.document(path).update({key: value})
+      logger.success(f'Document updated successfully.')
+      return Response.success(f'Document updated successfully.')
+    except Exception as e:
+      logger.error(f"Error updating document: {str(e)}")
+      return Response.error(f"Error updating document: {str(e)}")
+
+  def create(self, data, path, id):
+    logger.info(f'Adding document to collection: {path} with id: {id}')
     try:
       self.db.collection(path).document(id).set(data)
+      logger.success(f'Document added successfully.')
       return Response.success(f'Document added successfully.')
     except Exception as e:
+      logger.error(f"Error adding document: {str(e)}")
       return Response.error(f"Error adding document: {str(e)}")
