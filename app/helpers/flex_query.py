@@ -30,7 +30,8 @@ def getFlexQuery(token, queryId):
             logger.info(f'Retrying... Attempt {retry_count} of {max_retries}')
             time.sleep(retry_delay)
             generatedTemplateResponse = rq.get(url=generatedTemplateURL)
-        
+            retry_count += 1
+
         logger.success('Flex Query Template Generated')
 
         # Populate ET element with generated report template
@@ -43,10 +44,11 @@ def getFlexQuery(token, queryId):
         generatedReportURL = root.find('Url').text
         generatedReportURL = "".join([generatedReportURL, "?",token, refCode, version])
         generatedReportResponse = rq.get(url=generatedReportURL, allow_redirects=True)
-        while generatedReportResponse.status_code != 200 and 'ErrorCode' in generatedReportResponse.content:
+        while generatedReportResponse.status_code != 200:
             logger.info(f'Retrying... Attempt {retry_count} of {max_retries}')
             time.sleep(retry_delay)
             generatedReportResponse = rq.get(url=generatedReportURL, allow_redirects=True)
+            retry_count += 1
             
         xml_data = generatedReportResponse.content
         df = binaryXMLtoDF(xml_data)
@@ -67,7 +69,7 @@ def fetchFlexQueries(queryIds):
         flex_queries = {}
 
         for _, queryId in enumerate(queryIds):
-            flex_query_df = pd.DataFrame()
+            flex_query_df = None
             response = getFlexQuery(agmToken, queryId)
             if response['status'] == 'error':
                 return Response.error(f'Error fetching Flex Query for queryId {queryId}.')
@@ -111,13 +113,13 @@ def binaryXMLtoDF(binaryXMLData):
 
     logger.info(f'Converting binary XML to DF')
     try:
-        xml_data = binaryXMLData.decode('ascii')
+        xml_data = binaryXMLData.decode('utf-8')
         reader = csv.reader(xml_data.splitlines(), skipinitialspace=True)
 
         rows = []
 
         for row in reader:
-            if ('BOA' not in row) and ('BOF' not in row) and ('BOS' not in row) and ('EOS' not in row) and ('EOA' not in row) and ('EOF' not in row):
+            if ('BOA' not in row) and ('BOF' not in row) and ('BOS' not in row) and ('EOS' not in row) and ('EOA' not in row) and ('EOF' not in row) and ('MSG' not in row):
                 rows.append(row)
         
         df = pd.DataFrame(rows[1:], columns=rows[0])

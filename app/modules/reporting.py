@@ -1,101 +1,61 @@
 import requests as rq
 from pandas.tseries.offsets import BDay
 
+from datetime import datetime
+
 from app.helpers.dates import getCurrentCST
 
 from app.helpers.logger import logger
 from app.helpers.response import Response
-
+import pandas as pd
+from io import BytesIO
+import base64
 logger.info('Initializing Reporting Module')
 url = 'http://127.0.0.1:5001'
 logger.success('Initialized Reporting Module')
 
 cst_time = getCurrentCST()
 
-def generate():
+def extract():
 
     logger.info('Generating Reports')
+    batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
 
-    # Get relevant folder IDs
-    response = rq.post(url + '/drive/get_shared_drive_info', json={'drive_name': 'ETL'}).json()
+    # Reset batch folder
+    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': batch_folder_id}).json()
     if response['status'] == 'error':
-        return Response.error(f'Error fetching ETL Shared Drive Info.')
-    etl_id = response['content']['id']
+        return Response.error(f'Error fetching Flex Queries.')
+    batch_files = response['content']
+    if len(batch_files) > 0:
+        response = rq.post(url + '/drive/delete_files', json={'file_ids': [f['id'] for f in batch_files]}).json()
+        if response['status'] == 'error':
+            return Response.error(f'Error deleting files in batch folder.')
 
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': etl_id, 'folder_name': 'batch'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching Batch Folder Info.')
-    batch_folder_id = response['content']['id']
-
+    # Fetch Flex Queries
     response = rq.post(url + '/flex_query/fetch', json={'queryIds': ['732383', '734782', '742588']}).json()
     if response['status'] == 'error':
         return Response.error(f'Error fetching Flex Queries.')
     flex_queries = response['content']
 
-    # Upload files to batch folder
+    # Upload flex queries to batch folder
+    # TODO: Fix upload_csv_files route
     response = rq.post(url + '/drive/upload_csv_files', json={'files': flex_queries, 'parent_id': batch_folder_id}).json()
     if response['status'] == 'error':
         return Response.error(f'Error uploading CSV files.')
 
+    # Rename files in batch folder
     response = renameFilesInBatch(batch_folder_id)
     if response['status'] == 'error':
-        return Response.error(f'Error renaming files.')
-    
+        return Response.error(f'Error renaming files.')    
     batch_files = response['content']
+
+    # Sort files to respective backup folders
+    response = sortFilesToFolders(batch_files)
+    if response['status'] == 'error':
+        return Response.error(f'Error sorting files to backup folders.')
 
     logger.info('Reports successfully generated.')
     return Response.success(batch_files)
-
-def uploadReportsToDatabase():
-
-    logger.info('Uploading reports to database.')
-
-    response = rq.post(url + '/flex_query/get_files_in_folder', json={'parent_id': '1a-t3vp5vSbs0eBEO4ZdbS_5n9Sqlo-DN'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching files in batch.')
-    batch_files = response['content']
-
-    # Sort reports into backup folders
-    response = sortFilesToFolders(batch_files)
-    if response['status'] == 'error':
-        return Response.error(f'Error sorting files.')
-    
-    # Get Interactive Brokers Shared Drive ID
-    response = rq.post(url + '/drive/get_shared_drive_info', json={'drive_name': 'Interactive Brokers'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching Interactive Brokers Shared Drive Info.')
-    ibkr_folder_info = response['content']
-
-    # Get Queries folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': ibkr_folder_info['id'], 'folder_name': 'Queries'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching Queries Folder Info.')
-    queries_folder_info = response['content']
-
-    # Get Clients folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': queries_folder_info['id'], 'folder_name': 'Clients'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching Clients Folder Info.')
-    clients_folder_info = response['content']
-
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': clients_folder_info['id'], 'folder_name': 'Clients_IBKR'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching Clients_IBKR Folder Info.')
-    clients_ibkr_folder_info = response['content']
-
-    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': clients_ibkr_folder_info['id']}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching Clients Folder Info.')
-    client_files_info = response['content']
-
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': clients_folder_info['id'], 'folder_name': '2024'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching 2024 Folder Info.')
-    folder_2024_info = response['content']
-
-    logger.info(f'Clients files: {client_files_info}')
-
-    return Response.success('Reports uploaded to drive backup folders.')
 
 def renameFilesInBatch(batch_folder_id):
   
@@ -112,6 +72,7 @@ def renameFilesInBatch(batch_folder_id):
         return Response.error(f'Error fetching files in batch.')  
     batch_files = response['content']
 
+    # Rename files
     for f in batch_files:
 
         if ('742588' in f['name']):
@@ -128,161 +89,42 @@ def renameFilesInBatch(batch_folder_id):
             f['new_name'] = ('ContactListSummary ' + today_date + ' agmtech212' + '.csv')
         else:
             f['new_name'] = f['name']
-
     response = rq.post(url + '/drive/rename_files', json={'files': batch_files}).json()
     if response['status'] == 'error':
         return Response.error(f'Error renaming files.')
-
     batch_files = response['content']
     return Response.success(batch_files)
 
 def sortFilesToFolders(batch_files):
 
     logger.info('Sorting files into backup folders.')
-    current_year = cst_time.year
 
-    # Get Interactive Brokers Shared Drive ID
-    response = rq.post(url + '/drive/get_shared_drive_info', json={'drive_name': 'Interactive Brokers'}).json()
+    backups_folder_id = '1d9RShyGidP04XdnH87pUHsADghgOiWj3'
+    folder_names = ['TasksForSubaccounts', 'ContactListSummary', 'RTD', 'Clients', '742588', '734782', '732383']
+    folder_info = {}
+
+    # Get info for all backup folders
+    for folder_name in folder_names:
+        response = rq.post(url + '/drive/get_folder_info', json={'parent_id': backups_folder_id, 'folder_name': folder_name}).json()
+        if response['status'] == 'error':
+            return Response.error(f'Error fetching {folder_name} Folder Info.')
+        folder_info[folder_name] = response['content']
+    subaccounts_folder_info = folder_info['TasksForSubaccounts']
+    contacts_folder_info = folder_info['ContactListSummary']
+    rtd_folder_info = folder_info['RTD']
+    clients_folder_info = folder_info['Clients']
+    open_positions_folder_info = folder_info['742588']
+    nav_folder_info = folder_info['734782']
+    client_fees_folder_info = folder_info['732383']
+
+    # Get all files in batch
+    batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
+    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': batch_folder_id}).json()
     if response['status'] == 'error':
-        return Response.error(f'Error fetching Interactive Brokers Shared Drive Info.')
-    ibkr_folder_info = response['content']
+        return Response.error(f'Error fetching files in batch.')
+    batch_files = response['content']
 
-    # Get Queries folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': ibkr_folder_info['id'], 'folder_name': 'Queries'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching Queries Folder Info.')
-    queries_folder_info = response['content']
-
-    # Get Parent Tasks For Sub Accounts folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': queries_folder_info['id'], 'folder_name': 'Tasks For Sub Accounts'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching Tasks For Sub Accounts Folder Info.')
-    parent_subaccounts_folder_info = response['content']
-
-    # Get this year's Tasks For Sub Accounts folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': parent_subaccounts_folder_info['id'], 'folder_name': f'tasks_for_sub_accounts_{current_year}'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching Tasks For Sub Accounts Folder Info.')
-    subaccounts_folder_info = response['content']
-
-    # Get Parent Contact List Summary folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': queries_folder_info['id'], 'folder_name': 'Contact List Summary'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching Contact List Summary Folder Info.')
-    parent_contacts_folder_info = response['content']
-
-    # Get this year's Contact List Summary folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': parent_contacts_folder_info['id'], 'folder_name': f'Contact List Summary {current_year}'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching Contact List Summary Folder Info.')
-    contacts_folder_info = response['content']
-
-    # Get Parent RTD folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': queries_folder_info['id'], 'folder_name': 'RTD'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching RTD Folder Info.')
-    parent_rtd_folder_info = response['content']
-
-    # Get this year's RTD folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': parent_rtd_folder_info['id'], 'folder_name': f'RTD_{current_year}'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching RTD Folder Info.')
-    rtd_folder_info = response['content']
-
-
-    # Get Clients folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': queries_folder_info['id'], 'folder_name': 'Clients'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching Clients Folder Info.')
-    clients_folder_info = response['content']
-
-    # Get Open Positions folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': queries_folder_info['id'], 'folder_name': 'Open Positions'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching Open Positions Folder Info.')
-    open_positions_folder_info = response['content']
-
-    # Get parent 742588 folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': open_positions_folder_info['id'], 'folder_name': '742588'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching 742588 Folder Info.')
-    parent_742588_folder_info = response['content']
-
-    # Get this year's 742588 folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': parent_742588_folder_info['id'], 'folder_name': f'742588_{current_year}'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching 742588 Folder Info.')
-    folder_742588_info = response['content']
-
-
-    # Get NAV in Base folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': queries_folder_info['id'], 'folder_name': 'NAV in Base'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching NAV in Base Folder Info.')
-    nav_folder_info = response['content']
-
-    # Get parent 734782 folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': nav_folder_info['id'], 'folder_name': '734782'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching 734782 Folder Info.')
-    parent_734782_folder_info = response['content']
-
-    # Get this year's 734782 folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': parent_734782_folder_info['id'], 'folder_name': f'734782_{current_year}'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching 734782 Folder Info.')
-    folder_734782_info = response['content']
-
-
-    # Get Client Fees folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': queries_folder_info['id'], 'folder_name': 'Client Fees'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching Client Fees Folder Info.')
-    client_fees_folder_info = response['content']
-
-    # Get parent 734782 folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': client_fees_folder_info['id'], 'folder_name': '732383'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching 732383 Folder Info.')
-    parent_732383_folder_info = response['content']
-
-    # Get this year's 734782 folder ID
-    response = rq.post(url + '/drive/get_folder_info', json={'parent_id': parent_732383_folder_info['id'], 'folder_name': f'732383_{current_year}'}).json()
-    if response['status'] == 'error':
-        return Response.error(f'Error fetching 732383 Folder Info.')
-    folder_732383_info = response['content']
-
-
-    # Print all folder information
-    if False:
-        print('IBKR folder info:', ibkr_folder_info)
-
-        print('Queries folder info:', queries_folder_info)
-
-        print('Parent subaccounts folder info:', parent_subaccounts_folder_info)
-        print('Subaccounts folder info:', subaccounts_folder_info)
-
-        print('Parent contacts folder info:', parent_contacts_folder_info)
-        print('Contacts folder info:', contacts_folder_info)
-
-        print('Parent RTD folder info:', parent_rtd_folder_info)
-        print('RTD folder info:', rtd_folder_info)
-
-        print('Clients folder info:', clients_folder_info)
-
-        print('Open positions folder info:', open_positions_folder_info)
-        print('Parent 742588 folder info:', parent_742588_folder_info)
-        print('742588 folder info:', folder_742588_info)
-
-        print('NAV folder info:', nav_folder_info)
-        print('Parent 734782 folder info:', parent_734782_folder_info)
-        print('734782 folder info:', folder_734782_info)
-
-        print('Client fees folder info:', client_fees_folder_info)
-        print('Parent 732383 folder info:', parent_732383_folder_info)
-        print('732383 folder info:', folder_732383_info)
-
-    # Move files to respective folder in backups
+    # Find destination for each file
     for f in batch_files:
         
         # Set new file's destination
@@ -296,17 +138,267 @@ def sortFilesToFolders(batch_files):
             case name if 'RTD' in name:
                 new_parent_id = rtd_folder_info['id']
             case name if '742588' in name:
-                new_parent_id = folder_742588_info['id']
+                new_parent_id = open_positions_folder_info['id']
             case name if '734782' in name:
-                new_parent_id = folder_734782_info['id']
+                new_parent_id = nav_folder_info['id']
             case name if '732383' in name:
-                new_parent_id = folder_732383_info['id']
+                new_parent_id = client_fees_folder_info['id']
             case _:
                 new_parent_id = 'root'
 
-        response = rq.post(url + '/drive/move_file', json={'file_id': f, 'new_parent_id': new_parent_id}).json()
+        # Move file to destination
+        response = rq.post(url + '/drive/move_file', json={'file': f, 'new_parent_id': new_parent_id}).json()
         if response['status'] == 'error':
             return Response.error(f'Error moving file.')
         logger.info(f"File '{f['name']}' moved to new parent folder.")
 
     return Response.success('Files sorted into backup folders.')
+
+
+
+def transform():
+    logger.info('Transforming reports.')
+    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+
+    # Reset resources folder
+    logger.info(f'Resetting resources folder.')
+    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': resources_folder_id}).json()
+    if response['status'] == 'error':
+        return Response.error(f'Error fetching files in resources folder.')
+    resources_files = response['content']
+    if len(resources_files) > 0:
+        logger.info(f'Clearing resources folder.')
+        response = rq.post(url + '/drive/delete_files', json={'file_ids': [f['id'] for f in resources_files]}).json()
+        if response[0]['status'] == 'error':
+            return Response.error(f'Error deleting files in resources folder.')
+    logger.success(f'Resources folder reset.')
+
+    # Process files
+    response = processClients()
+    if response['status'] == 'error':
+        return Response.error(f'Error processing clients file.')
+
+    response = processOpenPositions()
+    if response['status'] == 'error':
+        return Response.error(f'Error processing open positions file.')
+    
+    response = processNav()
+    if response['status'] == 'error':
+        return Response.error(f'Error processing NAV file.')
+    
+    response = processClientFees()
+    if response['status'] == 'error':
+        return Response.error(f'Error processing client fees file.')
+    
+    # Get all files in resources folder to return
+    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': resources_folder_id}).json()
+    if response['status'] == 'error':
+        return Response.error(f'Error fetching files in resources folder.')
+    resources_files = response['content']
+    
+    return Response.success(resources_files)
+
+def processClients():
+
+    logger.info('Processing Clients reports.')
+
+    # Process clients file
+    clients_folder_id = '1FNcbWNptK-A5IhmLws-R2Htl85OSFrIn'
+    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': clients_folder_id}).json()
+    if response['status'] == 'error':
+        return Response.error(f'Error fetching files in clients folder.')
+    clients_files = response['content']
+
+    # Get most recent file
+    clients_files.sort(key=lambda f: datetime.strptime(f['name'].split(' ')[1], '%Y%m%d%H%M'))
+    most_recent_file = clients_files[-1]
+
+    # Download file and read into dataframe
+    response = rq.post(url + '/drive/download_file', json={'file_id': most_recent_file['id']}).content
+    client_data = BytesIO(response)
+    sheets_dict = pd.read_excel(client_data, sheet_name=None)
+    clients_df = pd.concat(sheets_dict.values(), ignore_index=True)
+
+    # Prepare file for upload
+    csv_buffer = BytesIO()
+    clients_df.to_csv(csv_buffer, index=False)
+    csv_base64 = base64.b64encode(csv_buffer.getvalue()).decode('utf-8')
+
+    # Upload file to Resources
+    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+    response = rq.post(url + '/drive/upload_file', json={'raw_file': csv_base64, 'file_name': 'ibkr_clients.csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id}).json()
+    if response['status'] == 'error':
+        return Response.error(f'Error uploading CSV file.')
+
+    return Response.success('Clients file processed.')
+
+# 742588
+def processOpenPositions():
+
+    logger.info('Processing Open Positions reports.')
+    open_positions_folder_id = '1JL4__mr1XgOtnesYihHo-netWKMIGMet'
+    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': open_positions_folder_id}).json()
+    if response['status'] == 'error':
+        return Response.error(f'Error fetching files in open positions folder.')
+    open_positions_files = response['content']
+
+    # Get most recent file
+    open_positions_files.sort(key=lambda f: datetime.strptime(f['name'].split('_')[1].split('.')[0], '%Y%m%d'))
+    most_recent_file = open_positions_files[-1]
+
+    # Download file and read into dataframe
+    response = rq.post(url + '/drive/download_file', json={'file_id': most_recent_file['id']}).content
+    open_positions_data = BytesIO(response)
+    open_positions_df = pd.read_csv(open_positions_data)
+
+    # Prepare file for upload
+    csv_buffer = BytesIO()
+    open_positions_df.to_csv(csv_buffer, index=False)
+    csv_base64 = base64.b64encode(csv_buffer.getvalue()).decode('utf-8')
+
+    # Upload file to Resources
+    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+    response = rq.post(url + '/drive/upload_file', json={'raw_file': csv_base64, 'file_name': 'ibkr_open_positions_all.csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id}).json()
+    if response['status'] == 'error':
+        return Response.error(f'Error uploading CSV file.')
+    
+    # Generate template
+    open_positions_df = open_positions_df[(open_positions_df['AssetClass'] == 'BOND') & (open_positions_df['LevelOfDetail'] == 'LOT')]
+    columns_order = ['ClientAccountID','AccountAlias','Model','CurrencyPrimary','FXRateToBase','AssetClass','Symbol','Description',
+        'Conid','SecurityID','SecurityIDType','CUSIP','ISIN','ListingExchange','UnderlyingConid','UnderlyingSymbol',
+        'UnderlyingSecurityID','UnderlyingListingExchange','Issuer','Multiplier','Strike','Expiry','Put/Call','PrincipalAdjustFactor',
+        'ReportDate','Quantity','MarkPrice','PositionValue','PositionValueInBase','OpenPrice','CostBasisPrice','CostBasisMoney',
+        'PercentOfNAV','FifoPnlUnrealized','UnrealizedCapitalGainsPnl','UnrealizedFxPnl','Side','LevelOfDetail','OpenDateTime',
+        'HoldingPeriodDateTime','Code','OriginatingOrderID','OriginatingTransactionID','AccruedInterest','VestingDate',
+        'SerialNumber','DeliveryType','CommodityType','Fineness','Weight'
+    ]
+    open_positions_df = open_positions_df[columns_order]
+
+    response = rq.post(url + '/drive/upload_file', json={'raw_file': csv_base64, 'file_name': 'ibkr_open_positions_lot_(template).csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id}).json()
+    if response['status'] == 'error':
+        return Response.error(f'Error uploading CSV file.')
+
+    return Response.success('Open positions file processed.')
+
+# 734782
+def processNav():
+    logger.info('Processing NAV reports.')
+    nav_folder_id = '1WgYA-Q9mnPYrbbLfYLuJZwUIWBYjiD4c'
+    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': nav_folder_id}).json()
+    if response['status'] == 'error':
+        return Response.error(f'Error fetching files in NAV folder.')
+    nav_files = response['content']
+
+    # Get most recent file
+    nav_files.sort(key=lambda f: datetime.strptime(f['name'].split('_')[1].split('.')[0], '%Y%m%d'))
+    most_recent_file = nav_files[-1]
+
+    # Download file and read into dataframe
+    response = rq.post(url + '/drive/download_file', json={'file_id': most_recent_file['id']}).content
+    nav_data = BytesIO(response)
+    nav_df = pd.read_csv(nav_data)
+
+    # Prepare file for upload
+    csv_buffer = BytesIO()
+    nav_df.to_csv(csv_buffer, index=False)
+    csv_base64 = base64.b64encode(csv_buffer.getvalue()).decode('utf-8')
+
+    # Upload file to Resources
+    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+    response = rq.post(url + '/drive/upload_file', json={'raw_file': csv_base64, 'file_name': 'ibkr_nav_in_base.csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id}).json()
+    if response['status'] == 'error':
+        return Response.error(f'Error uploading CSV file.')
+    
+    return Response.success('NAV file processed.')
+
+# 732383
+def processClientFees():
+    logger.info('Processing Client Fees reports.')
+    client_fees_folder_id = '1OnSEo8B2VUF5u-VkhtzZVIzx6ABe_YB7'
+    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': client_fees_folder_id}).json()
+    if response['status'] == 'error':
+        return Response.error(f'Error fetching files in client fees folder.')
+    client_fees_files = response['content']
+
+    # Get most recent file
+    client_fees_files.sort(key=lambda f: datetime.strptime(f['name'].split('_')[2].split('.')[0], '%Y%m%d'))
+    most_recent_file = client_fees_files[-1]
+
+    # Download file and read into dataframe
+    response = rq.post(url + '/drive/download_file', json={'file_id': most_recent_file['id']}).content
+    client_fees_data = BytesIO(response)
+    client_fees_df = pd.read_csv(client_fees_data)
+
+    # Prepare file for upload
+    csv_buffer = BytesIO()
+    client_fees_df.to_csv(csv_buffer, index=False)
+    csv_base64 = base64.b64encode(csv_buffer.getvalue()).decode('utf-8')
+
+    # Upload file to Resources
+    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+    response = rq.post(url + '/drive/upload_file', json={'raw_file': csv_base64, 'file_name': 'ibkr_client_fees.csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id}).json()
+    if response['status'] == 'error':
+        return Response.error(f'Error uploading CSV file.')
+    
+    return Response.success('Client fees file processed.')
+
+def processRTD():
+    logger.info('Processing resources.')
+    rtd_folder_id = '12L3NKflYtMiisnZOpU9aa1syx2ZJA6JC'
+    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': rtd_folder_id}).json()
+    if response['status'] == 'error':
+        return Response.error(f'Error fetching files in RTD folder.')
+    rtd_files = response['content']
+
+    # Get most recent file
+    rtd_files.sort(key=lambda f: datetime.strptime(f['name'].split(' ')[1].split('.')[0], '%Y%m%d%H%M'))
+    most_recent_file = rtd_files[-1]
+
+    # Download file and read into dataframe
+    response = rq.post(url + '/drive/download_file', json={'file_id': most_recent_file['id']}).content
+    rtd_data = BytesIO(response)
+    rtd_df = pd.read_csv(rtd_data)
+    
+    # Prepare file for upload
+    csv_buffer = BytesIO()
+    rtd_df.to_csv(csv_buffer, index=False)
+    csv_base64 = base64.b64encode(csv_buffer.getvalue()).decode('utf-8')
+
+    # Upload file to Resources
+    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+    response = rq.post(url + '/drive/upload_file', json={'raw_file': csv_base64, 'file_name': 'ibkr_rtd.csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id}).json()
+    if response['status'] == 'error':
+        return Response.error(f'Error uploading CSV file.')
+    
+    return Response.success('Resources successfully transformed.')
+
+
+
+
+def load():
+
+    logger.info('Uploading reports to database.')
+    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'}).json()
+
+    if response['status'] == 'error':
+        return Response.error(f'Error fetching files in resources folder.')
+    
+    resources_files = response['content']
+    for f in resources_files:
+        response = rq.post(url + '/drive/download_file', json={'file_id': f['id']}).content
+        data = BytesIO(response)
+        file_df = pd.read_csv(data)
+        file_dict = file_df.to_dict(orient='records')
+
+        response = rq.post(url + '/database/clear_collection', json={'path': 'db/reporting'}).json()
+        if response['status'] == 'error':
+            return Response.error(f'Error clearing collection.')
+
+        # Upload file to database
+        for col in file_dict:
+            response = rq.post(url + '/database/create', json={'data': col, 'path': 'db/reporting', 'id': f['name'].split('.')[0]}).json()
+            if response['status'] == 'error':
+                return Response.error(f'Error uploading file to database.')
+        
+    logger.success('Reports successfully uploaded to database.')
+    return Response.success('Reports successfully uploaded to database.')

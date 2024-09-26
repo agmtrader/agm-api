@@ -5,21 +5,12 @@ bp = Blueprint('database', __name__)
 
 Database = Firebase()
 
-@bp.route('/get_documents_in_collection', methods=['POST'])
-def get_documents_in_collection_route():
+@bp.route('/clear_collection', methods=['POST'])
+def clear_collection_route():
     body = request.get_json(force=True)
     path = body['path']
-    response = Database.getDocumentsInCollection(path)
+    response = Database.clearCollection(path)
     return response
-
-@bp.route('/add_dataframe_to_collection', methods=['POST'])
-def add_dataframe_to_collection_route():
-    body = request.get_json(force=True)
-    df = body['df']
-    path = body['path']
-    response = Database.addDataframeToCollection(df, path)
-    return response
-
 
 @bp.route('/create', methods=['POST'])
 def create_route():
@@ -34,8 +25,14 @@ def create_route():
 def read_route():
     body = request.get_json(force=True)
     path = body['path']
-    key = body['key']
-    value = body['value']
+    key = None
+    value = None
+
+    if 'key' in list(body.keys()):
+        key = body['key']
+    if 'value' in list(body.keys()):
+        value = body['value']
+
     response = Database.read(path, key, value)
     return response
 

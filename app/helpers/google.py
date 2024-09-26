@@ -56,7 +56,7 @@ class GoogleDrive:
           .list(
               supportsAllDrives=True,
               includeItemsFromAllDrives=True,
-              q=f"name = '{folder_name}' and '{parent_id}' in parents",
+              q=f"name = '{folder_name}' and '{parent_id}' in parents and trashed = false",
               fields="nextPageToken, files(id, name, parents)",
           ).execute())['files']
 
@@ -69,27 +69,6 @@ class GoogleDrive:
       logger.error(f"Error retrieving folder info: {str(e)}")
       return Response.error(f"Error retrieving folder info: {str(e)}")
 
-  def getFileInfo(self, parent_id, file_name):
-    logger.info(f'Getting file info for file: {file_name} in parent: {parent_id}')
-    try:
-      f = (
-          self.service.files()
-          .list(
-              supportsAllDrives=True,
-              includeItemsFromAllDrives=True,
-              q=f"name = '{file_name}' and '{parent_id}' in parents",
-              fields="nextPageToken, files(id, name, parents)",
-          ).execute())['files']
-
-      if not f:
-        logger.error(f"No file found with name '{file_name}' in parent '{parent_id}'")
-        return Response.error(f"No file found with name '{file_name}' in parent '{parent_id}'")
-      logger.success(f"File found with name '{file_name}' in parent '{parent_id}'")
-      return Response.success(f[0])
-    except Exception as e:
-      logger.error(f"Error retrieving file info: {str(e)}")
-      return Response.error(f"Error retrieving file info: {str(e)}")
-  
   def getFilesInFolder(self, parent_id):
     logger.info(f'Getting files in folder: {parent_id}')
     try:
@@ -108,6 +87,28 @@ class GoogleDrive:
       logger.error(f"Error retrieving files in folder: {str(e)}")
       return Response.error(f"Error retrieving files in folder: {str(e)}")
 
+
+  def getFileInfo(self, parent_id, file_name):
+    logger.info(f'Getting file info for file: {file_name} in parent: {parent_id}')
+    try:
+      f = (
+          self.service.files()
+          .list(
+              supportsAllDrives=True,
+              includeItemsFromAllDrives=True,
+              q=f"name = '{file_name}' and '{parent_id}' in parents and trashed = false",
+              fields="nextPageToken, files(id, name, parents)",
+          ).execute())['files']
+
+      if not f:
+        logger.error(f"No file found with name '{file_name}' in parent '{parent_id}'")
+        return Response.error(f"No file found with name '{file_name}' in parent '{parent_id}'")
+      logger.success(f"File found with name '{file_name}' in parent '{parent_id}'")
+      return Response.success(f[0])
+    except Exception as e:
+      logger.error(f"Error retrieving file info: {str(e)}")
+      return Response.error(f"Error retrieving file info: {str(e)}")
+  
   def uploadCSVFiles(self, files, parent_id):
     logger.info(f'Uploading files: {list(files.keys())} to folder: {parent_id}')
     try:
@@ -202,24 +203,9 @@ class GoogleDrive:
       logger.success(f"Successfully created folder: {folderName} in folder: {parentFolderId}")
       return Response.success(folder)
 
-  def uploadFileWithPath(self, filePath, parentFolderId):
-      logger.info(f"Uploading file: {filePath} to folder: {parentFolderId}")
-      fileMetadata = {'name': os.path.basename(filePath)}
-
-      if parentFolderId is not None:
-          fileMetadata['parents'] = [parentFolderId]
-      else:
-          logger.error("No parent folder ID provided.")
-          return Response.error('No parent folder ID provided.')
-      
-      media = MediaFileUpload(filePath, resumable=True)
-      f = self.service.files().create(body=fileMetadata, media_body=media, fields='id, name, parents, mimeType, size, modifiedTime').execute()
-      logger.success(f"Successfully uploaded file: {filePath} to folder: {parentFolderId}")
-      return Response.success(f)
-
-  def uploadFile(self, fileName, rawFile, parentFolderId):
+  def uploadFile(self, fileName, mimeType, rawFile, parentFolderId):
       logger.info(f"Uploading file: {fileName} to folder: {parentFolderId}")
-      fileMetadata = {'name': fileName}
+      fileMetadata = {'name': fileName, 'mimeType': mimeType}
 
       if parentFolderId is not None:
           fileMetadata['parents'] = [parentFolderId]
@@ -227,7 +213,7 @@ class GoogleDrive:
           logger.error("No parent folder ID provided.")
           return Response.error('No parent folder ID provided.')
       try:
-          media = MediaIoBaseUpload(rawFile, resumable=True)
+          media = MediaIoBaseUpload(rawFile, resumable=True, mimetype=mimeType)
           f = self.service.files().create(body=fileMetadata, media_body=media, fields='id, name, parents, mimeType, size, modifiedTime').execute()
           logger.success(f"Successfully uploaded file: {fileName} to folder: {parentFolderId}")
           return Response.success(f)
@@ -254,27 +240,27 @@ class GoogleDrive:
 
   def downloadFile(self, fileId):
 
-      logger.info(f"Downloading file with ID: {fileId}")
+    logger.info(f"Downloading file with ID: {fileId}")
 
-      try:
-          request = self.service.files().get_media(fileId=fileId)
-          downloaded_file = io.BytesIO()
-          downloader = MediaIoBaseDownload(downloaded_file, request)
-          done = False
-          while done is False:
-              status, done = downloader.next_chunk()
-              logger.info(f"Download {int(status.progress() * 100)}.")
+    try:
+        request = self.service.files().get_media(fileId=fileId)
+        downloaded_file = io.BytesIO()
+        downloader = MediaIoBaseDownload(downloaded_file, request)
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+            logger.info(f"Download {int(status.progress() * 100)}.")
 
-      except HttpError as error:
-          logger.error(f"An error occurred: {error}")
-          return Response.error(error)
-      
-      except:
-          logger.error("Error downloading file.")
-          return Response.error('Error downloading file.')
-      
-      logger.success("Successfully downloaded file.")
-      return Response.success(downloaded_file.getvalue())
+    except HttpError as error:
+        logger.error(f"An error occurred: {error}")
+        return Response.error(error)
+    
+    except:
+        logger.error("Error downloading file.")
+        return Response.error('Error downloading file.')
+    
+    logger.success("Successfully downloaded file.")
+    return Response.success(downloaded_file.getvalue())
 
 class Gmail:
 
@@ -325,47 +311,34 @@ class Firebase:
     except Exception as e:
       logger.error(f"Error initializing Firebase: {str(e)}")
 
-  def getDocumentsInCollection(self, path):
-    logger.info(f'Getting documents in collection: {path}')
+  def clearCollection(self, path):
+    logger.info(f'Clearing collection: {path}')
     try:
-      users_ref = self.db.collection(path)
-      docs = users_ref.stream()
-
-      clients = []
-      for doc in docs:
-        clients.append(doc.to_dict())
-
-      logger.success(f'Successfully got documents from collection: {path}')
-      return Response.success(clients)
+      self.db.collection(path).delete()
+      logger.success(f'Collection cleared successfully.')
+      return Response.success(f'Collection cleared successfully.')
     except Exception as e:
-      logger.error(f"Error getting documents from collection: {str(e)}")
-      return Response.error(f"Error getting documents from collection: {str(e)}")
-  
-  def addDataframeToCollection(self, df, path):
-    logger.info(f'Adding dataframe to collection: {path}')
-    try:
-      for index, row in df.iterrows():
-        info_dict = row.to_dict()
-        self.addDocument(info_dict, path, f'{index}')
-
-        if index == 0:
-          logger.info(f'Adding new collection.')
-        elif index % 100 == 0:
-          logger.info(f'Added {index} documents.')
-
-      logger.info(f'Added {index} total documents.')
-      return Response.success(f'Added {index} total documents.')
-    except Exception as e:
-      logger.error(f"Error adding dataframe to collection: {str(e)}")
-      return Response.error(f"Error adding dataframe to collection: {str(e)}")
-
-  def read(self, path, key, value):
+      logger.error(f"Error clearing collection: {str(e)}")
+      return Response.error(f"Error clearing collection: {str(e)}")
+    
+  def read(self, path, key=None, value=None):
     logger.info(f'Querying documents in collection: {path} with key: {key} and value: {value}')
     try:
       ref = self.db.collection(path)
-      query = ref.where(filter=firestore.FieldFilter(key, "==", value))
+      if key and value:
+        query = ref.where(filter=firestore.FieldFilter(key, "==", value))
+      else:
+        query = ref
       logger.success(f'Successfully queried documents.')
-      return Response.success(query.stream())
+      # Convert the query results to a list of dictionaries
+      results = []
+      for doc in query.stream():
+          doc_dict = doc.to_dict()
+          doc_dict['id'] = doc.id  # Add the document ID to the dictionary
+          results.append(doc_dict)
+      
+      logger.info(f'Retrieved {len(results)} documents.')
+      return Response.success(results)
     except Exception as e:
       logger.error(f"Error querying documents from collection: {str(e)}")
       return Response.error(f"Error querying documents from collection: {str(e)}")
