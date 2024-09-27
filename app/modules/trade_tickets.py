@@ -50,7 +50,10 @@ def generate_trade_ticket(flex_query_dict, indices):
         return Response.error('Not all rows in the Description column have the same value.')
 
     symbol, coupon, maturity = extract_bond_details(df_indexed['Description'].iloc[0])
-    print(symbol, coupon, maturity)
+
+    if (df_indexed.loc[:,'AccruedInterest'] == 0).any():
+        logger.error('At least one row has AccruedInterest value of 0.')
+        return Response.error('At least one row has AccruedInterest value of 0.')
 
     df_indexed['Coupon'] = coupon
     df_indexed['Maturity'] = maturity
