@@ -16,6 +16,11 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload, MediaIoBaseUpload
 
 from email.message import EmailMessage
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
+from jinja2 import Environment, FileSystemLoader
+from premailer import transform
 
 class GoogleDrive:
   
@@ -273,28 +278,55 @@ class Gmail:
     except Exception as e:
       logger.error(f"Error initializing Gmail: {str(e)}")
 
-  def sendClientEmail(self, data, client_email, subject):
+  def create_html_email(self, plain_text, subject):
+
+    # Load the HTML template
+    env = Environment(loader=FileSystemLoader('app/helpers/email_templates'))
+    template = env.get_template('trade_ticket.html')
+
+    # Render the template with the plain text content
+    html_content = template.render(content=plain_text, subject=subject)
+
+    # Inline the CSS
+    html_content_inlined = transform(html_content)
+
+    # Create a multipart message
+    message = MIMEMultipart('related')
+    message['Subject'] = subject
+    message['From'] = "info@agmtechnology.com"
+    message['To'] = "recipient@example.com"
+
+    # Attach the HTML content
+    message.attach(MIMEText(html_content_inlined, 'html'))
+
+    # Attach the logo image
+    logo_path = 'app/assets/agm-logo.png'
+    with open(logo_path, 'rb') as logo_file:
+        logo_mime = MIMEImage(logo_file.read())
+        logo_mime.add_header('Content-ID', '<logo>')
+        message.attach(logo_mime)
+
+    return message
+
+  def sendClientEmail(self, plain_text, client_email, subject):
     try:
-      message = EmailMessage()
-      message.set_content(data)
-      message["To"] = client_email
-      message["From"] = "info@agmtechnology.com"
-      message["Bcc"] = "cr@agmtechnology.com,aa@agmtechnology.com,jc@agmtechnology.com,hc@agmtechnology.com, rc@agmtechnology.com"
-      message["Subject"] = subject
+        message = self.create_html_email(plain_text, subject)
+        message['To'] = client_email
+        message['Bcc'] = "cr@agmtechnology.com,aa@agmtechnology.com,jc@agmtechnology.com,hc@agmtechnology.com, rc@agmtechnology.com"
 
-      encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
-      create_message = {"raw": encoded_message}
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        create_message = {"raw": raw_message}
 
-      send_message = (
-          self.service.users()
-          .messages()
-          .send(userId="me", body=create_message)
-          .execute()
-      )
+        send_message = (
+            self.service.users()
+            .messages()
+            .send(userId="me", body=create_message)
+            .execute()
+        )
 
-      return Response.success({'emailId': send_message["id"]})
+        return Response.success({'emailId': send_message["id"]})
     except Exception as e:
-      return Response.error(f"Error sending client email: {str(e)}")
+        return Response.error(f"Error sending client email: {str(e)}")
 
 class Firebase:
 

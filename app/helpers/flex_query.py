@@ -94,10 +94,10 @@ def fetchFlexQueries(queryIds):
 def binaryXMLtoCSV(binaryXMLData, file_name):
     logger.info(f'Converting binary XML to CSV for file: {file_name}')
     try:
-        xml_data = binaryXMLData.decode('ascii')
+        xml_data = binaryXMLData.decode('utf-8')
         reader = csv.reader(xml_data.splitlines(), skipinitialspace=True)
 
-        with open('backups/acobo/' + file_name + '.csv',  'w') as out_file:
+        with open('backups/acobo/' + file_name + '.csv',  'w', encoding='utf-8') as out_file:
             writer = csv.writer(out_file)
             for row in reader:
                 if ('BOA' not in row) and ('BOF' not in row) and ('BOS' not in row) and ('EOS' not in row) and ('EOA' not in row) and ('EOF' not in row):
@@ -119,6 +119,7 @@ def binaryXMLtoDF(binaryXMLData):
         rows = []
 
         for row in reader:
+            print(row)
             if ('BOA' not in row) and ('BOF' not in row) and ('BOS' not in row) and ('EOS' not in row) and ('EOA' not in row) and ('EOF' not in row) and ('MSG' not in row):
                 rows.append(row)
         

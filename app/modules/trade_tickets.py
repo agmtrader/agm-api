@@ -139,7 +139,10 @@ def generate_client_confirmation_message(consolidated_dict):
     tradeData = {}
 
     for key in trade_confirmation_columns:
-        tradeData[key] = df_consolidated.iloc[0][key]
+        try:
+            tradeData[key] = df_consolidated.iloc[0][key]
+        except:
+            return Response.error(f'Column {key} not found in dataframe.')
 
     # Create message from dictionary
     message = ''
