@@ -69,7 +69,10 @@ def generate_trade_ticket(flex_query_dict, indices):
         df_indexed.loc[:,'Accrued (Days)'] = 0
 
     df_indexed.loc[:,'TotalAmount'] = round(df_indexed['AccruedInterest'] + df_indexed['NetCash'], 2).astype(float)
+
+    # TODO fix this
     df_indexed.loc[:,'Price (including Commissions)'] = round((df_indexed['NetCash']/df_indexed['Quantity']) * 100, 4).astype(float)
+    
     df_indexed['Price'] = df_indexed['Price'].astype(float)
     df_consolidated = df_indexed.iloc[0:1].copy()
 

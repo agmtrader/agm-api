@@ -26,7 +26,7 @@ def getFlexQuery(token, queryId):
         logger.info('Requesting Flex Query Template...')
         generatedTemplateURL = "".join([url, token, '&q=' + queryId, version])
         generatedTemplateResponse = rq.get(url=generatedTemplateURL)
-        while generatedTemplateResponse.status_code != 200:
+        while generatedTemplateResponse.status_code != 200 and 'ErrorCode' not in generatedTemplateResponse.text:
             logger.info(f'Retrying... Attempt {retry_count} of {max_retries}')
             time.sleep(retry_delay)
             generatedTemplateResponse = rq.get(url=generatedTemplateURL)
@@ -44,7 +44,7 @@ def getFlexQuery(token, queryId):
         generatedReportURL = root.find('Url').text
         generatedReportURL = "".join([generatedReportURL, "?",token, refCode, version])
         generatedReportResponse = rq.get(url=generatedReportURL, allow_redirects=True)
-        while generatedReportResponse.status_code != 200:
+        while generatedReportResponse.status_code != 200 and 'ErrorCode' not in generatedReportResponse.text:
             logger.info(f'Retrying... Attempt {retry_count} of {max_retries}')
             time.sleep(retry_delay)
             generatedReportResponse = rq.get(url=generatedReportURL, allow_redirects=True)
@@ -119,7 +119,6 @@ def binaryXMLtoDF(binaryXMLData):
         rows = []
 
         for row in reader:
-            print(row)
             if ('BOA' not in row) and ('BOF' not in row) and ('BOS' not in row) and ('EOS' not in row) and ('EOA' not in row) and ('EOF' not in row) and ('MSG' not in row):
                 rows.append(row)
         

@@ -311,8 +311,10 @@ class Gmail:
   def sendClientEmail(self, plain_text, client_email, subject):
     try:
         message = self.create_html_email(plain_text, subject)
-        message['To'] = client_email
-        message['Bcc'] = "cr@agmtechnology.com,aa@agmtechnology.com,jc@agmtechnology.com,hc@agmtechnology.com, rc@agmtechnology.com"
+        del message['To']  # Remove the 'To' field set in create_html_email
+        message['To'] = client_email  # Set the correct 'To' field
+
+        message['Bcc'] = "cr@agmtechnology.com,aa@agmtechnology.com,jc@agmtechnology.com,hc@agmtechnology.com,rc@agmtechnology.com"
 
         raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
         create_message = {"raw": raw_message}
