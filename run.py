@@ -1,7 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, verify_jwt_in_request, create_access_token, exceptions
-from config import Config
 import os
 import logging
 from logging.handlers import RotatingFileHandler
@@ -31,9 +30,6 @@ def start_api():
     app = Flask(__name__)
     cors = CORS(app, resources={r"/*": {"origins": "*"}})
     app.config['CORS_HEADERS'] = 'Content-Type'
-    
-    # Use configuration from Config class
-    app.config.from_object(Config)
     
     # Add JWT configuration
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
@@ -87,7 +83,4 @@ def start_api():
 
 app = start_api()
 if __name__ == '__main__':
-    if Config.DEBUG:
-        app.run(debug=Config.DEBUG, host=Config.HOST, port=Config.PORT)
-    else:
-        pass
+    app.run(debug=True, host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
