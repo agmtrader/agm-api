@@ -9,7 +9,7 @@ steps:
 - name: 'gcr.io/cloud-builders/gcloud'
   args: ['run','deploy', 'fnote-taking-service', '--image=gcr.io/$PROJECT_ID/fnote-taking', '--region=us-west4', '--allow-unauthenticated']
 
-build:
-  service_account: 'agm-api@agm-datalake.iam.gserviceaccount.com'
-  options:
-    logging: CLOUD_LOGGING_ONLY
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+serviceAccount: 'agm-api@agm-datalake.iam.gserviceaccount.com'
