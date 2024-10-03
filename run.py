@@ -85,8 +85,8 @@ def start_api():
 
     return app
 
+app = start_api()
 if __name__ == '__main__':
-    app = start_api()
     if Config.DEBUG:
         app.run(debug=Config.DEBUG, host=Config.HOST, port=Config.PORT)
     else:

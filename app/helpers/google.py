@@ -28,7 +28,14 @@ class GoogleDrive:
     logger.info('Initializing GoogleDrive connection.')
     try:
       SCOPES = ["https://www.googleapis.com/auth/drive"]
-      creds = Credentials.from_authorized_user_file("app/creds/AAAuthedToken.json", SCOPES)
+      creds = Credentials(
+        token=os.getenv('TOKEN'),
+        refresh_token=os.getenv('REFRESH_TOKEN'),
+        token_uri=os.getenv('TOKEN_URI'),
+        client_id=os.getenv('CLIENT_ID'),
+        client_secret=os.getenv('CLIENT_SECRET'),
+        scopes=SCOPES
+      )
       self.service = build('drive', 'v3', credentials=creds)
       logger.success('Initialized GoogleDrive connection.')
     except Exception as e:
@@ -272,7 +279,14 @@ class Gmail:
   def __init__(self):
     logger.info('Initializing Gmail connection.')
     try:
-      creds = Credentials.from_authorized_user_file('app/creds/GmailAuthedTokenInfo.json')
+      creds = Credentials(
+        token=os.getenv('INFO_TOKEN'),
+        refresh_token=os.getenv('INFO_REFRESH_TOKEN'),
+        token_uri=os.getenv('INFO_TOKEN_URI'),
+        client_id=os.getenv('INFO_CLIENT_ID'),
+        client_secret=os.getenv('INFO_CLIENT_SECRET'),
+        scopes=os.getenv('INFO_SCOPES').split(',')
+      )
       self.service = build("gmail", "v1", credentials=creds)
       logger.success('Initialized Gmail connection.')
     except Exception as e:
@@ -335,7 +349,19 @@ class Firebase:
   def __init__(self):
     logger.info('Initializing Firebase connection.')
     try:
-      cred = credentials.Certificate('app/creds/FirebaseAdminSDK.json')
+      cred = credentials.Certificate({
+          "type": os.getenv('FIREBASE_TYPE'),
+          "project_id": os.getenv('FIREBASE_PROJECT_ID'),
+          "private_key_id": os.getenv('FIREBASE_PRIVATE_KEY_ID'),
+          "private_key": os.getenv('FIREBASE_PRIVATE_KEY'),
+          "client_email": os.getenv('FIREBASE_CLIENT_EMAIL'),
+          "client_id": os.getenv('FIREBASE_CLIENT_ID'),
+          "auth_uri": os.getenv('FIREBASE_AUTH_URI'),
+          "token_uri": os.getenv('FIREBASE_TOKEN_URI'),
+          "auth_provider_x509_cert_url": os.getenv('FIREBASE_AUTH_PROVIDER_X509_CERT_URL'),
+          "client_x509_cert_url": os.getenv('FIREBASE_CLIENT_X509_CERT_URL'),
+          "universe_domain": os.getenv('FIREBASE_UNIVERSE_DOMAIN')
+      })
       firebase_admin.initialize_app(cred)
       logger.success('Initialized Firebase connection.')
       self.db = firestore.client()
