@@ -4,7 +4,7 @@
 
 ### Description 
 
-This API is designed to streamline and automate various business processes for AGM Technology.
+This API is designed to streamline and automate various business processes for AGM Technology
 
 ### Roadmap
 - [x] Automate reporting procedures
