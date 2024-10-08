@@ -12,6 +12,14 @@ def clear_collection_route():
     response = Database.clearCollection(path)
     return response
 
+@bp.route('/upload_collection', methods=['POST'])
+def upload_collection_route():
+    body = request.get_json(force=True)
+    path = body['path']
+    data = body['data']
+    response = Database.uploadCollection(path, data)
+    return response
+
 @bp.route('/create', methods=['POST'])
 def create_route():
     body = request.get_json(force=True)
@@ -25,24 +33,16 @@ def create_route():
 def read_route():
     body = request.get_json(force=True)
     path = body['path']
-    key = None
-    value = None
-
-    if 'key' in list(body.keys()):
-        key = body['key']
-    if 'value' in list(body.keys()):
-        value = body['value']
-
-    response = Database.read(path, key, value)
+    query = body.get('query')  # Use .get() to handle cases where 'query' is not provided
+    response = Database.read(path, query)
     return response
 
 @bp.route('/update', methods=['POST'])
 def update_route():
     body = request.get_json(force=True)
     path = body['path']
-    key = body['key']
-    value = body['value']
-    response = Database.update(path, key, value)
+    data = body['data']
+    response = Database.update(path, data)
     return response
 
 @bp.route('/delete', methods=['POST'])
@@ -51,3 +51,4 @@ def delete_route():
     path = body['path']
     response = Database.delete(path)
     return response
+
