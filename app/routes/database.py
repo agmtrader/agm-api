@@ -17,8 +17,16 @@ def upload_collection_route():
     body = request.get_json(force=True)
     path = body['path']
     data = body['data']
-    response = Database.uploadCollection(path, data)
+    response = Database.upload_collection(path, data)
     return response
+
+@bp.route('/read_all', methods=['POST'])
+def read_all_route():
+    body = request.get_json(force=True)
+    path = body['path']
+    response = Database.read_all(path)
+    return response
+
 
 @bp.route('/create', methods=['POST'])
 def create_route():

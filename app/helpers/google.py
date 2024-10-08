@@ -371,7 +371,7 @@ class Firebase:
     except Exception as e:
       logger.error(f"Error initializing Firebase: {str(e)}")
 
-  def clearCollection(self, path):
+  def clear_collection(self, path):
     logger.info(f'Clearing collection: {path}')
     try:
       self.db.collection(path).delete()
