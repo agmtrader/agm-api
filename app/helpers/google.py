@@ -380,49 +380,40 @@ class Firebase:
     except Exception as e:
       logger.error(f"Error clearing collection: {str(e)}")
       return Response.error(f"Error clearing collection: {str(e)}")
-    
-  def uploadCollection(self, path, data):
-    logger.info(f'Uploading data to collection: {path}')
-    try:
-      if not path:
-        raise ValueError("Path cannot be empty")
-      if not isinstance(data, list):
-        raise TypeError("Data must be a list of dictionaries")
-      
-      # Clear the collection first
-      self.clearCollection(path)
-      
-      # Upload new data
-      batch = self.db.batch()
-      collection_ref = self.db.collection(path)
-      
-      for i, item in enumerate(data):
-        if not isinstance(item, dict):
-          raise TypeError(f"Item at index {i} is not a dictionary")
-        doc_ref = collection_ref.document()
-        batch.set(doc_ref, item)
-        
-        # Commit every 500 operations to avoid hitting limits
-        if (i + 1) % 500 == 0:
-          batch.commit()
-          batch = self.db.batch()
-          logger.info(f'Uploaded {i + 1} documents.')
-      
-      # Commit any remaining operations
-      batch.commit()
-      
-      logger.success(f'Successfully uploaded {len(data)} documents to collection.')
-      return Response.success(f'Successfully uploaded {len(data)} documents to collection.')
-    except ValueError as ve:
-      logger.error(f"Value error in uploadCollection operation: {str(ve)}")
-      return Response.error(f"Value error in uploadCollection operation: {str(ve)}")
-    except TypeError as te:
-      logger.error(f"Type error in uploadCollection operation: {str(te)}")
-      return Response.error(f"Type error in uploadCollection operation: {str(te)}")
-    except Exception as e:
-      logger.error(f"Error uploading data to collection: {str(e)}")
-      return Response.error(f"Error uploading data to collection: {str(e)}")
 
+  def read_all(self, path):
+    try:
+      users_ref = self.db.collection(path)
+      docs = users_ref.stream()
+
+      clients = []
+      for doc in docs:
+        clients.append(doc.to_dict())
+
+      return Response.success(clients)
+    except Exception as e:
+      return Response.error(f"Error getting documents from collection: {str(e)}")
+  
+  def upload_collection(self, data_array, path):
+    try:
+      # Clear the collection before uploading
+      self.clearCollection(path)
+    except Exception as e:
+      return Response.error(f"Error clearing collection: {str(e)}")
+    
+    try:
+      for index, info_dict in enumerate(data_array):
+        self.create(info_dict, path, f'{index}')
+
+        if index == 0:
+          print(f'Adding new collection.')
+        elif index % 100 == 0:
+          print(f'Added {index + 1} documents.')
+
+      print(f'Added {len(data_array)} total documents.')
+      return Response.success(f'Added {len(data_array)} total documents.')
+    except Exception as e:
+      return Response.error(f"Error adding data to collection: {str(e)}")
     
   def read(self, path, query=None):
     logger.info(f'Querying documents in collection: {path} with query: {query}')
