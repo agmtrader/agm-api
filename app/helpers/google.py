@@ -381,24 +381,79 @@ class Firebase:
       logger.error(f"Error clearing collection: {str(e)}")
       return Response.error(f"Error clearing collection: {str(e)}")
     
-  def read(self, path, key=None, value=None):
-    logger.info(f'Querying documents in collection: {path} with key: {key} and value: {value}')
+  def uploadCollection(self, path, data):
+    logger.info(f'Uploading data to collection: {path}')
     try:
+      if not path:
+        raise ValueError("Path cannot be empty")
+      if not isinstance(data, list):
+        raise TypeError("Data must be a list of dictionaries")
+      
+      # Clear the collection first
+      self.clearCollection(path)
+      
+      # Upload new data
+      batch = self.db.batch()
+      collection_ref = self.db.collection(path)
+      
+      for i, item in enumerate(data):
+        if not isinstance(item, dict):
+          raise TypeError(f"Item at index {i} is not a dictionary")
+        doc_ref = collection_ref.document()
+        batch.set(doc_ref, item)
+        
+        # Commit every 500 operations to avoid hitting limits
+        if (i + 1) % 500 == 0:
+          batch.commit()
+          batch = self.db.batch()
+          logger.info(f'Uploaded {i + 1} documents.')
+      
+      # Commit any remaining operations
+      batch.commit()
+      
+      logger.success(f'Successfully uploaded {len(data)} documents to collection.')
+      return Response.success(f'Successfully uploaded {len(data)} documents to collection.')
+    except ValueError as ve:
+      logger.error(f"Value error in uploadCollection operation: {str(ve)}")
+      return Response.error(f"Value error in uploadCollection operation: {str(ve)}")
+    except TypeError as te:
+      logger.error(f"Type error in uploadCollection operation: {str(te)}")
+      return Response.error(f"Type error in uploadCollection operation: {str(te)}")
+    except Exception as e:
+      logger.error(f"Error uploading data to collection: {str(e)}")
+      return Response.error(f"Error uploading data to collection: {str(e)}")
+
+    
+  def read(self, path, query=None):
+    logger.info(f'Querying documents in collection: {path} with query: {query}')
+    try:
+      if not path:
+        raise ValueError("Path cannot be empty")
+      
       ref = self.db.collection(path)
-      if key and value:
-        query = ref.where(filter=firestore.FieldFilter(key, "==", value))
-      else:
-        query = ref
+      if query:
+        if not isinstance(query, dict):
+          raise TypeError("Query must be a dictionary")
+        for key, value in query.items():
+          if not isinstance(key, str):
+            raise TypeError("Query keys must be strings")
+          ref = ref.where(filter=firestore.FieldFilter(key, "==", value))
+      
       logger.success(f'Successfully queried documents.')
-      # Convert the query results to a list of dictionaries
       results = []
-      for doc in query.stream():
+      for doc in ref.stream():
           doc_dict = doc.to_dict()
           doc_dict['id'] = doc.id  # Add the document ID to the dictionary
           results.append(doc_dict)
       
       logger.info(f'Retrieved {len(results)} documents.')
       return Response.success(results)
+    except ValueError as ve:
+      logger.error(f"Value error in read operation: {str(ve)}")
+      return Response.error(f"Value error in read operation: {str(ve)}")
+    except TypeError as te:
+      logger.error(f"Type error in read operation: {str(te)}")
+      return Response.error(f"Type error in read operation: {str(te)}")
     except Exception as e:
       logger.error(f"Error querying documents from collection: {str(e)}")
       return Response.error(f"Error querying documents from collection: {str(e)}")
@@ -406,26 +461,42 @@ class Firebase:
   def delete(self, path):
     logger.info(f'Deleting documents in collection: {path}')
     try:
+      if not path:
+        raise ValueError("Path cannot be empty")
+      
       users_ref = self.db.collection(path)
       docs = users_ref.stream()
 
-      for index, doc in enumerate(docs):
+      deleted_count = 0
+      for doc in docs:
         self.db.collection(path).document(doc.id).delete()
-        if index % 100 == 0:
-          logger.info(f'Deleted {index} documents.')
+        deleted_count += 1
+        if deleted_count % 100 == 0:
+          logger.info(f'Deleted {deleted_count} documents.')
       
-      logger.info(f'Deleted {index} documents.')
-      return Response.success(f'Deleted {index} documents.')
+      logger.info(f'Deleted {deleted_count} documents.')
+      return Response.success(f'Deleted {deleted_count} documents.')
+    except ValueError as ve:
+      logger.error(f"Value error in delete operation: {str(ve)}")
+      return Response.error(f"Value error in delete operation: {str(ve)}")
     except Exception as e:
       logger.error(f"Error deleting documents from collection: {str(e)}")
       return Response.error(f"Error deleting documents from collection: {str(e)}")
 
-  def update(self, path, key, value):
-    logger.info(f'Updating document in collection: {path} with key: {key} and value: {value}')
+  def update(self, path, data):
+    logger.info(f'Updating document in collection: {path} with updates: {data}')
     try:
-      self.db.document(path).update({key: value})
+      if not path:
+        raise ValueError("Path cannot be empty")
+      if not data or not isinstance(data, dict):
+        raise ValueError("Data must be a non-empty dictionary")
+      
+      self.db.document(path).update(data)
       logger.success(f'Document updated successfully.')
       return Response.success(f'Document updated successfully.')
+    except ValueError as ve:
+      logger.error(f"Value error in update operation: {str(ve)}")
+      return Response.error(f"Value error in update operation: {str(ve)}")
     except Exception as e:
       logger.error(f"Error updating document: {str(e)}")
       return Response.error(f"Error updating document: {str(e)}")
@@ -433,9 +504,19 @@ class Firebase:
   def create(self, data, path, id):
     logger.info(f'Adding document to collection: {path} with id: {id}')
     try:
+      if not path:
+        raise ValueError("Path cannot be empty")
+      if not id:
+        raise ValueError("ID cannot be empty")
+      if not data or not isinstance(data, dict):
+        raise ValueError("Data must be a non-empty dictionary")
+      
       self.db.collection(path).document(id).set(data)
       logger.success(f'Document added successfully.')
       return Response.success(f'Document added successfully.')
+    except ValueError as ve:
+      logger.error(f"Value error in create operation: {str(ve)}")
+      return Response.error(f"Value error in create operation: {str(ve)}")
     except Exception as e:
       logger.error(f"Error adding document: {str(e)}")
       return Response.error(f"Error adding document: {str(e)}")
