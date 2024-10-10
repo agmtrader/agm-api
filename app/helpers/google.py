@@ -380,19 +380,6 @@ class Firebase:
     except Exception as e:
       logger.error(f"Error clearing collection: {str(e)}")
       return Response.error(f"Error clearing collection: {str(e)}")
-
-  def read_all(self, path):
-    try:
-      users_ref = self.db.collection(path)
-      docs = users_ref.stream()
-
-      clients = []
-      for doc in docs:
-        clients.append(doc.to_dict())
-
-      return Response.success(clients)
-    except Exception as e:
-      return Response.error(f"Error getting documents from collection: {str(e)}")
   
   def upload_collection(self, data_array, path):
     try:
@@ -415,40 +402,48 @@ class Firebase:
     except Exception as e:
       return Response.error(f"Error adding data to collection: {str(e)}")
     
-  def read(self, path, query=None):
-    logger.info(f'Querying documents in collection: {path} with query: {query}')
+  def read(self, path):
+    logger.info(f'Reading from path: {path}')
     try:
-      if not path:
-        raise ValueError("Path cannot be empty")
-      
-      ref = self.db.collection(path)
-      if query:
-        if not isinstance(query, dict):
-          raise TypeError("Query must be a dictionary")
-        for key, value in query.items():
-          if not isinstance(key, str):
-            raise TypeError("Query keys must be strings")
-          ref = ref.where(filter=firestore.FieldFilter(key, "==", value))
-      
-      logger.success(f'Successfully queried documents.')
-      results = []
-      for doc in ref.stream():
-          doc_dict = doc.to_dict()
-          doc_dict['id'] = doc.id  # Add the document ID to the dictionary
-          results.append(doc_dict)
-      
-      logger.info(f'Retrieved {len(results)} documents.')
-      return Response.success(results)
+        if not path:
+            raise ValueError("Path cannot be empty")
+        
+        path_elements = path.split('/')
+        
+        if len(path_elements) % 2 == 0:
+            # Even number of elements: reading a document
+            doc_ref = self.db.document(path)
+            doc = doc_ref.get()
+            
+            if doc.exists:
+                data = doc.to_dict()
+                data['id'] = doc.id
+                logger.success(f'Successfully read document: {doc.id}')
+                return Response.success(data)
+            else:
+                logger.warning(f'Document not found: {path}')
+                return Response.error("Document not found")
+        else:
+            # Odd number of elements: reading a collection
+            collection_ref = self.db.collection(path)
+            docs = collection_ref.stream()
+            
+            results = []
+            for doc in docs:
+                doc_dict = doc.to_dict()
+                doc_dict['id'] = doc.id
+                results.append(doc_dict)
+            
+            logger.success(f'Successfully read {len(results)} documents from collection: {path}')
+            return Response.success(results)
+    
     except ValueError as ve:
-      logger.error(f"Value error in read operation: {str(ve)}")
-      return Response.error(f"Value error in read operation: {str(ve)}")
-    except TypeError as te:
-      logger.error(f"Type error in read operation: {str(te)}")
-      return Response.error(f"Type error in read operation: {str(te)}")
+        logger.error(f"Value error in read operation: {str(ve)}")
+        return Response.error(f"Value error in read operation: {str(ve)}")
     except Exception as e:
-      logger.error(f"Error querying documents from collection: {str(e)}")
-      return Response.error(f"Error querying documents from collection: {str(e)}")
-  
+        logger.error(f"Error reading from Firestore: {str(e)}")
+        return Response.error(f"Error reading from Firestore: {str(e)}")
+
   def delete(self, path):
     logger.info(f'Deleting documents in collection: {path}')
     try:
