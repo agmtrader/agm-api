@@ -1,4 +1,3 @@
-import requests as rq
 from pandas.tseries.offsets import BDay
 
 from datetime import datetime
@@ -10,11 +9,28 @@ from app.helpers.response import Response
 import pandas as pd
 from io import BytesIO
 import base64
+import os
+
 logger.info('Initializing Reporting Module')
-url = 'http://127.0.0.1:5001'
+
+url = os.getenv('API_URL')
 logger.success('Initialized Reporting Module')
 
 cst_time = getCurrentCST()
+
+import requests
+def access_api(endpoint, method='GET', data=None):
+    print(url + endpoint, data, method)
+    auth = requests.post(url + '/login', json={
+        'username': 'admin',
+        'password': 'password'
+    })
+    response = requests.request(method, url + endpoint, json=data, headers={
+        'Authorization': f'Bearer {auth.json()["access_token"]}'
+    }).json()
+    print(response)
+    return response
+
 
 def extract():
 
@@ -22,24 +38,24 @@ def extract():
     batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
 
     # Reset batch folder
-    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': batch_folder_id}).json()
+    response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': batch_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error fetching Flex Queries.')
     batch_files = response['content']
     if len(batch_files) > 0:
-        response = rq.post(url + '/drive/delete_files', json={'file_ids': [f['id'] for f in batch_files]}).json()
+        response = access_api('/drive/delete_files', method='POST', data={'file_ids': [f['id'] for f in batch_files]})
         if response['status'] == 'error':
             return Response.error(f'Error deleting files in batch folder.')
 
     # Fetch Flex Queries
-    response = rq.post(url + '/flex_query/fetch', json={'queryIds': ['732383', '734782', '742588']}).json()
+    response = access_api('/flex_query/fetch', method='POST', data={'queryIds': ['732383', '734782', '742588']})
     if response['status'] == 'error':
         return Response.error(f'Error fetching Flex Queries.')
     flex_queries = response['content']
 
     # Upload flex queries to batch folder
     # TODO: Fix upload_csv_files route
-    response = rq.post(url + '/drive/upload_csv_files', json={'files': flex_queries, 'parent_id': batch_folder_id}).json()
+    response = access_api('/drive/upload_csv_files', method='POST', data={'files': flex_queries, 'parent_id': batch_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error uploading CSV files.')
 
@@ -67,7 +83,7 @@ def renameFilesInBatch(batch_folder_id):
     logger.info('Renaming files in batch folder.')
 
     # Get all files in batch
-    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': batch_folder_id}).json()
+    response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': batch_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error fetching files in batch.')  
     batch_files = response['content']
@@ -89,7 +105,7 @@ def renameFilesInBatch(batch_folder_id):
             f['new_name'] = ('ContactListSummary ' + today_date + ' agmtech212' + '.csv')
         else:
             f['new_name'] = f['name']
-    response = rq.post(url + '/drive/rename_files', json={'files': batch_files}).json()
+    response = access_api('/drive/rename_files', method='POST', data={'files': batch_files})
     if response['status'] == 'error':
         return Response.error(f'Error renaming files.')
     batch_files = response['content']
@@ -105,7 +121,7 @@ def sortFilesToFolders(batch_files):
 
     # Get info for all backup folders
     for folder_name in folder_names:
-        response = rq.post(url + '/drive/get_folder_info', json={'parent_id': backups_folder_id, 'folder_name': folder_name}).json()
+        response = access_api('/drive/get_folder_info', method='POST', data={'parent_id': backups_folder_id, 'folder_name': folder_name})
         if response['status'] == 'error':
             return Response.error(f'Error fetching {folder_name} Folder Info.')
         folder_info[folder_name] = response['content']
@@ -119,7 +135,7 @@ def sortFilesToFolders(batch_files):
 
     # Get all files in batch
     batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
-    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': batch_folder_id}).json()
+    response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': batch_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error fetching files in batch.')
     batch_files = response['content']
@@ -147,7 +163,7 @@ def sortFilesToFolders(batch_files):
                 new_parent_id = 'root'
 
         # Move file to destination
-        response = rq.post(url + '/drive/move_file', json={'file': f, 'new_parent_id': new_parent_id}).json()
+        response = access_api('/drive/move_file', method='POST', data={'file': f, 'new_parent_id': new_parent_id})
         if response['status'] == 'error':
             return Response.error(f'Error moving file.')
         logger.info(f"File '{f['name']}' moved to new parent folder.")
@@ -162,13 +178,13 @@ def transform():
 
     # Reset resources folder
     logger.info(f'Resetting resources folder.')
-    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': resources_folder_id}).json()
+    response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': resources_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error fetching files in resources folder.')
     resources_files = response['content']
     if len(resources_files) > 0:
         logger.info(f'Clearing resources folder.')
-        response = rq.post(url + '/drive/delete_files', json={'file_ids': [f['id'] for f in resources_files]}).json()
+        response = access_api('/drive/delete_files', method='POST', data={'file_ids': [f['id'] for f in resources_files]})
         if response[0]['status'] == 'error':
             return Response.error(f'Error deleting files in resources folder.')
     logger.success(f'Resources folder reset.')
@@ -191,7 +207,7 @@ def transform():
         return Response.error(f'Error processing client fees file.')
     
     # Get all files in resources folder to return
-    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': resources_folder_id}).json()
+    response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': resources_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error fetching files in resources folder.')
     resources_files = response['content']
@@ -204,7 +220,7 @@ def processClients():
 
     # Process clients file
     clients_folder_id = '1FNcbWNptK-A5IhmLws-R2Htl85OSFrIn'
-    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': clients_folder_id}).json()
+    response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': clients_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error fetching files in clients folder.')
     clients_files = response['content']
@@ -214,7 +230,7 @@ def processClients():
     most_recent_file = clients_files[-1]
 
     # Download file and read into dataframe
-    response = rq.post(url + '/drive/download_file', json={'file_id': most_recent_file['id']}).content
+    response = access_api('/drive/download_file', method='POST', data={'file_id': most_recent_file['id']})
     client_data = BytesIO(response)
     sheets_dict = pd.read_excel(client_data, sheet_name=None)
     clients_df = pd.concat(sheets_dict.values(), ignore_index=True)
@@ -226,7 +242,7 @@ def processClients():
 
     # Upload file to Resources
     resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
-    response = rq.post(url + '/drive/upload_file', json={'raw_file': csv_base64, 'file_name': 'ibkr_clients.csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id}).json()
+    response = access_api('/drive/upload_file', method='POST', data={'raw_file': csv_base64, 'file_name': 'ibkr_clients.csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error uploading CSV file.')
 
@@ -237,7 +253,7 @@ def processOpenPositions():
 
     logger.info('Processing Open Positions reports.')
     open_positions_folder_id = '1JL4__mr1XgOtnesYihHo-netWKMIGMet'
-    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': open_positions_folder_id}).json()
+    response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': open_positions_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error fetching files in open positions folder.')
     open_positions_files = response['content']
@@ -247,7 +263,7 @@ def processOpenPositions():
     most_recent_file = open_positions_files[-1]
 
     # Download file and read into dataframe
-    response = rq.post(url + '/drive/download_file', json={'file_id': most_recent_file['id']}).content
+    response = access_api('/drive/download_file', method='POST', data={'file_id': most_recent_file['id']})
     open_positions_data = BytesIO(response)
     open_positions_df = pd.read_csv(open_positions_data)
 
@@ -258,7 +274,7 @@ def processOpenPositions():
 
     # Upload file to Resources
     resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
-    response = rq.post(url + '/drive/upload_file', json={'raw_file': csv_base64, 'file_name': 'ibkr_open_positions_all.csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id}).json()
+    response = access_api('/drive/upload_file', method='POST', data={'raw_file': csv_base64, 'file_name': 'ibkr_open_positions_all.csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error uploading CSV file.')
     
@@ -274,7 +290,7 @@ def processOpenPositions():
     ]
     open_positions_df = open_positions_df[columns_order]
 
-    response = rq.post(url + '/drive/upload_file', json={'raw_file': csv_base64, 'file_name': 'ibkr_open_positions_lot_(template).csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id}).json()
+    response = access_api('/drive/upload_file', method='POST', data={'raw_file': csv_base64, 'file_name': 'ibkr_open_positions_lot_(template).csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error uploading CSV file.')
 
@@ -284,7 +300,7 @@ def processOpenPositions():
 def processNav():
     logger.info('Processing NAV reports.')
     nav_folder_id = '1WgYA-Q9mnPYrbbLfYLuJZwUIWBYjiD4c'
-    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': nav_folder_id}).json()
+    response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': nav_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error fetching files in NAV folder.')
     nav_files = response['content']
@@ -294,7 +310,7 @@ def processNav():
     most_recent_file = nav_files[-1]
 
     # Download file and read into dataframe
-    response = rq.post(url + '/drive/download_file', json={'file_id': most_recent_file['id']}).content
+    response = access_api('/drive/download_file', method='POST', data={'file_id': most_recent_file['id']})
     nav_data = BytesIO(response)
     nav_df = pd.read_csv(nav_data)
 
@@ -305,7 +321,7 @@ def processNav():
 
     # Upload file to Resources
     resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
-    response = rq.post(url + '/drive/upload_file', json={'raw_file': csv_base64, 'file_name': 'ibkr_nav_in_base.csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id}).json()
+    response = access_api('/drive/upload_file', method='POST', data={'raw_file': csv_base64, 'file_name': 'ibkr_nav_in_base.csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error uploading CSV file.')
     
@@ -315,7 +331,7 @@ def processNav():
 def processClientFees():
     logger.info('Processing Client Fees reports.')
     client_fees_folder_id = '1OnSEo8B2VUF5u-VkhtzZVIzx6ABe_YB7'
-    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': client_fees_folder_id}).json()
+    response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': client_fees_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error fetching files in client fees folder.')
     client_fees_files = response['content']
@@ -325,7 +341,7 @@ def processClientFees():
     most_recent_file = client_fees_files[-1]
 
     # Download file and read into dataframe
-    response = rq.post(url + '/drive/download_file', json={'file_id': most_recent_file['id']}).content
+    response = access_api('/drive/download_file', method='POST', data={'file_id': most_recent_file['id']})
     client_fees_data = BytesIO(response)
     client_fees_df = pd.read_csv(client_fees_data)
 
@@ -336,7 +352,7 @@ def processClientFees():
 
     # Upload file to Resources
     resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
-    response = rq.post(url + '/drive/upload_file', json={'raw_file': csv_base64, 'file_name': 'ibkr_client_fees.csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id}).json()
+    response = access_api('/drive/upload_file', method='POST', data={'raw_file': csv_base64, 'file_name': 'ibkr_client_fees.csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error uploading CSV file.')
     
@@ -345,7 +361,7 @@ def processClientFees():
 def processRTD():
     logger.info('Processing resources.')
     rtd_folder_id = '12L3NKflYtMiisnZOpU9aa1syx2ZJA6JC'
-    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': rtd_folder_id}).json()
+    response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': rtd_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error fetching files in RTD folder.')
     rtd_files = response['content']
@@ -355,7 +371,7 @@ def processRTD():
     most_recent_file = rtd_files[-1]
 
     # Download file and read into dataframe
-    response = rq.post(url + '/drive/download_file', json={'file_id': most_recent_file['id']}).content
+    response = access_api('/drive/download_file', method='POST', data={'file_id': most_recent_file['id']})
     rtd_data = BytesIO(response)
     rtd_df = pd.read_csv(rtd_data)
     
@@ -366,7 +382,7 @@ def processRTD():
 
     # Upload file to Resources
     resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
-    response = rq.post(url + '/drive/upload_file', json={'raw_file': csv_base64, 'file_name': 'ibkr_rtd.csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id}).json()
+    response = access_api('/drive/upload_file', method='POST', data={'raw_file': csv_base64, 'file_name': 'ibkr_rtd.csv', 'mime_type': 'text/csv', 'parent_id': resources_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error uploading CSV file.')
     
@@ -378,25 +394,25 @@ def processRTD():
 def load():
 
     logger.info('Uploading reports to database.')
-    response = rq.post(url + '/drive/get_files_in_folder', json={'parent_id': '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'}).json()
+    response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'})
 
     if response['status'] == 'error':
         return Response.error(f'Error fetching files in resources folder.')
     
     resources_files = response['content']
     for f in resources_files:
-        response = rq.post(url + '/drive/download_file', json={'file_id': f['id']}).content
+        response = access_api('/drive/download_file', method='POST', data={'file_id': f['id']})
         data = BytesIO(response)
         file_df = pd.read_csv(data)
         file_dict = file_df.to_dict(orient='records')
 
-        response = rq.post(url + '/database/clear_collection', json={'path': 'db/reporting'}).json()
+        response = access_api('/database/clear_collection', method='POST', data={'path': 'db/reporting'})
         if response['status'] == 'error':
             return Response.error(f'Error clearing collection.')
 
         # Upload file to database
         for col in file_dict:
-            response = rq.post(url + '/database/create', json={'data': col, 'path': 'db/reporting', 'id': f['name'].split('.')[0]}).json()
+            response = access_api('/database/create', method='POST', data={'data': col, 'path': 'db/reporting', 'id': f['name'].split('.')[0]})
             if response['status'] == 'error':
                 return Response.error(f'Error uploading file to database.')
         

@@ -7,9 +7,7 @@ one = rq.post(api_url + '/login', json={
   'password': 'password'
 })
 
-response = rq.post(api_url + '/database/list_subcollections', json={
-  'parent_id': 'db/clients',
-}, headers={
+response = rq.get(api_url + '/reporting/extract', headers={
   'Authorization': f'Bearer {one.json()["access_token"]}'
 })
 
