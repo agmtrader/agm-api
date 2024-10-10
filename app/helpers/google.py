@@ -401,7 +401,9 @@ class Firebase:
       return Response.success(f'Added {len(data_array)} total documents.')
     except Exception as e:
       return Response.error(f"Error adding data to collection: {str(e)}")
-    
+  
+
+  
   def read(self, path, query=None):
     logger.info(f'Querying documents in collection: {path} with query: {query}')
     try:
@@ -498,3 +500,35 @@ class Firebase:
     except Exception as e:
       logger.error(f"Error adding document: {str(e)}")
       return Response.error(f"Error adding document: {str(e)}")
+
+  def readCollection(self, path):
+    logger.info(f'Listing subcollections in document: {path}')
+    try:
+        if not path:
+            raise ValueError("Path cannot be empty")
+        
+        # Get a reference to the document
+        doc_ref = self.db.document(path)
+        
+        # List the subcollections of the document
+        collections = doc_ref.collections()
+        
+        results = []
+        for collection in collections:
+            # For each subcollection, get its documents
+            docs = collection.stream()
+            subcollection_data = []
+            for doc in docs:
+                doc_dict = doc.to_dict()
+                doc_dict['id'] = doc.id
+                subcollection_data.append(doc_dict)
+            
+            results.append({
+                'collection_id': collection.id,
+                'documents': subcollection_data
+            })
+        
+        logger.success(f'Successfully listed subcollections.')
+        return Response.success(results)
+    except Exception as e:
+        return Response.error(f"Error listing subcollections: {str(e)}")
