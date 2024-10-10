@@ -53,3 +53,9 @@ def delete_route():
     response = Database.delete(path)
     return response
 
+@bp.route('/list_subcollections', methods=['POST'])
+def list_subcollections_route():
+    payload = request.get_json(force=True)
+    parent_id = payload['parent_id']
+    response = Database.listSubcollections(parent_id)
+    return response

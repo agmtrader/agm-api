@@ -77,4 +77,3 @@ def upload_csv_files_route():
     parent_id = payload['parent_id']
     response = Drive.uploadCSVFiles(files, parent_id)
     return response
-

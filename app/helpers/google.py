@@ -501,7 +501,7 @@ class Firebase:
       logger.error(f"Error adding document: {str(e)}")
       return Response.error(f"Error adding document: {str(e)}")
 
-  def readCollection(self, path):
+  def listSubcollections(self, path):
     logger.info(f'Listing subcollections in document: {path}')
     try:
         if not path:
