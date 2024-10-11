@@ -216,6 +216,7 @@ class GoogleDrive:
       return Response.success(folder)
 
   def uploadFile(self, fileName, mimeType, rawFile, parentFolderId):
+      
       logger.info(f"Uploading file: {fileName} to folder: {parentFolderId}")
       fileMetadata = {'name': fileName, 'mimeType': mimeType}
 
@@ -438,48 +439,79 @@ class Firebase:
       logger.error(f"Error querying documents from collection: {str(e)}")
       return Response.error(f"Error querying documents from collection: {str(e)}")
   
-  def delete(self, path):
-    logger.info(f'Deleting documents in collection: {path}')
+  def delete(self, path, query=None):
+    logger.info(f'Deleting documents in collection: {path} with query: {query}')
     try:
       if not path:
         raise ValueError("Path cannot be empty")
       
-      users_ref = self.db.collection(path)
-      docs = users_ref.stream()
-
+      ref = self.db.collection(path)
+      if query:
+        if not isinstance(query, dict):
+          raise TypeError("Query must be a dictionary")
+        for key, value in query.items():
+          if not isinstance(key, str):
+            raise TypeError("Query keys must be strings")
+          ref = ref.where(filter=firestore.FieldFilter(key, "==", value))
+      
+      batch = self.db.batch()
+      docs = ref.stream()
       deleted_count = 0
       for doc in docs:
-        self.db.collection(path).document(doc.id).delete()
+        batch.delete(doc.reference)
         deleted_count += 1
         if deleted_count % 100 == 0:
-          logger.info(f'Deleted {deleted_count} documents.')
+          logger.info(f'Deleting {deleted_count} documents.')
       
-      logger.info(f'Deleted {deleted_count} documents.')
+      batch.commit()
+      logger.success(f'Deleted {deleted_count} documents.')
       return Response.success(f'Deleted {deleted_count} documents.')
     except ValueError as ve:
       logger.error(f"Value error in delete operation: {str(ve)}")
       return Response.error(f"Value error in delete operation: {str(ve)}")
+    except TypeError as te:
+      logger.error(f"Type error in delete operation: {str(te)}")
+      return Response.error(f"Type error in delete operation: {str(te)}")
     except Exception as e:
       logger.error(f"Error deleting documents from collection: {str(e)}")
       return Response.error(f"Error deleting documents from collection: {str(e)}")
 
-  def update(self, path, data):
-    logger.info(f'Updating document in collection: {path} with updates: {data}')
+  def update(self, path, data, query=None):
+    logger.info(f'Updating documents in collection: {path} with updates: {data} and query: {query}')
     try:
       if not path:
         raise ValueError("Path cannot be empty")
       if not data or not isinstance(data, dict):
         raise ValueError("Data must be a non-empty dictionary")
       
-      self.db.document(path).update(data)
-      logger.success(f'Document updated successfully.')
-      return Response.success(f'Document updated successfully.')
+      ref = self.db.collection(path)
+      if query:
+        if not isinstance(query, dict):
+          raise TypeError("Query must be a dictionary")
+        for key, value in query.items():
+          if not isinstance(key, str):
+            raise TypeError("Query keys must be strings")
+          ref = ref.where(filter=firestore.FieldFilter(key, "==", value))
+      
+      batch = self.db.batch()
+      docs = ref.stream()
+      updated_count = 0
+      for doc in docs:
+        batch.update(doc.reference, data)
+        updated_count += 1
+      
+      batch.commit()
+      logger.success(f'{updated_count} documents updated successfully.')
+      return Response.success(f'{updated_count} documents updated successfully.')
     except ValueError as ve:
       logger.error(f"Value error in update operation: {str(ve)}")
       return Response.error(f"Value error in update operation: {str(ve)}")
+    except TypeError as te:
+      logger.error(f"Type error in update operation: {str(te)}")
+      return Response.error(f"Type error in update operation: {str(te)}")
     except Exception as e:
-      logger.error(f"Error updating document: {str(e)}")
-      return Response.error(f"Error updating document: {str(e)}")
+      logger.error(f"Error updating documents: {str(e)}")
+      return Response.error(f"Error updating documents: {str(e)}")
 
   def create(self, data, path, id):
     logger.info(f'Adding document to collection: {path} with id: {id}')
