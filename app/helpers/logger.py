@@ -13,20 +13,40 @@ class Logger:
         })
         self.console = Console(theme=custom_theme)
         logging.basicConfig(
-            level=logging.INFO,
+            level=logging.DEBUG,
             format="%(message)s",
             datefmt="[%X]",
             handlers=[RichHandler(console=self.console, rich_tracebacks=True)]
         )
         self.logger = logging.getLogger("rich")
 
+        # Suppress other logs
+        logging.getLogger('werkzeug').setLevel(logging.ERROR)
+        logging.getLogger('flask').setLevel(logging.ERROR)
+        logging.getLogger('requests').setLevel(logging.ERROR)
+        logging.getLogger('connectionpool').setLevel(logging.ERROR)
+        logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
+        logging.getLogger('googleapiclient.discovery').setLevel(logging.ERROR)
+        logging.getLogger('google_auth_httplib2').setLevel(logging.ERROR)
+
     def info(self, message):
-        self.logger.info(f"[blue]{message}[/blue]", extra={'markup': True})
+        self.logger.debug(f"[blue]{message}[/blue]", extra={'markup': True})
 
     def success(self, message):
-        self.logger.info(f"[green]{message}[/green]\n", extra={'markup': True})
+        self.logger.debug(f"[green]{message}[/green]", extra={'markup': True})
+
+    def warning(self, message):
+        self.logger.warning(f"[yellow]{message}[/yellow]\n", extra={'markup': True})
+
+    def announcement(self, message, type='info'):
+        if type == 'info':
+            self.logger.info(f"\n[blue][bold]{message}[/bold][/blue]", extra={'markup': True})
+        elif type == 'success':
+            self.logger.info(f"[bold][green]{message}[/green][/bold]\n", extra={'markup': True})
+        else:
+            raise ValueError("Invalid type. Choose 'info' or 'success'.")
 
     def error(self, message):
-        self.logger.error(f"[red]{message}[/red]", extra={'markup': True})
+        self.logger.error(f"[red]{message}[/red]\n", extra={'markup': True})
 
 logger = Logger()

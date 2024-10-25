@@ -6,6 +6,10 @@ import logging
 from logging.handlers import RotatingFileHandler
 from app.routes import email, trade_tickets
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 def jwt_required_except_login():
     if request.endpoint != 'login':
         try:
@@ -83,4 +87,5 @@ def start_api():
 
 app = start_api()
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
+    load_dotenv()
+    app.run(debug=True, host='0.0.0.0', port='8080')

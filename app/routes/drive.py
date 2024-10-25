@@ -28,13 +28,33 @@ def get_files_in_folder_route():
     response = Drive.getFilesInFolder(parent_id)
     return response
 
-
-
-@bp.route('/delete_files', methods=['POST'])
-def delete_files_route():
+@bp.route('/get_file_info', methods=['POST'])
+def get_file_info_route():
     payload = request.get_json(force=True)
-    file_ids = payload['file_ids']
-    response = Drive.deleteFiles(file_ids)
+    parent_id = payload['parent_id']
+    file_name = payload['file_name']
+    response = Drive.getFileInfo(parent_id, file_name)
+    return response
+
+@bp.route('/get_file_info_by_id', methods=['POST'])
+def get_file_info_by_id_route():
+    payload = request.get_json(force=True)
+    file_id = payload['file_id']
+    response = Drive.getFileInfoById(file_id)
+    return response
+
+@bp.route('/reset_folder', methods=['POST'])
+def reset_folder_route():
+    payload = request.get_json(force=True)
+    folder_id = payload['folder_id']
+    response = Drive.resetFolder(folder_id)
+    return response
+
+@bp.route('/delete_file', methods=['POST'])
+def delete_file_route():
+    payload = request.get_json(force=True)
+    fileId = payload['fileId']
+    response = Drive.deleteFile(fileId)
     return response
 
 @bp.route('/move_file', methods=['POST'])
@@ -52,28 +72,20 @@ def download_file_route():
     f = BytesIO(response['content'])
     return send_file(f, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-@bp.route('/rename_files', methods=['POST'])
-def rename_files_route():
+@bp.route('/rename_file', methods=['POST'])
+def rename_file_route():
     payload = request.get_json(force=True)
-    files = payload['files']
-    response = Drive.renameFiles(files)
+    fileId = payload['fileId']
+    newName = payload['newName']
+    response = Drive.renameFile(fileId, newName)
     return response
 
 @bp.route('/upload_file', methods=['POST'])
 def upload_file_route():
     payload = request.get_json(force=True)
-    raw_file = base64.b64decode(payload['raw_file'])
-    file_name = payload['file_name']
-    mime_type = payload['mime_type']
-    parent_id = payload['parent_id']
-    file_stream = BytesIO(raw_file)
-    response = Drive.uploadFile(file_name, mime_type, file_stream, parent_id)
-    return response
-
-@bp.route('/upload_csv_files', methods=['POST'])
-def upload_csv_files_route():
-    payload = request.get_json(force=True)
-    files = payload['files']
-    parent_id = payload['parent_id']
-    response = Drive.uploadCSVFiles(files, parent_id)
+    f = payload['file']
+    fileName = payload['fileName']
+    mimeType = payload['mimeType']
+    parentFolderId = payload['parentFolderId']
+    response = Drive.uploadFile(fileName, mimeType, f, parentFolderId)
     return response

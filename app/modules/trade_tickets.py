@@ -156,4 +156,5 @@ def generate_client_confirmation_message(consolidated_dict):
         if (key in skips):
             message += '\n'
 
+    logger.success(f'Client confirmation message generated.')
     return Response.success({'message':message})

@@ -9,7 +9,7 @@ Database = Firebase()
 def clear_collection_route():
     body = request.get_json(force=True)
     path = body['path']
-    response = Database.clearCollection(path)
+    response = Database.clear_collection(path)
     return response
 
 @bp.route('/upload_collection', methods=['POST'])
@@ -18,6 +18,13 @@ def upload_collection_route():
     path = body['path']
     data = body['data']
     response = Database.upload_collection(path, data)
+    return response
+
+@bp.route('/list_subcollections', methods=['POST'])
+def list_subcollections_route():
+    payload = request.get_json(force=True)
+    path = payload['path']
+    response = Database.listSubcollections(path)
     return response
 
 
@@ -34,7 +41,7 @@ def create_route():
 def read_route():
     body = request.get_json(force=True)
     path = body['path']
-    query = body.get('query')  # Use .get() to handle cases where 'query' is not provided
+    query = body.get('query')
     response = Database.read(path, query)
     return response
 
@@ -43,7 +50,8 @@ def update_route():
     body = request.get_json(force=True)
     path = body['path']
     data = body['data']
-    response = Database.update(path, data)
+    query = body['query']
+    response = Database.update(path, data, query)
     return response
 
 @bp.route('/delete', methods=['POST'])
@@ -51,11 +59,4 @@ def delete_route():
     body = request.get_json(force=True)
     path = body['path']
     response = Database.delete(path)
-    return response
-
-@bp.route('/list_subcollections', methods=['POST'])
-def list_subcollections_route():
-    payload = request.get_json(force=True)
-    path = payload['path']
-    response = Database.listSubcollections(path)
     return response

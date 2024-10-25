@@ -7,11 +7,12 @@ import csv
 from app.helpers.logger import logger
 from app.helpers.response import Response
 
-logger.info('Initializing Flex Query Service')
+logger.announcement('Initializing Flex Query Service', type='info')
 version='&v=3'
 url = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest?"
-logger.success('Initialized Flex Query Service')
+logger.announcement('Initialized Flex Query Service', type='success')
 
+# Returns flex query as df (internal use only)
 def getFlexQuery(token, queryId):
 
     logger.info(f'Getting Flex Query for queryId: {queryId}')
@@ -61,9 +62,9 @@ def getFlexQuery(token, queryId):
         logger.error(f"Error: {str(e)}")
         return Response.error(f"Failed to get Flex Query: {str(e)}")
 
+# Returns dict of queryIds as keys and flex query as values
 def fetchFlexQueries(queryIds):
     try:
-        logger.info('Fetching Flex Queries')
 
         agmToken = "t=949768708375319238802665"
         flex_queries = {}
@@ -84,7 +85,6 @@ def fetchFlexQueries(queryIds):
                 logger.error(f'Flex Query Empty for queryId {queryId}')
                 return Response.error(f'Flex Query Empty for queryId {queryId}')
             
-        logger.success('Flex Queries fetched.')
         return Response.success(flex_queries)
     
     except Exception as e:

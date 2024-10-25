@@ -1,13 +1,14 @@
 from google_auth_oauthlib.flow import InstalledAppFlow
 
+SCOPES = ["https://mail.google.com/"]
 
-SCOPES = ['https://www.googleapis.com/auth/drive', "https://mail.google.com/"]
+date = '20241024'
 
 flow = InstalledAppFlow.from_client_secrets_file(
-    "creds/credentials.json", SCOPES
+        f"app/creds/oauth{date}.json", SCOPES
 )
+
 creds = flow.run_local_server(port=0)
 
-# Save the credentials for the next run
 with open("token.json", "w") as token:
-  token.write(creds.to_json())
+    token.write(creds.to_json())
