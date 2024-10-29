@@ -84,7 +84,6 @@ def fetchFlexQueries(queryIds):
             except:
                 logger.error(f'Flex Query Empty for queryId {queryId}')
                 return Response.error(f'Flex Query Empty for queryId {queryId}')
-            
         return Response.success(flex_queries)
     
     except Exception as e:
