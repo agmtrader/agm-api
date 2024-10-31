@@ -346,43 +346,56 @@ class Gmail:
     logger.info(f'Creating HTML email with subject: {subject}')
 
     try:
-      # Load the HTML template
-      env = Environment(loader=FileSystemLoader('app/helpers/email_templates'))
-      template = env.get_template('trade_ticket.html')
+        # Load the HTML template
+        env = Environment(loader=FileSystemLoader('app/helpers/email_templates'))
+        template = env.get_template('trade_ticket.html')
 
-      # Render the template with the plain text content
-      html_content = template.render(content=plain_text, subject=subject)
+        # Render the template with the plain text content
+        html_content = template.render(content=plain_text, subject=subject)
 
-      # Inline the CSS
-      html_content_inlined = transform(html_content)
+        # Inline the CSS
+        html_content_inlined = transform(html_content)
+        logger.info(f'HTML content inlined: {html_content_inlined}')
 
-      # Create a multipart message
-      message = MIMEMultipart('related')
+        # Create a multipart message
+        message = MIMEMultipart('alternative')
+        message['Subject'] = subject
+        message['From'] = "info@agmtechnology.com"
 
-      # Attach the HTML content
-      message.attach(MIMEText(html_content_inlined, 'html'))
+        # Attach plain text and HTML versions
+        text_part = MIMEText(plain_text, 'plain')
+        html_part = MIMEText(html_content_inlined, 'html')
+        
+        message.attach(text_part)
+        message.attach(html_part)
 
-      # Attach the logo image
-      logo_path = 'app/assets/agm-logo.png'
-      with open(logo_path, 'rb') as logo_file:
-          logo_mime = MIMEImage(logo_file.read())
-          logo_mime.add_header('Content-ID', '<logo>')
-          message.attach(logo_mime)
+        # Create the final multipart/related message
+        final_message = MIMEMultipart('related')
+        final_message['Subject'] = subject
+        final_message['From'] = "info@agmtechnology.com"
+        final_message.attach(message)
 
-      logger.success(f'Successfully created HTML email with subject: {subject}')
-      return Response.success(message)
+        # Attach the logo image
+        logo_path = 'app/assets/agm-logo.png'
+        with open(logo_path, 'rb') as logo_file:
+            logo_mime = MIMEImage(logo_file.read())
+            logo_mime.add_header('Content-ID', '<logo>')
+            final_message.attach(logo_mime)
+
+        logger.success(f'Successfully created HTML email with subject: {subject}')
+        return Response.success(final_message)
+    
     except Exception as e:
-      logger.error(f"Error creating HTML email: {str(e)}")
-      return Response.error(f"Error creating HTML email: {str(e)}")
+        logger.error(f"Error creating HTML email: {str(e)}")
+        return Response.error(f"Error creating HTML email: {str(e)}")
 
   def sendClientEmail(self, plain_text, client_email, subject):
     try:
         logger.info(f'Sending client email to: {client_email}')
-        response = self.create_html_email(plain_text)
-        message = response['content']
+        response = self.create_html_email(plain_text, subject)
 
+        message = response['content']
         message['To'] = client_email
-        message['Subject'] = subject
         message['Bcc'] = "cr@agmtechnology.com,aa@agmtechnology.com,jc@agmtechnology.com,hc@agmtechnology.com,rc@agmtechnology.com"
 
         raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
