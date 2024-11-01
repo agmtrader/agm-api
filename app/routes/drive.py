@@ -70,7 +70,14 @@ def download_file_route():
     payload = request.get_json(force=True)
     response = Drive.downloadFile(payload['file_id'])
     f = BytesIO(response['content'])
-    return send_file(f, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    return send_file(f, mimetype=payload['mime_type'])
+
+@bp.route('/export_file', methods=['POST'])
+def export_file_route():
+    payload = request.get_json(force=True)
+    response = Drive.exportFile(payload['file_id'], payload['mime_type'])
+    f = BytesIO(response['content'])
+    return send_file(f, mimetype=payload['mime_type'])
 
 @bp.route('/rename_file', methods=['POST'])
 def rename_file_route():

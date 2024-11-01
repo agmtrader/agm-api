@@ -13,7 +13,7 @@ from app.helpers.response import Response
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google.oauth2.credentials import Credentials
-from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload, MediaIoBaseUpload
+from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
 from email.message import EmailMessage
 from email.mime.text import MIMEText
@@ -31,11 +31,11 @@ class GoogleDrive:
     try:
       SCOPES = ["https://www.googleapis.com/auth/drive"]
       creds = Credentials(
-        token=os.getenv('TOKEN'),
-        refresh_token=os.getenv('REFRESH_TOKEN'),
-        token_uri=os.getenv('TOKEN_URI'),
-        client_id=os.getenv('CLIENT_ID'),
-        client_secret=os.getenv('CLIENT_SECRET'),
+        token=os.getenv('ADMIN_TOKEN'),
+        refresh_token=os.getenv('ADMIN_REFRESH_TOKEN'),
+        token_uri=os.getenv('ADMIN_TOKEN_URI'),
+        client_id=os.getenv('ADMIN_CLIENT_ID'),
+        client_secret=os.getenv('ADMIN_CLIENT_SECRET'),
         scopes=SCOPES
       )
       self.service = build('drive', 'v3', credentials=creds)
@@ -323,6 +323,32 @@ class GoogleDrive:
     logger.success("Successfully downloaded file.")
     return Response.success(downloaded_file.getvalue())
 
+  def exportFile(self, fileId, mimeType):
+    logger.info(f"Exporting file with ID: {fileId} to MIME type: {mimeType}")
+
+    try:
+        request = self.service.files().export_media(
+            fileId=fileId,
+            mimeType=mimeType
+        )
+        exported_file = io.BytesIO()
+        downloader = MediaIoBaseDownload(exported_file, request)
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+            logger.info(f"Export {int(status.progress() * 100)}%.")
+
+        logger.success("Successfully exported file.")
+        return Response.success(exported_file.getvalue())
+
+    except HttpError as error:
+        logger.error(f"An error occurred: {error}")
+        return Response.error(error)
+    
+    except Exception as e:
+        logger.error(f"Error exporting file: {str(e)}")
+        return Response.error(f'Error exporting file: {str(e)}')
+
 class Gmail:
 
   def __init__(self):
@@ -330,11 +356,11 @@ class Gmail:
     SCOPES = ["https://mail.google.com/"]
     try:
       creds = Credentials(
-        token=os.getenv('INFO_EMAIL_TOKEN'),
-        refresh_token=os.getenv('INFO_EMAIL_REFRESH_TOKEN'),
-        token_uri=os.getenv('INFO_EMAIL_TOKEN_URI'),
-        client_id=os.getenv('INFO_EMAIL_CLIENT_ID'),
-        client_secret=os.getenv('INFO_EMAIL_CLIENT_SECRET'),
+        token=os.getenv('INFO_TOKEN'),
+        refresh_token=os.getenv('INFO_REFRESH_TOKEN'),
+        token_uri=os.getenv('INFO_TOKEN_URI'),
+        client_id=os.getenv('INFO_CLIENT_ID'),
+        client_secret=os.getenv('INFO_CLIENT_SECRET'),
         scopes=SCOPES
       )
       self.service = build("gmail", "v1", credentials=creds)
@@ -412,8 +438,6 @@ class Gmail:
     except Exception as e:
         return Response.error(f"Error sending client email: {str(e)}")
 
-
-
 class Firebase:
 
   def __init__(self):
@@ -433,11 +457,13 @@ class Firebase:
           "universe_domain": os.getenv('FIREBASE_UNIVERSE_DOMAIN')
       })
       firebase_admin.initialize_app(cred)
+      self.db = firestore.client()
       logger.announcement('Initialized Firebase connection.', type='success')
-      self.db = firestore.client()
     except ValueError:
-      logger.warning('App already exists.')
-      self.db = firestore.client()
+      try:
+        self.db = firestore.client()
+      except Exception as e:
+        logger.error(f"Error initializing Firebase: {str(e)}")
     except Exception as e:
       logger.error(f"Error initializing Firebase: {str(e)}")
 

@@ -2,9 +2,11 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, verify_jwt_in_request, create_access_token, exceptions
 import os
-import logging
+
 from logging.handlers import RotatingFileHandler
 from app.routes import email, trade_tickets
+
+from app.helpers.logger import logger
 
 from dotenv import load_dotenv
 
@@ -21,12 +23,10 @@ def configure_logging(app):
     if not os.path.exists('logs'):
         os.mkdir('logs')
     file_handler = RotatingFileHandler('logs/api.log', maxBytes=10240, backupCount=10)
-    file_handler.setFormatter(logging.Formatter(
-        '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
-    ))
-    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(logger.formatter)
+    file_handler.setLevel(logger.INFO)
     app.logger.addHandler(file_handler)
-    app.logger.setLevel(logging.INFO)
+    app.logger.setLevel(logger.INFO)
     app.logger.info('API startup')
 
 def start_api():
@@ -86,6 +86,6 @@ def start_api():
     return app
 
 app = start_api()
-if __name__ == '__main__':
-    load_dotenv()
-    app.run(debug=True, host='0.0.0.0', port='8080')
+
+logger.announcement('Running safety checks...', type='info')
+logger.announcement('Successfully started API', type='success')

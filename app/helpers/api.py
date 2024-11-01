@@ -1,7 +1,7 @@
 import requests
 import os
 
-url = os.getenv('API_URL')
+url = f'http://0.0.0.0:{os.getenv("API_PORT")}'
 
 def access_api(endpoint, method='GET', data=None):
     auth = requests.post(url + '/login', json={
