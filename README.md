@@ -2,7 +2,7 @@
 
 ## An API to automate all business processes for AGM Technology
 
-### Description 
+### Description
 
 This API is designed to streamline and automate various business processes for AGM Technology
 
