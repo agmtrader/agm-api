@@ -2,14 +2,10 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, verify_jwt_in_request, create_access_token, exceptions
 import os
-
 from logging.handlers import RotatingFileHandler
 from app.routes import email, trade_tickets
-
 from app.helpers.logger import logger
-
 from dotenv import load_dotenv
-from app.helpers.api import access_api
 
 load_dotenv()
 
