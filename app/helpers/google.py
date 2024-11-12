@@ -15,7 +15,6 @@ from googleapiclient.errors import HttpError
 from google.oauth2.credentials import Credentials
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
-from email.message import EmailMessage
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
@@ -674,6 +673,3 @@ class Firebase:
     except Exception as e:
       logger.error(f"Error adding document: {str(e)}")
       return Response.error(f"Error adding document: {str(e)}")
-
-
-

@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, verify_jwt_in_request, create_access_token, exceptions
 import os
@@ -9,11 +9,12 @@ from app.routes import email, trade_tickets
 from app.helpers.logger import logger
 
 from dotenv import load_dotenv
+from app.helpers.api import access_api
 
 load_dotenv()
 
 def jwt_required_except_login():
-    if request.endpoint != 'login':
+    if request.endpoint != 'login' and request.endpoint != 'index' and request.endpoint != 'docs':
         try:
             verify_jwt_in_request()
         except exceptions.JWTExtendedException as e:
@@ -24,14 +25,12 @@ def configure_logging(app):
         os.mkdir('logs')
     file_handler = RotatingFileHandler('logs/api.log', maxBytes=10240, backupCount=10)
     file_handler.setFormatter(logger.formatter)
-    file_handler.setLevel(logger.INFO)
-    app.logger.addHandler(file_handler)
-    app.logger.setLevel(logger.INFO)
+    file_handler.setLevel(logger.DEBUG)
     app.logger.info('API startup')
 
 def start_api():
     
-    app = Flask(__name__)
+    app = Flask(__name__, static_folder='static')
     cors = CORS(app, resources={r"/*": {"origins": "*"}})
     app.config['CORS_HEADERS'] = 'Content-Type'
     
@@ -41,6 +40,15 @@ def start_api():
 
     # Apply JWT authentication to all routes except login
     app.before_request(jwt_required_except_login)
+
+    # Add this route before other routes
+    @app.route('/')
+    def index():
+        return send_from_directory('static', 'index.html')
+    
+    @app.route('/docs')
+    def docs():
+        return send_from_directory('static', 'docs.html')
 
     from app.routes import reporting, drive, database, flex_query
     app.register_blueprint(reporting.bp, url_prefix='/reporting')

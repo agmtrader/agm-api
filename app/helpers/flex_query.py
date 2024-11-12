@@ -19,6 +19,8 @@ def getFlexQuery(token, queryId):
 
     try:
 
+        xml_data = None
+
         retry_count = 0
         max_retries = 5
         retry_delay = 1
@@ -27,7 +29,8 @@ def getFlexQuery(token, queryId):
         logger.info('Requesting Flex Query Template...')
         generatedTemplateURL = "".join([url, token, '&q=' + queryId, version])
         generatedTemplateResponse = rq.get(url=generatedTemplateURL)
-        while generatedTemplateResponse.status_code != 200 and 'ErrorCode' not in generatedTemplateResponse.text:
+        while generatedTemplateResponse.status_code != 200 and retry_count < max_retries:
+            logger.warning(f'Flex Query Template Generation Failed. Preview: {generatedTemplateResponse.text[0:100]}')
             logger.info(f'Retrying... Attempt {retry_count} of {max_retries}')
             time.sleep(retry_delay)
             generatedTemplateResponse = rq.get(url=generatedTemplateURL)
@@ -45,16 +48,17 @@ def getFlexQuery(token, queryId):
         generatedReportURL = root.find('Url').text
         generatedReportURL = "".join([generatedReportURL, "?",token, refCode, version])
         generatedReportResponse = rq.get(url=generatedReportURL, allow_redirects=True)
-        while generatedReportResponse.status_code != 200 and 'ErrorCode' not in generatedReportResponse.text:
+        while generatedReportResponse.status_code != 200 and retry_count < max_retries:
+            logger.warning(f'Flex Query Generation Failed. Preview: {generatedReportResponse.text[0:100]}')
             logger.info(f'Retrying... Attempt {retry_count} of {max_retries}')
             time.sleep(retry_delay)
             generatedReportResponse = rq.get(url=generatedReportURL, allow_redirects=True)
             retry_count += 1
-            
+        
         xml_data = generatedReportResponse.content
         df = binaryXMLtoDF(xml_data)
 
-        logger.success("Flex Query generated.")
+        logger.success(f"Flex Query generated")
         return Response.success(df)
     
     except Exception as e:

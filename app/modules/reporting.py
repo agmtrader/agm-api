@@ -14,7 +14,6 @@ import base64
 import os
 
 logger.announcement('Initializing Reporting Module', type='info')
-url = os.getenv('API_URL')
 logger.announcement('Initialized Reporting Module', type='success')
 cst_time = getCurrentCST()
 
