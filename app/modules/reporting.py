@@ -273,7 +273,7 @@ def process_report(config, resources_folder_id):
     most_recent_file = get_most_recent_file(files)
 
     # Download file and read into dataframe
-    response = access_api('/drive/download_file', method='POST', data={'file_id': most_recent_file['id']})
+    response = access_api('/drive/download_file', method='POST', data={'file_id': most_recent_file['id'], 'mime_type': 'text/csv'})
     try:
         file_data = BytesIO(response)
     except:

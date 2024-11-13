@@ -17,13 +17,13 @@ def getFlexQuery(token, queryId):
 
     logger.info(f'Getting Flex Query for queryId: {queryId}')
 
+    xml_data = None
+
+    retry_count = 0
+    max_retries = 5
+    retry_delay = 1
+
     try:
-
-        xml_data = None
-
-        retry_count = 0
-        max_retries = 5
-        retry_delay = 1
         
         # Create url for GET request to API for generating a report
         logger.info('Requesting Flex Query Template...')
@@ -35,46 +35,62 @@ def getFlexQuery(token, queryId):
             time.sleep(retry_delay)
             generatedTemplateResponse = rq.get(url=generatedTemplateURL)
             retry_count += 1
+    
+    except Exception as e:
+        logger.error(f'Error requesting Flex Query Template: {str(e)}')
+        return Response.error(f'Error requesting Flex Query Template: {str(e)}')
 
-        logger.success('Flex Query Template Generated')
+    logger.success('Flex Query Template Generated')
 
-        # Populate ET element with generated report template
-        tree = ET.ElementTree(ET.fromstring(generatedTemplateResponse.content))
-        root = tree.getroot()
-        refCode = "&q=%s" % root.find('ReferenceCode').text
+    # Populate ET element with generated report template
+    tree = ET.ElementTree(ET.fromstring(generatedTemplateResponse.content))
+    root = tree.getroot()
+    refCode = "&q=%s" % root.find('ReferenceCode').text
+
+    try:
 
         # Create url for GET request to API to fetch generated report
         logger.info("Generating Flex Query...")
         generatedReportURL = root.find('Url').text
         generatedReportURL = "".join([generatedReportURL, "?",token, refCode, version])
+
         generatedReportResponse = rq.get(url=generatedReportURL, allow_redirects=True)
-        while generatedReportResponse.status_code != 200 and retry_count < max_retries:
+        print(generatedReportResponse.text[0:100])
+        while (generatedReportResponse.status_code != 200 or ('ErrorCode' in generatedReportResponse.text and 'Fail' in generatedReportResponse.text)) and retry_count < max_retries:
             logger.warning(f'Flex Query Generation Failed. Preview: {generatedReportResponse.text[0:100]}')
             logger.info(f'Retrying... Attempt {retry_count} of {max_retries}')
             time.sleep(retry_delay)
             generatedReportResponse = rq.get(url=generatedReportURL, allow_redirects=True)
             retry_count += 1
-        
-        xml_data = generatedReportResponse.content
-        df = binaryXMLtoDF(xml_data)
 
-        logger.success(f"Flex Query generated")
-        return Response.success(df)
-    
+        if 'ErrorCode' in generatedReportResponse.text and 'Fail' in generatedReportResponse.text:
+            logger.error(f'Flex Query Generation Failed. Error Code: {generatedReportResponse.text[0:100]}')
+            return Response.error(f'Flex Query Generation Failed. Error Code: {generatedReportResponse.text[0:100]}')
+
     except Exception as e:
+        logger.error(f'Error generating Flex Query: {str(e)}')
+        return Response.error(f'Error generating Flex Query: {str(e)}')
+    
+    xml_data = generatedReportResponse.content
+    response = binaryXMLtoDF(xml_data)
 
-        logger.error(f"Error: {str(e)}")
-        return Response.error(f"Failed to get Flex Query: {str(e)}")
+    if (response['status'] == 'error'):
+        return Response.error(f'Error generating Flex Query: {response.get("message")}')
+    
+    df = response['content']
+    logger.info(f'File Preview: {df.head(5)}')
 
+    logger.success(f"Flex Query generated")
+    return Response.success(df)
+    
 # Returns dict of queryIds as keys and flex query as values
 def fetchFlexQueries(queryIds):
     try:
-
         agmToken = "t=949768708375319238802665"
         flex_queries = {}
 
         for _, queryId in enumerate(queryIds):
-            flex_query_df = None
+
             response = getFlexQuery(agmToken, queryId)
             if response['status'] == 'error':
                 return Response.error(f'Error fetching Flex Query for queryId {queryId}.')
@@ -85,32 +101,14 @@ def fetchFlexQueries(queryIds):
             try:
                 flex_query_dict = flex_query_df.to_dict(orient='records')
                 flex_queries[queryId] = flex_query_dict
-            except:
-                logger.error(f'Flex Query Empty for queryId {queryId}')
-                return Response.error(f'Flex Query Empty for queryId {queryId}')
+            except Exception as e:
+                logger.error(f'Flex Query Empty for queryId {queryId}: {str(e)}')
+                return Response.error(f'Flex Query Empty for queryId {queryId}: {str(e)}')
         return Response.success(flex_queries)
     
     except Exception as e:
         logger.error(f'Error fetching Flex Queries: {str(e)}')
         return Response.error(f'Error fetching Flex Queries: {str(e)}')
-
-def binaryXMLtoCSV(binaryXMLData, file_name):
-    logger.info(f'Converting binary XML to CSV for file: {file_name}')
-    try:
-        xml_data = binaryXMLData.decode('utf-8')
-        reader = csv.reader(xml_data.splitlines(), skipinitialspace=True)
-
-        with open('backups/acobo/' + file_name + '.csv',  'w', encoding='utf-8') as out_file:
-            writer = csv.writer(out_file)
-            for row in reader:
-                if ('BOA' not in row) and ('BOF' not in row) and ('BOS' not in row) and ('EOS' not in row) and ('EOA' not in row) and ('EOF' not in row):
-                    writer.writerow(row)
-
-        logger.success(f'Successfully converted binary XML to CSV for file: {file_name}')
-        return Response.success('backups/acobo/' + file_name + '.csv')
-    except Exception as e:
-        logger.error(f"Error in binaryXMLtoCSV: {str(e)}")
-        return Response.error(f"Failed to convert binary XML to CSV: {str(e)}")
 
 def binaryXMLtoDF(binaryXMLData):
 
@@ -127,7 +125,7 @@ def binaryXMLtoDF(binaryXMLData):
         
         df = pd.DataFrame(rows[1:], columns=rows[0])
         logger.success(f'Successfully converted binary XML to DF')
-        return df
+        return Response.success(df)
     
     except Exception as e:
         logger.error(f"Error. Failed to convert binary XML to DF: {str(e)}")

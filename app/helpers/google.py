@@ -303,7 +303,10 @@ class GoogleDrive:
     logger.info(f"Downloading file with ID: {fileId}")
 
     try:
-        request = self.service.files().get_media(fileId=fileId)
+        request = self.service.files().get_media(
+          fileId=fileId, 
+          supportsAllDrives=True
+        )
         downloaded_file = io.BytesIO()
         downloader = MediaIoBaseDownload(downloaded_file, request)
         done = False

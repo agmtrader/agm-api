@@ -16,14 +16,6 @@ def jwt_required_except_login():
         except exceptions.JWTExtendedException as e:
             return jsonify({"msg": str(e)}), 401
         
-def configure_logging(app):
-    if not os.path.exists('logs'):
-        os.mkdir('logs')
-    file_handler = RotatingFileHandler('logs/api.log', maxBytes=10240, backupCount=10)
-    file_handler.setFormatter(logger.formatter)
-    file_handler.setLevel(logger.DEBUG)
-    app.logger.info('API startup')
-
 def start_api():
     
     app = Flask(__name__, static_folder='static')
@@ -56,6 +48,7 @@ def start_api():
 
     @app.route('/login', methods=['POST'])
     def login():
+        logger.info(f'Login request: {request.get_json(force=True)}')
         payload = request.get_json(force=True)
         username = payload['username']
         password = payload['password']
