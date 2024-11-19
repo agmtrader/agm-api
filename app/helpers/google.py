@@ -383,7 +383,6 @@ class Gmail:
 
         # Inline the CSS
         html_content_inlined = transform(html_content)
-        logger.info(f'HTML content inlined: {html_content_inlined}')
 
         # Create a multipart message
         message = MIMEMultipart('alternative')
