@@ -4,8 +4,8 @@ import time
 import pandas as pd
 import csv
 
-from app.helpers.logger import logger
-from app.helpers.response import Response
+from src.utils.logger import logger
+from src.utils.response import Response
 
 logger.announcement('Initializing Flex Query Service', type='info')
 version='&v=3'

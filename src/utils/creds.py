@@ -1,11 +1,12 @@
+"""
+HELPER FOR TRANSFORMING GOOGLE CREDENTIALS INTO TOKENS
+"""
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-SCOPES = ["https://www.googleapis.com/auth/drive"]
-
-date = '20241024'
+SCOPES = ["https://mail.google.com/", "https://www.googleapis.com/auth/drive"]
 
 flow = InstalledAppFlow.from_client_secrets_file(
-        f"app/creds/creds.json", SCOPES
+        f"creds.json", SCOPES
 )
 
 creds = flow.run_local_server(port=0)

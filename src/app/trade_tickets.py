@@ -1,10 +1,8 @@
 from flask import request, Blueprint
 import requests as rq
 
-from app.modules.trade_tickets import generate_trade_ticket, generate_client_confirmation_message
-
-
-from app.helpers.logger import logger
+from src.components.trade_tickets import generate_trade_ticket, generate_client_confirmation_message
+from src.utils.logger import logger
 
 bp = Blueprint('trade_tickets', __name__)
 url = 'http://127.0.0.1:5001'

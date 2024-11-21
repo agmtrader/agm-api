@@ -1,5 +1,6 @@
 from flask import request, Blueprint
-from app.helpers.google import Firebase
+from src.components.database import Firebase
+from src.utils.logger import logger
 
 bp = Blueprint('database', __name__)
 
@@ -43,6 +44,7 @@ def read_route():
     path = body['path']
     query = body.get('query')
     response = Database.read(path, query)
+    logger.info(response)
     return response
 
 @bp.route('/update', methods=['POST'])

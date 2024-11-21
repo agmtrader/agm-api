@@ -1,7 +1,7 @@
 from flask import Blueprint, request, send_file
-from app.helpers.google import GoogleDrive
+from src.components.drive import GoogleDrive
 from io import BytesIO
-import base64
+
 bp = Blueprint('drive', __name__)
 
 Drive = GoogleDrive()

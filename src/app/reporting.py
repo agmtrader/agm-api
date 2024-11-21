@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from app.modules.reporting import extract, transform, load
+from src.components.reporting import extract, transform, load
 
 bp = Blueprint('reporting', __name__)
 

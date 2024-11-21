@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from app.helpers.flex_query import fetchFlexQueries
+from src.components.flex_query import fetchFlexQueries
 
 bp = Blueprint('flex_query', __name__)
 

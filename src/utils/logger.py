@@ -28,6 +28,10 @@ class Logger:
         logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
         logging.getLogger('googleapiclient.discovery').setLevel(logging.ERROR)
         logging.getLogger('google_auth_httplib2').setLevel(logging.ERROR)
+        logging.getLogger('feedparser').setLevel(logging.ERROR)
+        logging.getLogger('nltk').setLevel(logging.ERROR)
+        logging.getLogger('chardet').setLevel(logging.ERROR)
+        logging.getLogger('sqlalchemy').setLevel(logging.ERROR)
 
     def info(self, message):
         self.logger.debug(f"[blue]{message}[/blue]", extra={'markup': True})

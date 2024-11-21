@@ -2,10 +2,10 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, verify_jwt_in_request, create_access_token, exceptions
 import os
-from logging.handlers import RotatingFileHandler
-from app.routes import email, trade_tickets
-from app.helpers.logger import logger
 from dotenv import load_dotenv
+
+from src.app import email, trade_tickets
+from src.utils.logger import logger
 
 load_dotenv()
 
@@ -29,22 +29,23 @@ def start_api():
     # Apply JWT authentication to all routes except login
     app.before_request(jwt_required_except_login)
 
-    # Add this route before other routes
-    @app.route('/')
-    def index():
-        return send_from_directory('static', 'index.html')
-    
-    @app.route('/docs')
-    def docs():
-        return send_from_directory('static', 'docs.html')
-
-    from app.routes import reporting, drive, database, flex_query
+    from src.app import reporting, drive, database, flex_query
     app.register_blueprint(reporting.bp, url_prefix='/reporting')
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
     app.register_blueprint(drive.bp, url_prefix='/drive')
     app.register_blueprint(database.bp, url_prefix='/database')
     app.register_blueprint(flex_query.bp, url_prefix='/flex_query')
     app.register_blueprint(email.bp, url_prefix='/email')
+
+    # Add this route before other routes
+    @app.route('/')
+    def index():
+        return send_from_directory('public/static', 'index.html')
+    
+    @app.route('/docs')
+    def docs():
+        return send_from_directory('public/static', 'docs.html')
+
 
     @app.route('/login', methods=['POST'])
     def login():

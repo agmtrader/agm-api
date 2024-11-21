@@ -1,6 +1,6 @@
 import requests
 import os
-from app.helpers.logger import logger
+from src.utils.logger import logger
 
 # Use localhost instead of 0.0.0.0
 url = f'http://127.0.0.1:{os.getenv("API_PORT")}'
