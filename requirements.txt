@@ -5,7 +5,7 @@ Flask_JWT_Extended==4.6.0
 google_api_python_client==2.136.0
 google_auth_oauthlib==1.2.1
 Jinja2==3.1.4
-numpy==2.1.2
+numpy==2.0.2
 pandas==2.2.3
 premailer==3.10.0
 python-dotenv==1.0.1
