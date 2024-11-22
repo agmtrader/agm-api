@@ -1,7 +1,9 @@
 #!/bin/bash
 
 # Load environment variables first (ignoring comments and handling multiline values)
-export $(cat .env | xargs)
+set -a
+source .env
+set +a
 
 # Kill any existing process running on specified port
 lsof -ti :${API_PORT} | xargs kill -9 2>/dev/null || true
