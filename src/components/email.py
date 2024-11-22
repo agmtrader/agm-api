@@ -38,7 +38,7 @@ class Gmail:
 
     try:
         # Load the HTML template
-        env = Environment(loader=FileSystemLoader('app/helpers/email_templates'))
+        env = Environment(loader=FileSystemLoader('src/lib/email_templates'))
         template = env.get_template('trade_ticket.html')
 
         # Render the template with the plain text content
@@ -66,7 +66,7 @@ class Gmail:
         final_message.attach(message)
 
         # Attach the logo image
-        logo_path = 'app/assets/agm-logo.png'
+        logo_path = 'public/assets/agm-logo.png'
         with open(logo_path, 'rb') as logo_file:
             logo_mime = MIMEImage(logo_file.read())
             logo_mime.add_header('Content-ID', '<logo>')
