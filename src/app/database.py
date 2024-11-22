@@ -44,7 +44,6 @@ def read_route():
     path = body['path']
     query = body.get('query')
     response = Database.read(path, query)
-    logger.info(response)
     return response
 
 @bp.route('/update', methods=['POST'])

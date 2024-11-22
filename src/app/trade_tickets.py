@@ -18,7 +18,6 @@ def generate_route():
 
 @bp.route('/generate_client_confirmation_message', methods=['POST'])
 def generate_client_confirmation_message_route():
-    logger.info('Processing trade data.')
     payload = request.get_json(force=True)
     trade_data = payload['trade_data']
     response = generate_client_confirmation_message(trade_data)

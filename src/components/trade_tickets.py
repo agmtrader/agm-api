@@ -8,7 +8,9 @@ import re
 from datetime import datetime
 
 def extract_bond_details(description):
+    
     # Extract symbol (assuming it's always at the beginning)
+    logger.info(f'Extracting bond details from description: {description}')
     symbol = description.split()[0]
     
     # Extract coupon (handling both mixed number and decimal formats)
@@ -34,6 +36,7 @@ def extract_bond_details(description):
     else:
         maturity = None
     
+    logger.success(f'Extracted bond details: symbol={symbol}, coupon={coupon}, maturity={maturity}')
     return symbol, coupon, maturity
 
 def generate_trade_ticket(flex_query_dict, indices):

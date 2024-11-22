@@ -131,7 +131,6 @@ class Firebase:
           raise TypeError("Query keys must be strings")
         ref = ref.where(filter=firestore.FieldFilter(key, "==", value))
     
-    logger.success(f'Successfully queried documents.')
     results = []
     for doc in ref.stream():
         doc_dict = doc.to_dict()
