@@ -46,7 +46,6 @@ def start_api():
     def docs():
         return send_from_directory('public/static', 'docs.html')
 
-
     @app.route('/login', methods=['POST'])
     def login():
         logger.info(f'Login request: {request.get_json(force=True)}')
