@@ -85,4 +85,13 @@ def start_api():
 app = start_api()
 
 logger.announcement('Running safety checks...', type='info')
+current_dir = os.path.dirname(os.path.abspath(__file__))
+file_path = os.path.join(current_dir, 'src/lib/email_templates/trade_ticket.html')
+try:
+    with open(file_path, 'r') as file:
+        content = file.read()
+except Exception as e:
+    logger.error(f'Error reading email templates: {e}')
+    exit(1)
+    
 logger.announcement('Successfully started API', type='success')
