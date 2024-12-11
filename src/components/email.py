@@ -38,7 +38,11 @@ class Gmail:
 
     try:
         # Load the HTML template
-        env = Environment(loader=FileSystemLoader('src/lib/email_templates'))
+        # Get current directory
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        print(current_dir)
+
+        env = Environment(loader=FileSystemLoader(os.path.join(current_dir, '../lib/email_templates')))
         template = env.get_template('trade_ticket.html')
 
         # Render the template with the plain text content

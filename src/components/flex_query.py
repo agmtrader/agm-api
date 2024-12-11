@@ -55,7 +55,6 @@ def getFlexQuery(token, queryId):
         generatedReportURL = "".join([generatedReportURL, "?",token, refCode, version])
 
         generatedReportResponse = rq.get(url=generatedReportURL, allow_redirects=True)
-        print(generatedReportResponse.text[0:100])
         while (generatedReportResponse.status_code != 200 or ('ErrorCode' in generatedReportResponse.text and 'Fail' in generatedReportResponse.text)) and retry_count < max_retries:
             logger.warning(f'Flex Query Generation Failed. Preview: {generatedReportResponse.text[0:100]}')
             logger.info(f'Retrying... Attempt {retry_count} of {max_retries}')
