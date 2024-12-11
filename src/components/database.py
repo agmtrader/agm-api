@@ -100,7 +100,7 @@ class Firebase:
       if isinstance(data, pd.DataFrame):
         data = data.to_dict('records')
       
-      # Iterate through the data and add each row as a document]
+      # Iterate through the data and add each row as a document
       for i, row in enumerate(data):
         self.db.collection(path).add(row)
         if i != 0:

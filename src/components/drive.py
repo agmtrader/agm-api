@@ -13,6 +13,8 @@ import io
 import os
 import base64
 
+from typing import Union
+
 class GoogleDrive:
   
   def __init__(self):
@@ -174,7 +176,15 @@ class GoogleDrive:
       logger.error(f"Error retrieving file info: {str(e)}")
       return Response.error(f"Error retrieving file info: {str(e)}")
 
-
+  def getFileInfoById(self, file_id):
+    logger.info(f'Getting file info for file: {file_id}')
+    try:
+      file = self.service.files().get(fileId=file_id, fields='id, name, parents, mimeType, size, modifiedTime, createdTime', supportsAllDrives=True).execute()
+      logger.success(f"File found with ID: {file_id}")
+      return Response.success(file)
+    except Exception as e:
+      logger.error(f"Error retrieving file info: {str(e)}")
+      return Response.error(f"Error retrieving file info: {str(e)}")
 
   def renameFile(self, fileId, newName):
     try:
@@ -216,41 +226,53 @@ class GoogleDrive:
       logger.error(f"Error moving file: {str(e)}")
       return Response.error(f"Error moving file: {str(e)}")
   
-  def uploadFile(self, fileName, mimeType, f, parentFolderId):
+  def uploadFile(self, fileName: str, mimeType: str, f: Union[str, io.IOBase, list], parentFolderId: str) -> dict:
+    """
+    Uploads a file to Google Drive in a specified folder.
+
+    Args:
+        fileName (str): The name to give the uploaded file in Google Drive
+        mimeType (str): The MIME type of the file being uploaded
+        f (Union[str, io.IOBase, list]): The file content to upload. Can be:
+            - base64 encoded string (from third parties)
+            - file object (io.IOBase)
+            - list (will be converted to CSV via pandas DataFrame)
+        parentFolderId (str): The ID of the folder where the file should be uploaded
+
+    Returns:
+        dict: A Response object containing:
+            - On success: {'status': 'success', 'content': file_metadata}
+                where file_metadata includes id, name, parents, mimeType, size, modifiedTime, createdTime
+            - On failure: {'status': 'error', 'content': error_message}
+
+    Raises:
+        Exception: If an unsupported file type is provided or if upload fails
+
+    """
     logger.info(f"Uploading file: {fileName} to folder: {parentFolderId}")
     fileMetadata = {'name': fileName, 'mimeType': mimeType}
 
     if parentFolderId is not None:
         fileMetadata['parents'] = [parentFolderId]
-    else:
-        logger.error("No parent folder ID provided.")
-        return Response.error('No parent folder ID provided.')
-    
+
     try:
         # Handle base64 encoded data from React
-        if isinstance(f, str) and f.startswith('data:'):
-            # Extract the base64 encoded data
-            header, encoded = f.split(",", 1)
-            file_bytes = base64.b64decode(encoded)
+        if isinstance(f, str):
+            if f.startswith('data:'):
+                header, encoded = f.split(",", 1)
+                file_bytes = base64.b64decode(encoded)
+            else:
+                # Handle plain string content
+                file_bytes = f.encode('utf-8')
             media = MediaIoBaseUpload(BytesIO(file_bytes), mimetype=mimeType)
-        # Handle other file types (keeping existing logic)
         elif isinstance(f, io.IOBase):
             media = MediaIoBaseUpload(f, mimetype=mimeType)
-        elif isinstance(f, bytes):
-            media = MediaIoBaseUpload(BytesIO(f), mimetype=mimeType)
-        elif isinstance(f, pd.DataFrame):
-            csv_buffer = BytesIO()
-            f.to_csv(csv_buffer, index=False)
-            csv_bytes = csv_buffer.getvalue()
-            media = MediaIoBaseUpload(BytesIO(csv_bytes), mimetype='text/csv')
         elif isinstance(f, list):
             df = pd.DataFrame(f)
             csv_buffer = BytesIO()
             df.to_csv(csv_buffer, index=False)
             csv_bytes = csv_buffer.getvalue()
             media = MediaIoBaseUpload(BytesIO(csv_bytes), mimetype='text/csv')
-        else:
-            raise Exception('Unsupported file type')
 
         file_metadata = {
             'name': fileName,

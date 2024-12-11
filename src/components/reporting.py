@@ -10,7 +10,6 @@ from src.utils.api import access_api
 import pandas as pd
 from io import BytesIO
 import base64
-import os
 
 logger.announcement('Initializing Reporting Module', type='info')
 logger.announcement('Initialized Reporting Module', type='success')
@@ -29,21 +28,18 @@ def get_most_recent_file(files):
     logger.info(f'Most recent file: {most_recent_file["name"], most_recent_file["createdTime"]}')
     return most_recent_file
     
-"""EXTRACT"""
+"""
+Extracts reports from various sources and prepare them for processing.
+
+This function performs the following steps:
+1. Reset the batch folder
+2. Fetch Flex Queries
+3. Upload Flex Queries to the batch folder
+4. Rename files in the batch folder
+5. Sort files to respective backup folders
+6. Return the list of processed files in the batch folder
+"""
 def extract():
-    """
-    Extract reports from various sources and prepare them for processing.
-    
-    This function performs the following steps:
-    1. Reset the batch folder
-    2. Fetch Flex Queries
-    3. Upload Flex Queries to the batch folder
-    4. Rename files in the batch folder
-    5. Sort files to respective backup folders
-    
-    :return: Response object with batch files or error message. Note batch files are not in 
-    batch folder by return time, but can be helpful for checking which reports were generated.
-    """
     logger.announcement('Generating Reports.', type='info')
     batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
 
@@ -88,6 +84,59 @@ def extract():
     logger.announcement('Reports successfully extracted.', type='success')
     return Response.success(batch_files)
 
+"""
+Transform the extracted reports for further processing.
+
+This function performs the following steps:
+1. Reset the resources folder
+2. Process each report according to its configuration (or default processing) and store in resources folder
+3. Return the list of processed files in the resources folder
+"""
+def transform():
+    logger.announcement('Transforming reports.', type='info')
+    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+
+    # Reset resources folder
+    logger.announcement('Resetting resources folder.', type='info')
+    response = access_api('/drive/reset_folder', method='POST', data={'folder_id': resources_folder_id})
+    if response['status'] == 'error':
+        return Response.error(f'Error resetting resources folder.')
+    logger.announcement('Resources folder reset.', type='success')
+
+    # Define report configurations
+    logger.announcement('Defining report configurations.', type='info')
+    logger.announcement('Report configurations defined.', type='success')
+
+    # Process files
+    logger.announcement('Processing files.', type='info')
+    for report_type, config in report_configs.items():
+        logger.announcement(f'Processing {report_type.capitalize()} file.', type='info')
+        response = process_report(config, resources_folder_id)
+        if response['status'] == 'error':
+            logger.warning(f'Error processing {report_type.capitalize()} file, not added to resources folder.')
+        else:
+            logger.announcement(f'{report_type.capitalize()} file processed.', type='success')
+    logger.announcement('Files processed.', type='success')
+
+    response = getFinanceData()
+    if response['status'] == 'error':
+        return Response.error(f'Error fetching finance data.')
+
+    # Get all files in resources folder to return
+    logger.announcement('Fetching files in resources folder.', type='info')
+    response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': resources_folder_id})
+    if response['status'] == 'error':
+        logger.error(f'Error fetching files in resources folder.')
+        return Response.error(f'Error fetching files in resources folder.')
+    resources_files = response['content']
+    logger.announcement('Files fetched.', type='success')
+
+    logger.announcement('Reports successfully transformed.', type='success')
+    return Response.success(resources_files)
+
+"""
+HELPER FUNCTIONS
+"""
 def renameFilesInBatch(batch_folder_id):
     """
     Rename files in the batch folder based on specific naming conventions.
@@ -196,54 +245,57 @@ def sortFilesToFolders(batch_files):
 
     return Response.success('Files sorted into backup folders.')
 
-"""TRANSFORM"""
-def transform():
+def getFinanceData():
     """
-    Transform the extracted reports for further processing.
+    Get finance data from the finance folder.
     
-    This function performs the following steps:
-    1. Reset the resources folder
-    2. Process each report according to its configuration and store in resources folder
-    3. Return the list of processed files in the resources folder
-    
-    :return: Response object with resources files or error message
+    :return: Response object with finance data or error message
     """
-    logger.announcement('Transforming reports.', type='info')
-    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+    import yfinance as yf
+    path_resources = '/content/gdrive/Shareddrives/ETL/resources/'
 
-    # Reset resources folder
-    logger.announcement('Resetting resources folder.', type='info')
-    response = access_api('/drive/reset_folder', method='POST', data={'folder_id': resources_folder_id})
+    response = access_api('/drive/export_file', method='POST', data={'file_id': '1AqpIE7LRV40J-Aew5fA-P6gEfji3Yb-Rp5DohI9BQFY', 'mime_type': 'text/csv'})
+    try:
+        # Convert binary response to DataFrame
+        data = pd.read_csv(BytesIO(response))
+    except Exception as e:
+        logger.error(f'Error converting response to DataFrame: {str(e)}')
+        raise Response.error(f'Error processing file: {str(e)}')
+
+    # Rest of your code using 'data' DataFrame instead of previous undefined 'data' variable
+    ticker_list = data['Ticker'].tolist()
+    ticker_list
+
+    TICKERS = ticker_list
+
+    df = yf.download(tickers= TICKERS, period= 'max', interval= '1d')
+    df = df.sort_index(ascending=False)
+    df2 = df.iloc[[0,251,503,755,1007,1259]]
+
+    # EXPORT DATASET
+    filename =  'dataset_PX_5Y.csv'
+    folder = path_resources
+
+    # Instead of writing to file, write to memory
+    csv_buffer = BytesIO()
+    df2.to_csv(csv_buffer, index=True)
+    csv_buffer.seek(0)
+
+    # Convert bytes to base64 string for JSON serialization
+    csv_base64 = base64.b64encode(csv_buffer.getvalue()).decode('utf-8')
+
+    # Upload the CSV data from memory
+    response = access_api('/drive/upload_file', method='POST', data={
+        'fileName': filename,
+        'mimeType': 'text/csv',
+        'file': csv_base64,
+        'parentFolderId': '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+    })
+
     if response['status'] == 'error':
-        return Response.error(f'Error resetting resources folder.')
-    logger.announcement('Resources folder reset.', type='success')
-
-    # Define report configurations
-    logger.announcement('Defining report configurations.', type='info')
-    logger.announcement('Report configurations defined.', type='success')
-
-    # Process files
-    logger.announcement('Processing files.', type='info')
-    for report_type, config in report_configs.items():
-        logger.announcement(f'Processing {report_type.capitalize()} file.', type='info')
-        response = process_report(config, resources_folder_id)
-        if response['status'] == 'error':
-            logger.warning(f'Error processing {report_type.capitalize()} file, not added to resources folder.')
-        else:
-            logger.announcement(f'{report_type.capitalize()} file processed.', type='success')
-    logger.announcement('Files processed.', type='success')
-
-    # Get all files in resources folder to return
-    logger.announcement('Fetching files in resources folder.', type='info')
-    response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': resources_folder_id})
-    if response['status'] == 'error':
-        logger.error(f'Error fetching files in resources folder.')
-        return Response.error(f'Error fetching files in resources folder.')
-    resources_files = response['content']
-    logger.announcement('Files fetched.', type='success')
-
-    logger.announcement('Reports successfully transformed.', type='success')
-    return Response.success(resources_files)
+        logger.error(f'Error uploading finance data CSV file.')
+        return Response.error('Error uploading finance data.')
+    return Response.success('Finance data uploaded.')
 
 def process_report(config, resources_folder_id):
     """
@@ -344,6 +396,56 @@ def process_open_positions_template(df):
     ]
     return df[columns_order]
 
+def process_rtd_template(df):
+    """
+    Process the RTD file.
+    
+    :param df: Input dataframe
+    :return: Processed dataframe
+    """
+    # Upload the full file
+    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+    full_dict = df.to_dict(orient='records')
+    response = access_api('/drive/upload_file', method='POST', data={
+        'fileName': 'ibkr_rtd_all.csv',
+        'mimeType': 'text/csv',
+        'file': full_dict,
+        'parentFolderId': resources_folder_id
+    })
+    if response['status'] == 'error':
+        logger.error(f'Error uploading full RTD CSV file.')
+    
+    # Sort the dataframe in the same order as the excel template
+    df_rtd_template = df[['Symbol',
+                            'Company Name',
+                            'Financial Instrument',
+                            'Position',
+                            'Avg Price',
+                            'Bid Size',
+                            'Bid',
+                            'Daily P&L',
+                            'Ask',
+                            'Ask Size',
+                            'Ask Yield',
+                            'Duration %  ', # The downloaded CSV has 2 spaces after the % symbol
+                            'Sector',
+                            'Industry',
+                            'Maturity',
+                            'Next Option Date',
+                            'Coupon',
+                            'Change',
+                            'Change %',
+                            'Last',
+                            'Ticker Action',
+                            'Bid Yield',
+                            'Ratings',
+                            'Payment Frequency',
+                            'Issuer Country ' # The downloaded CSV has 1 space after the y
+    ]]
+    df_rtd_template['Symbol'] = df_rtd_template['Symbol'].astype(str)
+    df_rtd_template = df_rtd_template[df_rtd_template['Symbol'].str.contains('IBCID')]
+    return df
+
 report_configs = {
     'clients': {
         'folder_id': '1FNcbWNptK-A5IhmLws-R2Htl85OSFrIn',
@@ -365,54 +467,37 @@ report_configs = {
     },
     'rtd': {
         'folder_id': '12L3NKflYtMiisnZOpU9aa1syx2ZJA6JC',
-        'output_filename': 'ibkr_rtd.csv',
+        'output_filename': 'ibkr_rtd_template.csv',
+        'process_func': process_rtd_template,
     },
 }
 
-"""LOAD"""
-def load():
-    """
-    Load the processed reports into the database.
+def migrate():
+    logger.announcement('Migrating reports.', type='info')
+    response = access_api('/drive/export_file', method='POST', data={'file_id': '1hhYzIBQ3sEVlmiYpiOP9sCyHXGUefajVU7WMvNgXLYk', 'mime_type': 'text/csv'})
+    try:
+        file_data = BytesIO(response)
+    except:
+        return Response.error(f'Error downloading file.')
+    old_accounts_df = pd.read_csv(file_data)
     
-    This function performs the following steps:
-    1. Fetch files from the resources folder
-    2. For each file:
-        a. Download the file
-        b. Upload the file data to the database
-    
-    :return: Response object with success message or error
-    """
-    logger.announcement('Uploading reports to database.', type='info')
+    accounts_df = pd.DataFrame(old_accounts_df, columns=['AccountID', 'AccountNumber', 'IBKRPassword', 'IBKRUsername', 'TemporalEmail', 'TemporalPassword', 'TicketID'])
 
-    logger.announcement('Fetching files in resources folder.', type='info')
-    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
-    response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': resources_folder_id})
+    accounts_df['AccountNumber'] = old_accounts_df['Numero de cuenta'].astype(str)
+    accounts_df['IBKRPassword'] = old_accounts_df['Contraseña 1'].astype(str)
+    accounts_df['IBKRUsername'] = old_accounts_df['Usuario'].astype(str)
+    accounts_df['TemporalEmail'] = old_accounts_df['Dirección de Correo'].astype(str)
+    accounts_df['TemporalPassword'] = old_accounts_df['Contraseña'].astype(str)
+    accounts_df['Uploader'] = old_accounts_df['Dirección de correo electrónico'].astype(str)
+    accounts_df = accounts_df.fillna('')
+
+    logger.info(f'{accounts_df}')
+
+    logger.info(f'Uploading accounts to database.')
+    response = access_api('/database/upload_collection', method='POST', data={'path': 'db/clients/accounts', 'data': accounts_df.to_dict('records')})
     if response['status'] == 'error':
-        return Response.error(f'Error fetching files in resources folder.')
-    logger.announcement('Files fetched.', type='success')
-    
-    resources_files = response['content']
-    for f in resources_files:
-        
-        # Download file
-        logger.announcement(f'Downloading file: {f["name"]}', type='info')
-        response = access_api('/drive/download_file', method='POST', data={'file_id': f['id']})
-        try:
-            data = BytesIO(response)
-        except:
-            return Response.error(f'Error downloading file.')
-        logger.announcement(f'File downloaded.', type='success')
+        logger.error(f'Error uploading accounts to database.')
+        return Response.error('Error uploading accounts to database.')
+    logger.success('Accounts uploaded to database.')
 
-        file_df = pd.read_csv(data)
-        file_df = file_df.fillna('')
-        file_dict = file_df.to_dict(orient='records')
-
-        # Upload collection
-        logger.announcement(f'Uploading {f["name"]} to database.', type='info')
-        response = access_api('/database/upload_collection', method='POST', data={'path': f'db/reporting/{f["name"]}', 'data': file_dict})
-        if response['status'] == 'error':
-            return Response.error(f'Error uploading file to database.')
-        logger.announcement(f'{f["name"]} added to database.', type='success')
-
-    logger.announcement('Reports successfully uploaded to database.', type='success')
-    return Response.success('Reports successfully uploaded to database.')
+    return Response.success('Reports migrated.')
