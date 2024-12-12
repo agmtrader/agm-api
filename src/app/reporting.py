@@ -1,5 +1,5 @@
 from flask import Blueprint
-from src.components.reporting import extract, transform, migrate
+from src.components.reporting import extract, transform
 
 bp = Blueprint('reporting', __name__)
 
@@ -11,9 +11,4 @@ def extract_route():
 @bp.route('/transform', methods=['GET'])
 def transform_route():
     response = transform()
-    return response
-
-@bp.route('/migrate', methods=['POST'])
-def migrate_route():
-    response = migrate()
     return response
