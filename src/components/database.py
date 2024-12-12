@@ -1,6 +1,8 @@
 import os
 import pandas as pd
 
+from io import BytesIO
+
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
@@ -8,6 +10,7 @@ from firebase_admin import firestore
 from src.utils.logger import logger
 from src.utils.response import Response
 from src.utils.exception import handle_exception
+from src.utils.api import access_api
 
 class Firebase:
 
