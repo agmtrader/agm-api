@@ -1,6 +1,5 @@
 from flask import request, Blueprint
 from src.components.database import Firebase
-from src.utils.logger import logger
 
 bp = Blueprint('database', __name__)
 
@@ -27,7 +26,6 @@ def list_subcollections_route():
     path = payload['path']
     response = Database.listSubcollections(path)
     return response
-
 
 @bp.route('/create', methods=['POST'])
 def create_route():
