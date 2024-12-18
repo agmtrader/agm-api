@@ -11,6 +11,6 @@ lsof -ti :${API_PORT} | xargs kill -9 2>/dev/null || true
 # Start Gunicorn with environment variables and increased timeout
 gunicorn --bind 0.0.0.0:${API_PORT} \
          --timeout 120 \
-         --workers 2 \
-         --threads 4 \
+         --workers 4 \
+         --threads 8 \
          run:app

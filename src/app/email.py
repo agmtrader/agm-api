@@ -9,5 +9,4 @@ Email = Gmail()
 @bp.route('/send_client_email', methods=['POST'])
 def send_client_email_route():
   payload = request.get_json(force=True)
-  response = Email.sendClientEmail(payload['plain_text'], payload['client_email'], payload['subject'])
-  return Response.success(response)
+  return Email.sendClientEmail(payload['plain_text'], payload['client_email'], payload['subject'])

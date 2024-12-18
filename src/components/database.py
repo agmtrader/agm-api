@@ -92,7 +92,7 @@ class Firebase:
       logger.error(f"Error clearing collection: {str(e)}")
       return Response.error(f"Error clearing collection: {str(e)}")
   
-  # upload collection is used to upload a csv file or pandas DataFrame to a folder
+  # upload collection is used to upload a list of dictionaries or pandas DataFrame to a folder
   def upload_collection(self, path, data):
     try:
       # Clear the collection before uploading

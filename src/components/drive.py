@@ -16,7 +16,7 @@ import base64
 from typing import Union
 
 class GoogleDrive:
-  
+
   def __init__(self):
     logger.announcement('Initializing GoogleDrive connection.', type='info')
     try:
@@ -34,7 +34,7 @@ class GoogleDrive:
     except Exception as e:
       logger.error(f"Error initializing GoogleDrive: {str(e)}")
 
-  def getSharedDriveInfo(self, drive_name):
+  def get_shared_drive_info(self, drive_name):
     logger.info(f'Getting shared drive info for drive: {drive_name}')
     try:
       shared_drives = []
@@ -63,7 +63,7 @@ class GoogleDrive:
       logger.error(f"Error retrieving shared drive info: {str(e)}")
       return Response.error(f"Error retrieving shared drive info: {str(e)}")
 
-  def getFolderInfo(self, parent_id, folder_name):
+  def get_folder_info(self, parent_id, folder_name):
     logger.info(f'Getting folder info for folder: {folder_name} in parent: {parent_id}')
     try:
       folders = []
@@ -92,8 +92,8 @@ class GoogleDrive:
       logger.error(f"Error retrieving folder info: {str(e)}")
       return Response.error(f"Error retrieving folder info: {str(e)}")
 
-  def resetFolder(self, folder_id):
-      response = self.getFilesInFolder(folder_id)
+  def reset_folder(self, folder_id):
+      response = self.get_files_in_folder(folder_id)
       if response['status'] == 'error':
           return Response.error(f'Error fetching files in folder.')
       files = response['content']
@@ -104,7 +104,7 @@ class GoogleDrive:
                   return Response.error(f'Error deleting file.')
       return Response.success('Folder reset.')
 
-  def getFilesInFolder(self, parent_id):
+  def get_files_in_folder(self, parent_id):
     logger.info(f'Getting files in folder: {parent_id}')
     try:
       files = []
@@ -129,7 +129,7 @@ class GoogleDrive:
       logger.error(f"Error retrieving files in folder: {str(e)}")
       return Response.error(f"Error retrieving files in folder: {str(e)}")
 
-  def createFolder(self, folderName, parentFolderId):
+  def create_folder(self, folderName, parentFolderId):
 
       logger.info(f"Creating folder: {folderName} in folder: {parentFolderId}")
 
@@ -147,7 +147,7 @@ class GoogleDrive:
       logger.success(f"Successfully created folder: {folderName} in folder: {parentFolderId}")
       return Response.success(folder)
 
-  def getFileInfo(self, parent_id, file_name):
+  def get_file_info(self, parent_id, file_name):
     logger.info(f'Getting file info for file: {file_name} in parent: {parent_id}')
     try:
       files = []
@@ -176,7 +176,7 @@ class GoogleDrive:
       logger.error(f"Error retrieving file info: {str(e)}")
       return Response.error(f"Error retrieving file info: {str(e)}")
 
-  def getFileInfoById(self, file_id):
+  def get_file_info_by_id(self, file_id):
     logger.info(f'Getting file info for file: {file_id}')
     try:
       file = self.service.files().get(fileId=file_id, fields='id, name, parents, mimeType, size, modifiedTime, createdTime', supportsAllDrives=True).execute()
@@ -186,7 +186,7 @@ class GoogleDrive:
       logger.error(f"Error retrieving file info: {str(e)}")
       return Response.error(f"Error retrieving file info: {str(e)}")
 
-  def renameFile(self, fileId, newName):
+  def rename_file(self, fileId, newName):
     try:
 
       logger.info(f'Renaming file {fileId} to {newName}')
@@ -208,7 +208,7 @@ class GoogleDrive:
       logger.error(f"Error renaming file: {str(e)}")
       return Response.error(f"Error renaming file: {str(e)}")
 
-  def moveFile(self, f, newParentId):
+  def move_file(self, f, newParentId):
     logger.info(f'Moving file: {f} to new parent: {newParentId}')
     try:
       
@@ -226,7 +226,7 @@ class GoogleDrive:
       logger.error(f"Error moving file: {str(e)}")
       return Response.error(f"Error moving file: {str(e)}")
   
-  def uploadFile(self, fileName: str, mimeType: str, f: Union[str, io.IOBase, list], parentFolderId: str) -> dict:
+  def upload_file(self, fileName: str, mimeType: str, f: Union[str, io.IOBase, list], parentFolderId: str) -> dict:
     """
     Uploads a file to Google Drive in a specified folder.
 
@@ -294,8 +294,8 @@ class GoogleDrive:
     except Exception as e:
         logger.error(f"Error uploading file: {fileName}. Error: {str(e)}")
         return Response.error(f'Error uploading file: {str(e)}')
-          
-  def deleteFile(self, fileId):
+      
+  def delete_file(self, fileId):
 
       logger.info(f"Deleting file with ID: {fileId}")
 
@@ -310,15 +310,12 @@ class GoogleDrive:
           logger.error(f"Error deleting file with ID: {fileId}. Error: {str(e)}")
           return Response.error({'content': f'Error deleting file: {str(e)}', 'file_id': fileId})
 
-  def downloadFile(self, fileId):
+  def download_file(self, fileId):
 
     logger.info(f"Downloading file with ID: {fileId}")
 
     try:
-        request = self.service.files().get_media(
-          fileId=fileId, 
-          supportsAllDrives=True
-        )
+        request = self.service.files().get_media(fileId=fileId)
         downloaded_file = io.BytesIO()
         downloader = MediaIoBaseDownload(downloaded_file, request)
         done = False
@@ -330,14 +327,14 @@ class GoogleDrive:
         logger.error(f"An error occurred: {error}")
         return Response.error(error)
     
-    except:
-        logger.error("Error downloading file.")
-        return Response.error('Error downloading file.')
+    except Exception as e:
+        logger.error(f"Error downloading file: {str(e)}")
+        return Response.error(f"Error downloading file: {str(e)}")
     
     logger.success("Successfully downloaded file.")
     return Response.success(downloaded_file.getvalue())
 
-  def exportFile(self, fileId, mimeType):
+  def export_file(self, fileId, mimeType):
     logger.info(f"Exporting file with ID: {fileId} to MIME type: {mimeType}")
 
     try:
