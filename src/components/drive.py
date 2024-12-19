@@ -99,7 +99,7 @@ class GoogleDrive:
       files = response['content']
       if len(files) > 0:
           for f in files:
-              response = self.deleteFile(f['id'])
+              response = self.delete_file(f['id'])
               if response['status'] == 'error':
                   return Response.error(f'Error deleting file.')
       return Response.success('Folder reset.')

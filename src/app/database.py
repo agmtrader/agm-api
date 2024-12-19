@@ -51,4 +51,5 @@ def update_route():
 def delete_route():
     body = request.get_json(force=True)
     path = body['path']
-    return Database.delete(path)
+    query = body['query']
+    return Database.delete(path, query)

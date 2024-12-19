@@ -65,7 +65,8 @@ def backup_investment_proposals():
                         'FileInfo': pdf_file,
                         'ClientName': client_full_name,  # Keep full name with spaces
                         'YearEmmitted': yearly_folder['name'],
-                        'Timestamp': timestamp  # New column for the timestamp
+                        'Timestamp': timestamp,  # New column for the timestamp
+                        'Accepted': False
                     })
 
     response = access_api('/database/upload_collection', 'POST', {
