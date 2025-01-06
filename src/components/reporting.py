@@ -10,24 +10,12 @@ from src.utils.api import access_api
 import pandas as pd
 from io import BytesIO
 import base64
+import yfinance as yf
 
 logger.announcement('Initializing Reporting Module', type='info')
 logger.announcement('Initialized Reporting Module', type='success')
 cst_time = getCurrentCST()
 
-def get_most_recent_file(files):
-    """
-    Get the most recent file from a list of files based on creation time.
-    
-    :param files: List of file dictionaries
-    :return: Most recent file dictionary
-    """
-    logger.info('Getting most recent file.')
-    files.sort(key=lambda f: datetime.strptime(f['createdTime'], '%Y-%m-%dT%H:%M:%S.%fZ'), reverse=True)
-    most_recent_file = files[0]
-    logger.info(f'Most recent file: {most_recent_file["name"], most_recent_file["createdTime"]}')
-    return most_recent_file
-    
 """
 Extracts reports from various sources and prepare them for processing.
 
@@ -42,13 +30,7 @@ This function performs the following steps:
 def extract():
     logger.announcement('Generating Reports.', type='info')
     batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
-
-    # Reset batch folder
-    logger.announcement('Resetting batch folder.', type='info')
-    response = access_api('/drive/reset_folder', method='POST', data={'folder_id': batch_folder_id})
-    if response['status'] == 'error':
-        return Response.error(f'Error resetting batch folder.')
-    logger.announcement('Batch folder reset.', type='success')
+    backups_folder_id = '1d9RShyGidP04XdnH87pUHsADghgOiWj3'
 
     # Fetch Flex Queries
     logger.announcement('Fetching Flex Queries.', type='info')
@@ -61,28 +43,32 @@ def extract():
     # Upload Flex Queries to batch folder
     logger.announcement('Uploading Flex Queries to batch folder.', type='info')
     for key, value in flex_queries.items():
-        response = access_api('/drive/upload_file', method='POST', data={'fileName': key, 'mimeType': 'text/csv', 'file': value, 'parentFolderId': batch_folder_id})
+        response = access_api('/drive/upload_file', method='POST', data={
+            'file_name': key, 
+            'mime_type': 'text/csv', 
+            'file': value, 
+            'parent_folder_id': batch_folder_id
+        })
         if response['status'] == 'error':
             return Response.error(f'Error uploading files.')
     logger.announcement('Flex Queries uploaded to batch folder.', type='success')
 
     # Rename files in batch folder
     logger.announcement('Renaming files in batch folder.', type='info')
-    response = renameFilesInBatch(batch_folder_id)
+    response = rename_files_in_batch(batch_folder_id)
     if response['status'] == 'error':
         return Response.error(f'Error renaming files.')    
-    batch_files = response['content']
     logger.announcement('Files renamed.', type='success')
     
     # Sort files to respective backup folders
     logger.announcement('Sorting files to backup folders.', type='info')
-    response = sortFilesToFolders(batch_files)
+    response = sort_files_to_folders(batch_folder_id, backups_folder_id)
     if response['status'] == 'error':
         return Response.error(f'Error sorting files to backup folders.')
     logger.announcement('Files sorted to backup folders.', type='success')
 
     logger.announcement('Reports successfully extracted.', type='success')
-    return Response.success(batch_files)
+    return Response.success('Reports successfully extracted and sent to backup folders.')
 
 """
 Transform the extracted reports for further processing.
@@ -103,11 +89,7 @@ def transform():
         return Response.error(f'Error resetting resources folder.')
     logger.announcement('Resources folder reset.', type='success')
 
-    # Define report configurations
-    logger.announcement('Defining report configurations.', type='info')
-    logger.announcement('Report configurations defined.', type='success')
-
-    # Process files
+    # Process files in each backup folder
     logger.announcement('Processing files.', type='info')
     for report_type, config in report_configs.items():
         logger.announcement(f'Processing {report_type.capitalize()} file.', type='info')
@@ -118,26 +100,28 @@ def transform():
             logger.announcement(f'{report_type.capitalize()} file processed.', type='success')
     logger.announcement('Files processed.', type='success')
 
-    response = getFinanceData()
+    # Process finance data
+    logger.announcement('Fetching finance data.', type='info')
+    response = get_finance_data(resources_folder_id)
     if response['status'] == 'error':
         return Response.error(f'Error fetching finance data.')
 
     # Get all files in resources folder to return
-    logger.announcement('Fetching files in resources folder.', type='info')
+    """
     response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': resources_folder_id})
     if response['status'] == 'error':
         logger.error(f'Error fetching files in resources folder.')
         return Response.error(f'Error fetching files in resources folder.')
     resources_files = response['content']
-    logger.announcement('Files fetched.', type='success')
-
+    """
+    
     logger.announcement('Reports successfully transformed.', type='success')
-    return Response.success(resources_files)
+    return Response.success('Reports successfully transformed.')
 
 """
-HELPER FUNCTIONS
+EXTRACT HELPERS
 """
-def renameFilesInBatch(batch_folder_id):
+def rename_files_in_batch(batch_folder_id):
     """
     Rename files in the batch folder based on specific naming conventions.
     
@@ -181,16 +165,15 @@ def renameFilesInBatch(batch_folder_id):
     if response['status'] == 'error':
         return Response.error(f'Error fetching files in batch.')  
     batch_files = response['content'] 
-    return Response.success(batch_files)
+    return Response.success('Files renamed in batch folder.')
 
-def sortFilesToFolders(batch_files):
+def sort_files_to_folders(batch_folder_id, backups_folder_id):
     """
     Sort files from the batch folder into their respective backup folders.
     
     :param batch_files: List of files in the batch folder
     :return: Response object with success message or error
     """
-    backups_folder_id = '1d9RShyGidP04XdnH87pUHsADghgOiWj3'
     folder_names = ['TasksForSubaccounts', 'ContactListSummary', 'RTD', 'Clients', '742588', '734782', '732383']
     folder_info = {}
 
@@ -211,7 +194,6 @@ def sortFilesToFolders(batch_files):
     client_fees_folder_info = folder_info['732383']
 
     # Get all files in batch
-    batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
     response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': batch_folder_id})
     if response['status'] == 'error':
         return Response.error(f'Error fetching files in batch.')
@@ -245,22 +227,30 @@ def sortFilesToFolders(batch_files):
 
     return Response.success('Files sorted into backup folders.')
 
-def getFinanceData():
+"""
+TRANSFORM HELPERS
+"""
+def get_finance_data(resources_folder_id):
     """
     Get finance data from the finance folder.
     
     :return: Response object with finance data or error message
     """
-    import yfinance as yf
-    path_resources = '/content/gdrive/Shareddrives/ETL/resources/'
 
-    response = access_api('/drive/export_file', method='POST', data={'file_id': '1AqpIE7LRV40J-Aew5fA-P6gEfji3Yb-Rp5DohI9BQFY', 'mime_type': 'text/csv'})
+    proposals_equity_list_id = '1AqpIE7LRV40J-Aew5fA-P6gEfji3Yb-Rp5DohI9BQFY'
+    
+    response = access_api('/drive/export_file', method='POST', data={
+        'file_id': proposals_equity_list_id, 
+        'mime_type': 'text/csv'
+    })
+    print(response)
+
     try:
         # Convert binary response to DataFrame
         data = pd.read_csv(BytesIO(response))
-    except Exception as e:
-        logger.error(f'Error converting response to DataFrame: {str(e)}')
-        raise Response.error(f'Error processing file: {str(e)}')
+    except:
+        logger.error(f'Error converting response to DataFrame.')
+        return Response.error(f'Error processing file.')
 
     # Rest of your code using 'data' DataFrame instead of previous undefined 'data' variable
     ticker_list = data['Ticker'].tolist()
@@ -274,7 +264,6 @@ def getFinanceData():
 
     # EXPORT DATASET
     filename =  'dataset_PX_5Y.csv'
-    folder = path_resources
 
     # Instead of writing to file, write to memory
     csv_buffer = BytesIO()
@@ -286,10 +275,10 @@ def getFinanceData():
 
     # Upload the CSV data from memory
     response = access_api('/drive/upload_file', method='POST', data={
-        'fileName': filename,
-        'mimeType': 'text/csv',
+        'file_name': filename,
+        'mime_type': 'text/csv',
         'file': csv_base64,
-        'parentFolderId': '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+        'parent_folder_id': resources_folder_id
     })
 
     if response['status'] == 'error':
@@ -313,7 +302,6 @@ def process_report(config, resources_folder_id):
     if response['status'] == 'error':
         logger.error(f'Error fetching files in folder.')
         return Response.error(f'Error fetching files in folder.')
-    
     files = response['content']
 
     if len(files) == 0:
@@ -324,28 +312,37 @@ def process_report(config, resources_folder_id):
     most_recent_file = get_most_recent_file(files)
 
     # Download file and read into dataframe
-    response = access_api('/drive/download_file', method='POST', data={'file_id': most_recent_file['id'], 'mime_type': 'text/csv'})
+    response = access_api('/drive/download_file', method='POST', data={'file_id': most_recent_file['id'], 'mime_type': most_recent_file['mimeType']})
     try:
         file_data = BytesIO(response)
     except:
         return Response.error(f'Error downloading file.')
     
-    df = pd.read_csv(file_data)
-    df = df.fillna('')
+    if most_recent_file['mimeType'] == 'text/csv':
+        df = pd.read_csv(file_data)
+        df = df.fillna('')
+    elif most_recent_file['mimeType'] == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or most_recent_file['mimeType'] == 'application/vnd.ms-excel':
+        df = pd.read_excel(file_data, sheet_name=None)
+    else:
+        logger.error(f'Unsupported file type: {most_recent_file["mimeType"]}')
+        return Response.error(f'Unsupported file type.')
     
     # Apply custom processing if specified
     if 'process_func' in config:
         df = config['process_func'](df)
+
+    df = df.fillna('')
     
     file_dict = df.to_dict(orient='records')
 
     # Upload processed file to Resources folder
     response = access_api('/drive/upload_file', method='POST', data={
-        'fileName': output_filename,
-        'mimeType': 'text/csv',
+        'file_name': output_filename,
+        'mime_type': 'text/csv',
         'file': file_dict,
-        'parentFolderId': resources_folder_id
+        'parent_folder_id': resources_folder_id
     })
+    print(response)
     if response['status'] == 'error':
         return Response.error(f'Error uploading CSV file.')
 
@@ -355,10 +352,10 @@ def process_clients_file(df):
     """
     Process the clients file by concatenating all sheets into a single dataframe.
     
-    :param df: Input dataframe
+    :param df: Input dataframe from Excel file
     :return: Processed dataframe
     """
-    return pd.concat(pd.read_excel(df, sheet_name=None).values(), ignore_index=True)
+    return pd.concat(df.values(), ignore_index=True)  # Concatenate all sheets into a single DataFrame
 
 def process_open_positions_template(df):
     """
@@ -376,10 +373,10 @@ def process_open_positions_template(df):
     resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
     full_dict = df.to_dict(orient='records')
     response = access_api('/drive/upload_file', method='POST', data={
-        'fileName': 'ibkr_open_positions_all.csv',
-        'mimeType': 'text/csv',
+        'file_name': 'ibkr_open_positions_all.csv',
+        'mime_type': 'text/csv',
         'file': full_dict,
-        'parentFolderId': resources_folder_id
+        'parent_folder_id': resources_folder_id
     })
     if response['status'] == 'error':
         logger.error(f'Error uploading full open positions CSV file.')
@@ -407,10 +404,10 @@ def process_rtd_template(df):
     resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
     full_dict = df.to_dict(orient='records')
     response = access_api('/drive/upload_file', method='POST', data={
-        'fileName': 'ibkr_rtd_all.csv',
-        'mimeType': 'text/csv',
+        'file_name': 'ibkr_rtd_all.csv',
+        'mime_type': 'text/csv',
         'file': full_dict,
-        'parentFolderId': resources_folder_id
+        'parent_folder_id': resources_folder_id
     })
     if response['status'] == 'error':
         logger.error(f'Error uploading full RTD CSV file.')
@@ -471,3 +468,20 @@ report_configs = {
         'process_func': process_rtd_template,
     },
 }
+
+"""
+HELPER FUNCTIONS
+"""
+
+def get_most_recent_file(files):
+    """
+    Get the most recent file from a list of files based on creation time.
+    
+    :param files: List of file dictionaries
+    :return: Most recent file dictionary
+    """
+    logger.info('Getting most recent file.')
+    files.sort(key=lambda f: datetime.strptime(f['createdTime'], '%Y-%m-%dT%H:%M:%S.%fZ'), reverse=True)
+    most_recent_file = files[0]
+    logger.info(f'Most recent file: {most_recent_file["name"], most_recent_file["createdTime"]}')
+    return most_recent_file

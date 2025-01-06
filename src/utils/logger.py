@@ -13,7 +13,7 @@ class Logger:
         })
         self.console = Console(theme=custom_theme)
         logging.basicConfig(
-            level=logging.INFO,
+            level=logging.DEBUG,
             format="%(message)s",
             datefmt="[%X]",
             handlers=[RichHandler(console=self.console, rich_tracebacks=True)]

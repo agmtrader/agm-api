@@ -48,8 +48,8 @@ def reset_folder_route():
 @bp.route('/delete_file', methods=['POST'])
 def delete_file_route():
     payload = request.get_json(force=True)
-    fileId = payload['fileId']
-    return Drive.delete_file(fileId)
+    file_id = payload['file_id']
+    return Drive.delete_file(file_id)
 
 @bp.route('/move_file', methods=['POST'])
 def move_file_route():
@@ -58,28 +58,49 @@ def move_file_route():
     new_parent_id = payload['new_parent_id']
     return Drive.move_file(f, new_parent_id)
 
-@bp.route('/download_file', methods=['POST'])
-def download_file_route():
-    payload = request.get_json(force=True)
-    response = Drive.download_file(payload['file_id'])
-    try:
-        f = BytesIO(response['content'])
-        return send_file(f, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    except Exception as e:
-        return Response.error(f"Error downloading file: {str(e)}")
-
 @bp.route('/rename_file', methods=['POST'])
 def rename_file_route():
     payload = request.get_json(force=True)
-    fileId = payload['fileId']
-    newName = payload['newName']
-    return Drive.rename_file(fileId, newName)
+    file_id = payload['file_id']
+    new_name = payload['new_name']
+    return Drive.rename_file(file_id, new_name)
 
 @bp.route('/upload_file', methods=['POST'])
 def upload_file_route():
     payload = request.get_json(force=True)
     f = payload['file']
-    fileName = payload['fileName']
-    mimeType = payload['mimeType']
-    parentFolderId = payload['parentFolderId']
-    return Drive.upload_file(fileName, mimeType, f, parentFolderId)
+    file_name = payload['file_name']
+    mime_type = payload['mime_type']
+    parent_folder_id = payload['parent_folder_id']
+    return Drive.upload_file(file_name, mime_type, f, parent_folder_id)
+
+@bp.route('/download_file', methods=['POST'])
+def download_file_route():
+    payload = request.get_json(force=True)
+    file_id = payload['file_id']
+    parse = payload['parse']
+    response = Drive.download_file(file_id, parse)
+    try:
+        if parse:
+            return Response.success(response['content'])
+        else:
+            f = BytesIO(response['content'])
+            return send_file(f, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    except Exception as e:
+        return Response.error(f"Error downloading file: {str(e)}")
+
+@bp.route('/export_file', methods=['POST'])
+def export_file_route():
+    payload = request.get_json(force=True)
+    file_id = payload['file_id']
+    mime_type = payload['mime_type']
+    parse = payload['parse']
+    response = Drive.export_file(file_id, mime_type, parse)
+    try:
+        if parse:
+            return Response.success(response['content'])
+        else:
+            f = BytesIO(response['content'])
+            return send_file(f, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    except Exception as e:
+        return Response.error(f"Error exporting file: {str(e)}")

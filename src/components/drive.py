@@ -7,7 +7,7 @@ from src.utils.logger import logger
 from src.utils.response import Response
 
 import pandas as pd
-from io import BytesIO
+from io import BytesIO, StringIO
 import io
 
 import os
@@ -186,23 +186,23 @@ class GoogleDrive:
       logger.error(f"Error retrieving file info: {str(e)}")
       return Response.error(f"Error retrieving file info: {str(e)}")
 
-  def rename_file(self, fileId, newName):
+  def rename_file(self, file_id, new_name):
     try:
 
-      logger.info(f'Renaming file {fileId} to {newName}')
+      logger.info(f'Renaming file {file_id} to {new_name}')
       file_metadata = {
-        'name': newName
+        'name': new_name
       }
 
       renamedFile = (
         self.service.files().update(
-          fileId=fileId,
+          fileId=file_id,
           body=file_metadata,
           supportsAllDrives=True,
           fields='id, name, parents, mimeType, size, modifiedTime, createdTime'
         )).execute()
 
-      logger.success(f'Successfully renamed file {fileId} to {newName}')
+      logger.success(f'Successfully renamed file {file_id} to {new_name}')
       return Response.success(renamedFile)
     except Exception as e:
       logger.error(f"Error renaming file: {str(e)}")
@@ -226,18 +226,18 @@ class GoogleDrive:
       logger.error(f"Error moving file: {str(e)}")
       return Response.error(f"Error moving file: {str(e)}")
   
-  def upload_file(self, fileName: str, mimeType: str, f: Union[str, io.IOBase, list], parentFolderId: str) -> dict:
+  def upload_file(self, file_name: str, mime_type: str, f: Union[str, io.IOBase, list], parent_folder_id: str) -> dict:
     """
     Uploads a file to Google Drive in a specified folder.
 
     Args:
-        fileName (str): The name to give the uploaded file in Google Drive
-        mimeType (str): The MIME type of the file being uploaded
+        file_name (str): The name to give the uploaded file in Google Drive
+        mime_type (str): The MIME type of the file being uploaded
         f (Union[str, io.IOBase, list]): The file content to upload. Can be:
             - base64 encoded string (from third parties)
             - file object (io.IOBase)
             - list (will be converted to CSV via pandas DataFrame)
-        parentFolderId (str): The ID of the folder where the file should be uploaded
+        parent_folder_id (str): The ID of the folder where the file should be uploaded
 
     Returns:
         dict: A Response object containing:
@@ -249,11 +249,11 @@ class GoogleDrive:
         Exception: If an unsupported file type is provided or if upload fails
 
     """
-    logger.info(f"Uploading file: {fileName} to folder: {parentFolderId}")
-    fileMetadata = {'name': fileName, 'mimeType': mimeType}
+    logger.info(f"Uploading file: {file_name} to folder: {parent_folder_id}")
+    file_metadata = {'name': file_name, 'mimeType': mime_type}
 
-    if parentFolderId is not None:
-        fileMetadata['parents'] = [parentFolderId]
+    if parent_folder_id is not None:
+        file_metadata['parents'] = [parent_folder_id]
 
     try:
         # Handle base64 encoded data from React
@@ -264,9 +264,9 @@ class GoogleDrive:
             else:
                 # Handle plain string content
                 file_bytes = f.encode('utf-8')
-            media = MediaIoBaseUpload(BytesIO(file_bytes), mimetype=mimeType)
+            media = MediaIoBaseUpload(BytesIO(file_bytes), mimetype=mime_type)
         elif isinstance(f, io.IOBase):
-            media = MediaIoBaseUpload(f, mimetype=mimeType)
+            media = MediaIoBaseUpload(f, mimetype=mime_type)
         elif isinstance(f, list):
             df = pd.DataFrame(f)
             csv_buffer = BytesIO()
@@ -275,9 +275,9 @@ class GoogleDrive:
             media = MediaIoBaseUpload(BytesIO(csv_bytes), mimetype='text/csv')
 
         file_metadata = {
-            'name': fileName,
-            'parents': [parentFolderId],
-            'mimeType': mimeType
+            'name': file_name,
+            'parents': [parent_folder_id],
+            'mimeType': mime_type
         }
 
         created_file = (
@@ -288,34 +288,34 @@ class GoogleDrive:
             fields='id, name, parents, mimeType, size, modifiedTime, createdTime'
           )).execute()
 
-        logger.success(f"Successfully uploaded file: {fileName} to folder: {parentFolderId}")
+        logger.success(f"Successfully uploaded file: {file_name} to folder: {parent_folder_id}")
         return Response.success(created_file)
     
     except Exception as e:
-        logger.error(f"Error uploading file: {fileName}. Error: {str(e)}")
+        logger.error(f"Error uploading file: {file_name}. Error: {str(e)}")
         return Response.error(f'Error uploading file: {str(e)}')
       
-  def delete_file(self, fileId):
+  def delete_file(self, file_id):
 
-      logger.info(f"Deleting file with ID: {fileId}")
+      logger.info(f"Deleting file with ID: {file_id}")
 
       try:
           deletedFile = self.service.files().delete(
-            fileId=fileId, 
+            fileId=file_id, 
             supportsAllDrives=True, 
           ).execute()
-          logger.success(f"Successfully deleted file with ID: {fileId}")
+          logger.success(f"Successfully deleted file with ID: {file_id}")
           return Response.success(deletedFile)
       except Exception as e:
-          logger.error(f"Error deleting file with ID: {fileId}. Error: {str(e)}")
-          return Response.error({'content': f'Error deleting file: {str(e)}', 'file_id': fileId})
+          logger.error(f"Error deleting file with ID: {file_id}. Error: {str(e)}")
+          return Response.error({'content': f'Error deleting file: {str(e)}', 'file_id': file_id})
 
-  def download_file(self, fileId):
+  def download_file(self, file_id, parse=False):
 
-    logger.info(f"Downloading file with ID: {fileId}")
+    logger.info(f"Downloading file with ID: {file_id}")
 
     try:
-        request = self.service.files().get_media(fileId=fileId)
+        request = self.service.files().get_media(fileId=file_id)
         downloaded_file = io.BytesIO()
         downloader = MediaIoBaseDownload(downloaded_file, request)
         done = False
@@ -332,15 +332,23 @@ class GoogleDrive:
         return Response.error(f"Error downloading file: {str(e)}")
     
     logger.success("Successfully downloaded file.")
-    return Response.success(downloaded_file.getvalue())
-
-  def export_file(self, fileId, mimeType):
-    logger.info(f"Exporting file with ID: {fileId} to MIME type: {mimeType}")
+    
+    if not parse:
+      return Response.success(downloaded_file.getvalue())
+    else:
+      logger.warning("Exporting parsed file. This may take a while.")
+      file_string = downloaded_file.getvalue().decode('latin1')
+      list_data = pd.read_csv(StringIO(file_string)).fillna('').to_dict(orient='records')
+      logger.success("Successfully exported parsed file.")
+      return Response.success(list_data)
+    
+  def export_file(self, file_id, mime_type, parse=False):
+    logger.info(f"Exporting file with ID: {file_id} to MIME type: {mime_type}")
 
     try:
         request = self.service.files().export_media(
-            fileId=fileId,
-            mimeType=mimeType
+            fileId=file_id,
+            mimeType=mime_type,
         )
         exported_file = io.BytesIO()
         downloader = MediaIoBaseDownload(exported_file, request)
@@ -349,9 +357,6 @@ class GoogleDrive:
             status, done = downloader.next_chunk()
             logger.info(f"Export {int(status.progress() * 100)}%.")
 
-        logger.success("Successfully exported file.")
-        return Response.success(exported_file.getvalue())
-
     except HttpError as error:
         logger.error(f"An error occurred: {error}")
         return Response.error(error)
@@ -359,3 +364,23 @@ class GoogleDrive:
     except Exception as e:
         logger.error(f"Error exporting file: {str(e)}")
         return Response.error(f'Error exporting file: {str(e)}')
+    
+    logger.success("Successfully exported file.")
+    if not parse:
+      return Response.success(exported_file.getvalue())
+    else:
+      if mime_type == 'text/csv':
+        logger.warning("Exporting parsed file. This may take a while.")
+        file_string = exported_file.getvalue().decode('latin1')
+        list_data = pd.read_csv(StringIO(file_string)).fillna('').to_dict(orient='records')
+        logger.success("Successfully exported parsed file.")
+        return Response.success(list_data)
+      elif mime_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+        logger.warning("Exporting parsed file. This may take a while.")
+        file_string = exported_file.getvalue().decode('latin1')
+        list_data = pd.read_excel(file_string).fillna('').to_dict(orient='records')
+        logger.success("Successfully exported parsed file.")
+        return Response.success(list_data)
+      else:
+        logger.error("Unsupported MIME type for parsing.")
+        return Response.error("Unsupported MIME type for parsing.")

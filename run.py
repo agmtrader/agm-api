@@ -3,6 +3,8 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager, verify_jwt_in_request, create_access_token, exceptions
 import os
 from dotenv import load_dotenv
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 from src.app import email, trade_tickets
 from src.utils.logger import logger
@@ -25,6 +27,13 @@ def start_api():
     # Add JWT configuration
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
     jwt = JWTManager(app)
+
+    # Initialize Limiter
+    limiter = Limiter(
+        get_remote_address,  # Use remote address for rate limiting
+        app=app,
+        default_limits=["100 per minute"]  # Set your desired limits
+    )
 
     # Apply JWT authentication to all routes except login
     app.before_request(jwt_required_except_login)
