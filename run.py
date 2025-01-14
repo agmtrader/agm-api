@@ -30,15 +30,16 @@ def start_api():
 
     # Initialize Limiter
     limiter = Limiter(
-        get_remote_address,  # Use remote address for rate limiting
+        get_remote_address,
         app=app,
-        default_limits=["100 per minute"]  # Set your desired limits
+        default_limits=["100 per minute"],
+        storage_uri='memory://'
     )
 
     # Apply JWT authentication to all routes except login
     app.before_request(jwt_required_except_login)
 
-    from src.app import reporting, drive, database, flex_query, investment_proposals
+    from src.app import reporting, drive, database, flex_query, investment_proposals, bonds
     app.register_blueprint(reporting.bp, url_prefix='/reporting')
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
     app.register_blueprint(drive.bp, url_prefix='/drive')
@@ -46,6 +47,7 @@ def start_api():
     app.register_blueprint(flex_query.bp, url_prefix='/flex_query')
     app.register_blueprint(email.bp, url_prefix='/email')
     app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')
+    app.register_blueprint(bonds.bp, url_prefix='/bonds')
     
     # Add this route before other routes
     @app.route('/')
