@@ -15,3 +15,4 @@ rich==13.9.3
 gunicorn==21.2.0
 Flask-Limiter==3.5.0
 yfinance==0.2.37
+ib_insync==0.9.86
