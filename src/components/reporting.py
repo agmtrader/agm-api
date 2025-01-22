@@ -16,6 +16,81 @@ logger.announcement('Initializing Reporting Module', type='info')
 logger.announcement('Initialized Reporting Module', type='success')
 cst_time = getCurrentCST()
 
+def get_clients_report():
+    """
+    Get the clients report.
+    
+    :return: Response object with clients report or error message
+    """
+    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+    response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': resources_folder_id})
+    if response['status'] != 'success':
+        raise Exception('Error fetching clients')
+    resources = response['content']
+
+    # Filter by Clients file
+    clients_file_ids = [file['id'] for file in resources if 'ibkr_clients.csv' in file['name']]
+    if len(clients_file_ids) != 1:
+        raise Exception('Error with clients file')
+    clients_file_id = clients_file_ids[0]
+
+    # Download nav file
+    nav_file_ids = [file['id'] for file in resources if 'ibkr_nav_in_base.csv' in file['name']]
+    if len(nav_file_ids) != 1:
+        raise Exception('Error with nav file')
+    nav_file_id = nav_file_ids[0]
+
+    # Download clients file
+    clients_response = access_api('/drive/download_file', method='POST', data={'file_id': clients_file_id, 'parse': True})
+    if clients_response['status'] != 'success':
+        raise Exception('Error with clients file')
+    clients_df = pd.DataFrame(clients_response['content'])
+
+    # Download nav file
+    nav_response = access_api('/drive/download_file', method='POST', data={'file_id': nav_file_id, 'parse': True})
+    if nav_response['status'] != 'success':
+        raise Exception('Error with nav file')
+    nav_df = pd.DataFrame(nav_response['content'])
+
+    accounts_response = access_api('/database/read', method='POST', data={'path': 'db/clients/accounts', 'params': {}})
+    if accounts_response['status'] != 'success':
+        raise Exception('Error with accounts file')
+    accounts_df = pd.DataFrame(accounts_response['content'])
+
+    # Add new columns to clients dataframe
+    clients_df['AccountHolder'] = clients_df['First Name'] + ' ' + clients_df['Last Name']
+    clients_df['NAV'] = clients_df['Account ID'].map(nav_df.set_index('ClientAccountID')['Total'])
+
+    clients_df = clients_df.fillna('')
+    nav_df = nav_df.fillna('')
+    accounts_df = accounts_df.fillna('')
+
+    return Response.success({'clients': clients_df.to_dict(orient='records'), 'accounts': accounts_df.to_dict(orient='records')})
+
+def get_accrued_interest_report():
+
+    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+    response = access_api('/drive/get_files_in_folder', method='POST', data={'parent_id': resources_folder_id})
+    if response['status'] != 'success':
+        raise Exception('Error fetching clients')
+    resources = response['content']
+
+    # Filter by Open Positions file
+    open_positions_ids = [file['id'] for file in resources if 'ibkr_open_positions_template.csv' in file['name']]
+    if len(open_positions_ids) != 1:
+        raise Exception('Error with open positions file')
+    open_positions_id = open_positions_ids[0]
+
+    # Download Open Positions file
+    response = access_api('/drive/download_file', method='POST', data={'file_id': open_positions_id, 'parse': True})
+    if response['status'] != 'success':
+        raise Exception('Error with open positions file')
+    
+    open_positions_df = pd.DataFrame(response['content'])
+    open_positions_df = open_positions_df.fillna('')
+
+    return Response.success(open_positions_df.to_dict(orient='records'))
+
 """
 Extracts reports from various sources and prepare them for processing.
 
@@ -156,7 +231,7 @@ def rename_files_in_batch(batch_folder_id):
         else:
             new_name = f['name']
 
-        response = access_api('/drive/rename_file', method='POST', data={'fileId': f['id'], 'newName': new_name})
+        response = access_api('/drive/rename_file', method='POST', data={'file_id': f['id'], 'new_name': new_name})
         if response['status'] == 'error':
             return Response.error(f'Error renaming file.')
         
@@ -241,9 +316,9 @@ def get_finance_data(resources_folder_id):
     
     response = access_api('/drive/export_file', method='POST', data={
         'file_id': proposals_equity_list_id, 
-        'mime_type': 'text/csv'
+        'mime_type': 'text/csv',
+        'parse': False
     })
-    print(response)
 
     try:
         # Convert binary response to DataFrame
@@ -251,14 +326,11 @@ def get_finance_data(resources_folder_id):
     except:
         logger.error(f'Error converting response to DataFrame.')
         return Response.error(f'Error processing file.')
-
+    
     # Rest of your code using 'data' DataFrame instead of previous undefined 'data' variable
     ticker_list = data['Ticker'].tolist()
-    ticker_list
 
-    TICKERS = ticker_list
-
-    df = yf.download(tickers= TICKERS, period= 'max', interval= '1d')
+    df = yf.download(tickers=ticker_list, period= 'max', interval= '1d')
     df = df.sort_index(ascending=False)
     df2 = df.iloc[[0,251,503,755,1007,1259]]
 
@@ -270,14 +342,13 @@ def get_finance_data(resources_folder_id):
     df2.to_csv(csv_buffer, index=True)
     csv_buffer.seek(0)
 
-    # Convert bytes to base64 string for JSON serialization
-    csv_base64 = base64.b64encode(csv_buffer.getvalue()).decode('utf-8')
+    base64_data = base64.b64encode(csv_buffer.getvalue()).decode('utf-8')
 
     # Upload the CSV data from memory
     response = access_api('/drive/upload_file', method='POST', data={
         'file_name': filename,
         'mime_type': 'text/csv',
-        'file': csv_base64,
+        'file': base64_data,
         'parent_folder_id': resources_folder_id
     })
 
@@ -312,28 +383,34 @@ def process_report(config, resources_folder_id):
     most_recent_file = get_most_recent_file(files)
 
     # Download file and read into dataframe
-    response = access_api('/drive/download_file', method='POST', data={'file_id': most_recent_file['id'], 'mime_type': most_recent_file['mimeType']})
+    response = access_api('/drive/download_file', method='POST', data={
+        'file_id': most_recent_file['id'], 
+        'mime_type': most_recent_file['mimeType'],
+        'parse': False
+    })
     try:
-        file_data = BytesIO(response)
+        file_bytes = BytesIO(response)
     except:
         return Response.error(f'Error downloading file.')
     
     if most_recent_file['mimeType'] == 'text/csv':
-        df = pd.read_csv(file_data)
-        df = df.fillna('')
+        file_df = pd.read_csv(file_bytes)
     elif most_recent_file['mimeType'] == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or most_recent_file['mimeType'] == 'application/vnd.ms-excel':
-        df = pd.read_excel(file_data, sheet_name=None)
+        file_df = pd.read_excel(file_bytes, sheet_name=None)
     else:
         logger.error(f'Unsupported file type: {most_recent_file["mimeType"]}')
         return Response.error(f'Unsupported file type.')
     
+    if isinstance(file_df, pd.DataFrame):
+        file_df = file_df.fillna('')
+
     # Apply custom processing if specified
     if 'process_func' in config:
-        df = config['process_func'](df)
+        file_df = config['process_func'](file_df)
 
-    df = df.fillna('')
-    
-    file_dict = df.to_dict(orient='records')
+    if isinstance(file_df, pd.DataFrame):
+        file_df = file_df.fillna('')
+        file_dict = file_df.to_dict(orient='records')
 
     # Upload processed file to Resources folder
     response = access_api('/drive/upload_file', method='POST', data={
@@ -342,20 +419,24 @@ def process_report(config, resources_folder_id):
         'file': file_dict,
         'parent_folder_id': resources_folder_id
     })
-    print(response)
     if response['status'] == 'error':
         return Response.error(f'Error uploading CSV file.')
 
     return Response.success(f'File processed successfully.')
 
-def process_clients_file(df):
+def process_clients_file(sheets_df):
     """
     Process the clients file by concatenating all sheets into a single dataframe.
     
     :param df: Input dataframe from Excel file
     :return: Processed dataframe
     """
-    return pd.concat(df.values(), ignore_index=True)  # Concatenate all sheets into a single DataFrame
+    concatenated_df = pd.DataFrame()
+    for sheet_name, sheet_data in sheets_df.items():
+        sheet_df = pd.DataFrame(sheet_data)
+        sheet_df['MasterAccount'] = sheet_name
+        concatenated_df = pd.concat([concatenated_df, sheet_df])
+    return concatenated_df
 
 def process_open_positions_template(df):
     """
@@ -381,17 +462,114 @@ def process_open_positions_template(df):
     if response['status'] == 'error':
         logger.error(f'Error uploading full open positions CSV file.')
     
-    # Generate template
+    # Generate template (extract bonds and details)
     df = df[(df['AssetClass'] == 'BOND') & (df['LevelOfDetail'] == 'LOT')]
-    columns_order = ['ClientAccountID','AccountAlias','Model','CurrencyPrimary','FXRateToBase','AssetClass','Symbol','Description',
-        'Conid','SecurityID','SecurityIDType','CUSIP','ISIN','ListingExchange','UnderlyingConid','UnderlyingSymbol',
-        'UnderlyingSecurityID','UnderlyingListingExchange','Issuer','Multiplier','Strike','Expiry','Put/Call','PrincipalAdjustFactor',
-        'ReportDate','Quantity','MarkPrice','PositionValue','PositionValueInBase','OpenPrice','CostBasisPrice','CostBasisMoney',
-        'PercentOfNAV','FifoPnlUnrealized','UnrealizedCapitalGainsPnl','UnrealizedFxPnl','Side','LevelOfDetail','OpenDateTime',
-        'HoldingPeriodDateTime','Code','OriginatingOrderID','OriginatingTransactionID','AccruedInterest','VestingDate',
-        'SerialNumber','DeliveryType','CommodityType','Fineness','Weight'
+
+    # Extract only the columns that are needed
+    file_columns = [
+        'ClientAccountID',
+        'AccountAlias',
+        'Model',
+        'CurrencyPrimary',
+        'FXRateToBase',
+        'AssetClass',
+        'Symbol',
+        'Description',
+        'Conid',
+        'SecurityID',
+        'SecurityIDType',
+        'CUSIP',
+        'ISIN',
+        'ListingExchange',
+        'UnderlyingConid',
+        'UnderlyingSymbol',
+        'UnderlyingSecurityID',
+        'UnderlyingListingExchange',
+        'Issuer',
+        'Multiplier',
+        'Strike',
+        'Expiry',
+        'Put/Call',
+        'PrincipalAdjustFactor',
+        'ReportDate',
+        'Quantity',
+        'MarkPrice',
+        'PositionValue',
+        'PositionValueInBase',
+        'OpenPrice',
+        'CostBasisPrice',
+        'CostBasisMoney',
+        'PercentOfNAV',
+        'FifoPnlUnrealized',
+        'UnrealizedCapitalGainsPnl',
+        'UnrealizedFxPnl',
+        'Side',
+        'LevelOfDetail',
+        'OpenDateTime',
+        'HoldingPeriodDateTime',
+        'Code',
+        'OriginatingOrderID',
+        'OriginatingTransactionID',
+        'AccruedInterest',
+        'VestingDate',
+        'SerialNumber',
+        'DeliveryType',
+        'CommodityType',
+        'Fineness',
+        'Weight'
     ]
-    return df[columns_order]
+    df = df[file_columns]
+
+    # Create formula columns
+    formula_columns = [
+        'KEY',
+        'securities_bond row',
+        'Maturity',
+        'Coupon',
+        'Sector',
+        'Frequency',
+        'Open Date',
+        'Column5',
+        'Column6',
+        'Tasa',
+        'Column7',
+        'Meses en Cartera',
+        'Rendimiento Acumulado x Cupón',
+        'Current Price - 100',
+        'Duraciones',
+        'MDURATION',
+        'DURATION',
+        'Column8',
+        'Market Price',
+        'Yield',
+        'Rate',
+        'RTD MATCH CONID',
+        'RTD Duration',
+        'RTD Bid',
+        'RTD Ask',
+        'RTD Credit Rating',
+        'RTD Credit Rating Level',
+        'RTD Ask Value',
+        'a',
+        'a2',
+        'Change in Price + Accrued Interest Received',
+        'Year on Portfolio',
+        'Yield (Price + Interest)',
+        'a3',
+        'Duration FX',
+        'Coupon * Quantity',
+        'Credit Rating Main Class',
+        'Investment Grade Amt',
+        'Column1',
+        'Issuer FX'
+    ]
+    formula_df = pd.DataFrame(columns=formula_columns)
+
+    # Concatenate the two dataframes horizontally
+    concatenated_df = pd.concat([df, formula_df], axis=1)
+    concatenated_df = concatenated_df.fillna('')
+
+    return concatenated_df
 
 def process_rtd_template(df):
     """
@@ -413,35 +591,39 @@ def process_rtd_template(df):
         logger.error(f'Error uploading full RTD CSV file.')
     
     # Sort the dataframe in the same order as the excel template
-    df_rtd_template = df[['Symbol',
-                            'Company Name',
-                            'Financial Instrument',
-                            'Position',
-                            'Avg Price',
-                            'Bid Size',
-                            'Bid',
-                            'Daily P&L',
-                            'Ask',
-                            'Ask Size',
-                            'Ask Yield',
-                            'Duration %  ', # The downloaded CSV has 2 spaces after the % symbol
-                            'Sector',
-                            'Industry',
-                            'Maturity',
-                            'Next Option Date',
-                            'Coupon',
-                            'Change',
-                            'Change %',
-                            'Last',
-                            'Ticker Action',
-                            'Bid Yield',
-                            'Ratings',
-                            'Payment Frequency',
-                            'Issuer Country ' # The downloaded CSV has 1 space after the y
-    ]]
+    template_columns = [
+        'Symbol',
+        'Company Name',
+        'Financial Instrument',
+        'Position',
+        'Avg Price',
+        'Bid Size',
+        'Bid',
+        'Daily P&L',
+        'Ask',
+        'Ask Size',
+        'Ask Yield',
+        'Duration %  ',
+        'Sector',
+        'Industry',
+        'Maturity',
+        'Next Option Date',
+        'Coupon',
+        'Change',
+        'Change %',
+        'Last',
+        'Ticker Action',
+        'Bid Yield',
+        'Ratings',
+        'Payment Frequency',
+        'Issuer Country '
+    ]
+    logger.info(f'{df}')
+
+    df_rtd_template = df[template_columns].copy()
     df_rtd_template['Symbol'] = df_rtd_template['Symbol'].astype(str)
     df_rtd_template = df_rtd_template[df_rtd_template['Symbol'].str.contains('IBCID')]
-    return df
+    return df_rtd_template
 
 report_configs = {
     'clients': {

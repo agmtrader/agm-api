@@ -226,7 +226,7 @@ class GoogleDrive:
       logger.error(f"Error moving file: {str(e)}")
       return Response.error(f"Error moving file: {str(e)}")
   
-  def upload_file(self, file_name: str, mime_type: str, f: Union[str, io.IOBase, list], parent_folder_id: str) -> dict:
+  def upload_file(self, file_name: str, mime_type: str, f: Union[str, list], parent_folder_id: str) -> dict:
     """
     Uploads a file to Google Drive in a specified folder.
 
@@ -258,21 +258,15 @@ class GoogleDrive:
     try:
         # Handle base64 encoded data from React
         if isinstance(f, str):
-            if f.startswith('data:'):
-                header, encoded = f.split(",", 1)
-                file_bytes = base64.b64decode(encoded)
-            else:
-                # Handle plain string content
-                file_bytes = f.encode('utf-8')
+            file_bytes = base64.b64decode(f)
             media = MediaIoBaseUpload(BytesIO(file_bytes), mimetype=mime_type)
-        elif isinstance(f, io.IOBase):
-            media = MediaIoBaseUpload(f, mimetype=mime_type)
         elif isinstance(f, list):
             df = pd.DataFrame(f)
-            csv_buffer = BytesIO()
-            df.to_csv(csv_buffer, index=False)
-            csv_bytes = csv_buffer.getvalue()
-            media = MediaIoBaseUpload(BytesIO(csv_bytes), mimetype='text/csv')
+            io_buffer = BytesIO()
+            if mime_type == 'text/csv':
+              df.to_csv(io_buffer, index=False)
+            file_bytes = io_buffer.getvalue()
+            media = MediaIoBaseUpload(BytesIO(file_bytes), mimetype=mime_type)
 
         file_metadata = {
             'name': file_name,
@@ -316,6 +310,12 @@ class GoogleDrive:
 
     try:
         request = self.service.files().get_media(fileId=file_id)
+
+        file_info = self.get_file_info_by_id(file_id)
+        if file_info['status'] == 'error':
+          return Response.error(file_info['content'])
+        mime_type = file_info['content']['mimeType']
+
         downloaded_file = io.BytesIO()
         downloader = MediaIoBaseDownload(downloaded_file, request)
         done = False
@@ -337,8 +337,13 @@ class GoogleDrive:
       return Response.success(downloaded_file.getvalue())
     else:
       logger.warning("Exporting parsed file. This may take a while.")
-      file_string = downloaded_file.getvalue().decode('latin1')
-      list_data = pd.read_csv(StringIO(file_string)).fillna('').to_dict(orient='records')
+      if mime_type == 'text/csv':
+        list_data = pd.read_csv(StringIO(downloaded_file.getvalue().decode('latin1'))).fillna('').to_dict(orient='records')
+      elif mime_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+        list_data = pd.read_excel(BytesIO(downloaded_file.getvalue())).fillna('').to_dict(orient='records')
+      else:
+        logger.error("Unsupported MIME type for parsing.")
+        return Response.error("Unsupported MIME type for parsing.")
       logger.success("Successfully exported parsed file.")
       return Response.success(list_data)
     
@@ -369,16 +374,13 @@ class GoogleDrive:
     if not parse:
       return Response.success(exported_file.getvalue())
     else:
+      logger.warning("Exporting parsed file. This may take a while.")
       if mime_type == 'text/csv':
-        logger.warning("Exporting parsed file. This may take a while.")
-        file_string = exported_file.getvalue().decode('latin1')
-        list_data = pd.read_csv(StringIO(file_string)).fillna('').to_dict(orient='records')
+        list_data = pd.read_csv(StringIO(exported_file.getvalue().decode('latin1'))).fillna('').to_dict(orient='records')
         logger.success("Successfully exported parsed file.")
         return Response.success(list_data)
       elif mime_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
-        logger.warning("Exporting parsed file. This may take a while.")
-        file_string = exported_file.getvalue().decode('latin1')
-        list_data = pd.read_excel(file_string).fillna('').to_dict(orient='records')
+        list_data = pd.read_excel(BytesIO(exported_file.getvalue())).fillna('').to_dict(orient='records')
         logger.success("Successfully exported parsed file.")
         return Response.success(list_data)
       else:
