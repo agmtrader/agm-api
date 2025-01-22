@@ -5,8 +5,6 @@ import os
 from dotenv import load_dotenv
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-
-from src.app import email, trade_tickets
 from src.utils.logger import logger
 
 load_dotenv()
@@ -39,7 +37,7 @@ def start_api():
     # Apply JWT authentication to all routes except login
     app.before_request(jwt_required_except_login)
 
-    from src.app import reporting, drive, database, flex_query, investment_proposals, bonds, advisors
+    from src.app import reporting, drive, database, flex_query, investment_proposals, bonds, advisors, email, trade_tickets
     app.register_blueprint(reporting.bp, url_prefix='/reporting')
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
     app.register_blueprint(drive.bp, url_prefix='/drive')
