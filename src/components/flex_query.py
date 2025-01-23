@@ -77,8 +77,7 @@ def getFlexQuery(token, queryId):
         return Response.error(f'Error generating Flex Query: {response.get("message")}')
     
     df = response['content']
-    logger.info(f'File Preview: {df.head(5)}')
-
+    
     logger.success(f"Flex Query generated")
     return Response.success(df)
     
