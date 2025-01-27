@@ -258,15 +258,29 @@ class GoogleDrive:
     try:
         # Handle base64 encoded data from React
         if isinstance(f, str):
+            # Remove data URL prefix if present (e.g., "data:application/pdf;base64,")
+            if ',' in f:
+                f = f.split(',', 1)[1]
             file_bytes = base64.b64decode(f)
-            media = MediaIoBaseUpload(BytesIO(file_bytes), mimetype=mime_type)
+            # Configure MediaIoBaseUpload for better handling of large files
+            media = MediaIoBaseUpload(
+                BytesIO(file_bytes),
+                mimetype=mime_type,
+                resumable=True,  # Enable resumable uploads
+                chunksize=1024*1024  # 1MB chunks
+            )
         elif isinstance(f, list):
             df = pd.DataFrame(f)
             io_buffer = BytesIO()
             if mime_type == 'text/csv':
               df.to_csv(io_buffer, index=False)
             file_bytes = io_buffer.getvalue()
-            media = MediaIoBaseUpload(BytesIO(file_bytes), mimetype=mime_type)
+            media = MediaIoBaseUpload(
+                BytesIO(file_bytes),
+                mimetype=mime_type,
+                resumable=True,
+                chunksize=1024*1024
+            )
 
         file_metadata = {
             'name': file_name,
