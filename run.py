@@ -9,8 +9,11 @@ from src.utils.logger import logger
 
 load_dotenv()
 
+public_routes = ['docs', 'index', 'login']
+
+# JWT authentication middleware
 def jwt_required_except_login():
-    if request.endpoint != 'login' and request.endpoint != 'index' and request.endpoint != 'docs':
+    if request.endpoint not in public_routes:
         try:
             verify_jwt_in_request()
         except exceptions.JWTExtendedException as e:
@@ -48,15 +51,21 @@ def start_api():
     app.register_blueprint(bonds.bp, url_prefix='/bonds')
     app.register_blueprint(advisors.bp, url_prefix='/advisors')
 
-    # Add this route before other routes
+    # Create index route
     @app.route('/')
     def index():
         return send_from_directory('public/static', 'index.html')
     
+    # Create documentation pages
     @app.route('/docs')
     def docs():
         return send_from_directory('public/static', 'docs.html')
+    
+    @app.route('/docs/drive')
+    def drive():
+        return send_from_directory('public/static/docs', 'drive.html')
 
+    # Create backend routes
     @app.route('/login', methods=['POST'])
     def login():
         logger.info(f'Login request: {request.get_json(force=True)}')

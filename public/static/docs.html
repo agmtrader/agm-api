@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API Documentation</title>
+    <title>AGM API Documentation</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -67,24 +67,19 @@
             border: 1px solid #e9ecef;
             overflow-x: auto;
         }
-        footer {
-            margin-top: 50px;
-            padding: 20px;
-            background-color: #062D47;
-            color: white;
-            border-radius: 8px;
-        }
-        footer code {
-            background-color: #2571A5;
-            color: white;
-        }
     </style>
 </head>
 <body>
-    <h1>API Documentation</h1>
-    
-    <h2>Authentication</h2>
-    <div class="endpoint">
+    <h1>AGM API Documentation</h1>
+
+    <div>
+        <p>All endpoints except /login require JWT authentication. Include the JWT token in the Authorization header:</p>
+        <code>Authorization: Bearer your_jwt_token</code>
+    </div>
+
+    <div>
+        <h2>Authentication</h2>
+        <div class="endpoint">
         <span class="method post">POST</span>
         <span class="route">/login</span>
         <p>Authenticate and receive a JWT token.</p>
@@ -99,51 +94,186 @@
 }</code></pre>
     </div>
 
-    <h2>Reporting Endpoints</h2>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/reporting/*</span>
-        <p>Various reporting endpoints for generating and managing reports.</p>
+    <div>
+        <h1>Drive API Documentation</h1>
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <span class="route">/drive/shared_drive_info</span>
+            <p>Get information about a shared Google Drive by name.</p>
+            <h4>Request Body:</h4>
+            <pre><code>{
+        "drive_name": "string"
+    }</code></pre>
+            <h4>Response:</h4>
+            <pre><code>{
+        "id": "string",
+        "name": "string"
+    }</code></pre>
+        </div>
+    
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <span class="route">/drive/folder_info</span>
+            <p>Get information about a folder within a parent folder.</p>
+            <h4>Request Body:</h4>
+            <pre><code>{
+        "parent_id": "string",
+        "folder_name": "string"
+    }</code></pre>
+            <h4>Response:</h4>
+            <pre><code>{
+        "id": "string",
+        "name": "string",
+        "parents": ["string"]
+    }</code></pre>
+        </div>
+    
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="route">/drive/reset_folder</span>
+            <p>Delete all files within a specified folder.</p>
+            <h4>Request Body:</h4>
+            <pre><code>{
+        "folder_id": "string"
+    }</code></pre>
+        </div>
+    
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <span class="route">/drive/files_in_folder</span>
+            <p>List all files within a specified folder.</p>
+            <h4>Request Body:</h4>
+            <pre><code>{
+        "parent_id": "string"
+    }</code></pre>
+            <h4>Response:</h4>
+            <pre><code>[{
+        "id": "string",
+        "name": "string",
+        "parents": ["string"],
+        "mimeType": "string",
+        "size": "string",
+        "modifiedTime": "string",
+        "createdTime": "string"
+    }]</code></pre>
+        </div>
+    
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="route">/drive/create_folder</span>
+            <p>Create a new folder in a specified parent folder.</p>
+            <h4>Request Body:</h4>
+            <pre><code>{
+        "folder_name": "string",
+        "parent_folder_id": "string"
+    }</code></pre>
+            <h4>Response:</h4>
+            <pre><code>{
+        "id": "string",
+        "name": "string",
+        "parents": ["string"],
+        "mimeType": "application/vnd.google-apps.folder"
+    }</code></pre>
+        </div>
+    
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <span class="route">/drive/file_info</span>
+            <p>Get information about a specific file by name and parent folder.</p>
+            <h4>Request Body:</h4>
+            <pre><code>{
+        "parent_id": "string",
+        "file_name": "string"
+    }</code></pre>
+            <h4>Response:</h4>
+            <pre><code>{
+        "id": "string",
+        "name": "string",
+        "parents": ["string"]
+    }</code></pre>
+        </div>
+    
+        <div class="endpoint">
+            <span class="method patch">PATCH</span>
+            <span class="route">/drive/rename_file</span>
+            <p>Rename an existing file.</p>
+            <h4>Request Body:</h4>
+            <pre><code>{
+        "file_id": "string",
+        "new_name": "string"
+    }</code></pre>
+        </div>
+    
+        <div class="endpoint">
+            <span class="method patch">PATCH</span>
+            <span class="route">/drive/move_file</span>
+            <p>Move a file to a new parent folder.</p>
+            <h4>Request Body:</h4>
+            <pre><code>{
+        "file": {
+            "id": "string",
+            "parents": ["string"]
+        },
+        "new_parent_id": "string"
+    }</code></pre>
+        </div>
+    
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="route">/drive/upload_file</span>
+            <p>Upload a new file to a specified folder. Supports base64 encoded files, CSV data, and more.</p>
+            <h4>Request Body:</h4>
+            <pre><code>{
+        "file_name": "string",
+        "mime_type": "string",
+        "file": "string | array",  // base64 encoded string or array for CSV
+        "parent_folder_id": "string"
+    }</code></pre>
+            <h4>Response:</h4>
+            <pre><code>{
+        "id": "string",
+        "name": "string",
+        "parents": ["string"],
+        "mimeType": "string",
+        "size": "string",
+        "modifiedTime": "string",
+        "createdTime": "string"
+    }</code></pre>
+        </div>
+    
+        <div class="endpoint">
+            <span class="method delete">DELETE</span>
+            <span class="route">/drive/delete_file</span>
+            <p>Delete a file from Google Drive.</p>
+            <h4>Request Body:</h4>
+            <pre><code>{
+        "file_id": "string"
+    }</code></pre>
+        </div>
+    
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <span class="route">/drive/download_file</span>
+            <p>Download a file from Google Drive. Optionally parse CSV or Excel files into JSON.</p>
+            <h4>Request Body:</h4>
+            <pre><code>{
+        "file_id": "string",
+        "parse": "boolean"  // Optional, defaults to false
+    }</code></pre>
+        </div>
+        
+        <div class="endpoint">
+                <span class="method get">GET</span>
+                <span class="route">/drive/export_file</span>
+                <p>Export a Google Workspace file (Docs, Sheets, etc.) to a specified format.</p>
+                <h4>Request Body:</h4>
+                <pre><code>{
+            "file_id": "string",
+            "mime_type": "string",
+            "parse": "boolean"  // Optional, defaults to false
+        }</code></pre>
+        </div>
     </div>
 
-    <h2>Trade Tickets</h2>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/trade_tickets/*</span>
-        <p>Endpoints for managing trade tickets.</p>
-    </div>
-
-    <h2>Drive Integration</h2>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/drive/*</span>
-        <p>Google Drive integration endpoints.</p>
-    </div>
-
-    <h2>Database Operations</h2>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/database/*</span>
-        <p>Database operation endpoints.</p>
-    </div>
-
-    <h2>Flex Query</h2>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/flex_query/*</span>
-        <p>Flexible query endpoints.</p>
-    </div>
-
-    <h2>Email</h2>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/email/*</span>
-        <p>Email-related endpoints.</p>
-    </div>
-
-    <footer>
-        <p>All endpoints except /login require JWT authentication. Include the JWT token in the Authorization header:</p>
-        <code>Authorization: Bearer your_jwt_token</code>
-    </footer>
 </body>
 </html> 
