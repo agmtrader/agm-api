@@ -18,3 +18,4 @@ yfinance==0.2.37
 ib_insync==0.9.86
 sqlalchemy==2.0.35
 openpyxl==3.1.5
+xlrd==2.0.1

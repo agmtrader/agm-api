@@ -305,6 +305,7 @@ def sort_files_to_folders(batch_folder_id, backups_folder_id):
 """
 TRANSFORM HELPERS
 """
+# TODO Filter columns
 def get_finance_data(resources_folder_id):
     """
     Get finance data from the finance folder.
@@ -424,6 +425,7 @@ def process_report(config, resources_folder_id):
 
     return Response.success(f'File processed successfully.')
 
+# TODO IBKR CLIENTS -> Filename column
 def process_clients_file(sheets_df):
     """
     Process the clients file by concatenating all sheets into a single dataframe.
@@ -438,6 +440,7 @@ def process_clients_file(sheets_df):
         concatenated_df = pd.concat([concatenated_df, sheet_df])
     return concatenated_df
 
+# TODO TEMPLATE SAVE TWICE: (template up to AX)/(template up to CL)
 def process_open_positions_template(df):
     """
     Process the open positions template file.
@@ -571,6 +574,7 @@ def process_open_positions_template(df):
 
     return concatenated_df
 
+# DONE
 def process_rtd_template(df):
     """
     Process the RTD file.
@@ -582,7 +586,7 @@ def process_rtd_template(df):
     resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
     full_dict = df.to_dict(orient='records')
     response = access_api('/drive/upload_file', method='POST', data={
-        'file_name': 'ibkr_rtd_all.csv',
+        'file_name': 'ibkr_rtd.csv',
         'mime_type': 'text/csv',
         'file': full_dict,
         'parent_folder_id': resources_folder_id
