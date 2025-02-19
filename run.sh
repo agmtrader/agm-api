@@ -1,12 +1,8 @@
 #!/bin/bash
+#!/bin/bash
 
-# Load environment variables first (ignoring comments and handling multiline values)
-set -a
-source .env
-set +a
-
-# Kill any existing process running on specified port
-lsof -ti :${API_PORT} | xargs kill -9 2>/dev/null || true
+# Load environment variables first
+export $(cat .env | xargs)
 
 # Start Gunicorn with environment variables and increased timeout
 gunicorn --bind 0.0.0.0:${API_PORT} \
