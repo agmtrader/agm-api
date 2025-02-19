@@ -2,10 +2,10 @@
 FROM python:3.9-slim
 
 # Add labels for metadata
-LABEL maintainer="aguilarcarboni"
+LABEL maintainer="AGM Technology"
 LABEL name="agm-api"
 LABEL version="1.0"
-LABEL description="AGM API"
+LABEL description=""
 
 # Set the working directory in the container
 WORKDIR /app
@@ -13,15 +13,50 @@ WORKDIR /app
 # Copy the requirements file into the container
 COPY requirements.txt .
 
-# Install the required packages
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the rest of the application code
+# Copy the application code
 COPY . .
 
-# Copy the .env file into the container
-COPY .env .
-COPY run.sh .
+# Make run script executable
 RUN chmod +x run.sh
+
+# AGM API
+ENV API_PORT=${API_PORT}
+
+# JWT Authentication
+ENV AUTH_PASSWORD=${AUTH_PASSWORD}
+ENV AUTH_USERNAME=${AUTH_USERNAME}
+ENV JWT_SECRET_KEY=${JWT_SECRET_KEY}
+
+# agm-python-auth - OAuth2.0 Client Credentials
+# admin@agmtechnology.com
+ENV ADMIN_TOKEN=${ADMIN_TOKEN}
+ENV ADMIN_REFRESH_TOKEN=${ADMIN_REFRESH_TOKEN}
+ENV ADMIN_TOKEN_URI=${ADMIN_TOKEN_URI}
+ENV ADMIN_CLIENT_ID=${ADMIN_CLIENT_ID}
+ENV ADMIN_CLIENT_SECRET=${ADMIN_CLIENT_SECRET}
+ENV ADMIN_SCOPES=${ADMIN_SCOPES}
+
+# agm-python-auth - OAuth2.0 Client Credentials
+# info@agmtechnology.com
+ENV INFO_TOKEN=${INFO_TOKEN}
+ENV INFO_REFRESH_TOKEN=${INFO_REFRESH_TOKEN}
+ENV INFO_TOKEN_URI=${INFO_TOKEN_URI}
+ENV INFO_CLIENT_ID=${INFO_CLIENT_ID}
+ENV INFO_CLIENT_SECRET=${INFO_CLIENT_SECRET}
+ENV INFO_SCOPES=${INFO_SCOPES}
+# firebase_adminsdk - Service Account Credentials
+ENV FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+ENV FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL}
+ENV FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
+ENV FIREBASE_TYPE=${FIREBASE_TYPE}
+ENV FIREBASE_UNIVERSE_DOMAIN=${FIREBASE_UNIVERSE_DOMAIN}
+ENV FIREBASE_CLIENT_X509_CERT_URL=${FIREBASE_CLIENT_X509_CERT_URL}
+ENV FIREBASE_AUTH_PROVIDER_X509_CERT_URL=${FIREBASE_AUTH_PROVIDER_X509_CERT_URL}
+ENV FIREBASE_TOKEN_URI=${FIREBASE_TOKEN_URI}
+ENV FIREBASE_AUTH_URI=${FIREBASE_AUTH_URI}
+ENV FIREBASE_CLIENT_ID=${FIREBASE_CLIENT_ID}
+ENV FIREBASE_PRIVATE_KEY_ID=${FIREBASE_PRIVATE_KEY_ID}
+
+EXPOSE ${API_PORT}
 
 ENTRYPOINT ["./run.sh"]
