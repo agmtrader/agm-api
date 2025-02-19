@@ -277,23 +277,22 @@ def sort_files_to_folders(batch_folder_id, backups_folder_id):
     # Sort files to their respective folders
     for f in batch_files:
         # Determine the destination folder based on file name
-        match f['name']:
-            case name if 'clients' in name:
-                new_parent_id = clients_folder_info['id']
-            case name if 'ContactListSummary' in name:
-                new_parent_id = contacts_folder_info['id']
-            case name if 'tasks_for_subaccounts' in name:
-                new_parent_id = subaccounts_folder_info['id']
-            case name if 'RTD' in name:
-                new_parent_id = rtd_folder_info['id']
-            case name if '742588' in name:
-                new_parent_id = open_positions_folder_info['id']
-            case name if '734782' in name:
-                new_parent_id = nav_folder_info['id']
-            case name if '732383' in name:
-                new_parent_id = client_fees_folder_info['id']
-            case _:
-                new_parent_id = 'root'
+        if 'clients' in f['name']:
+            new_parent_id = clients_folder_info['id']
+        elif 'ContactListSummary' in f['name']:
+            new_parent_id = contacts_folder_info['id']
+        elif 'tasks_for_subaccounts' in f['name']:
+            new_parent_id = subaccounts_folder_info['id']
+        elif 'RTD' in f['name']:
+            new_parent_id = rtd_folder_info['id']
+        elif '742588' in f['name']:
+            new_parent_id = open_positions_folder_info['id']
+        elif '734782' in f['name']:
+            new_parent_id = nav_folder_info['id']
+        elif '732383' in f['name']:
+            new_parent_id = client_fees_folder_info['id']
+        else:
+            new_parent_id = 'root'
 
         # Move file to destination
         response = access_api('/drive/move_file', method='POST', data={'file': f, 'new_parent_id': new_parent_id})

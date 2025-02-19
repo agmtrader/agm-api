@@ -13,6 +13,9 @@ WORKDIR /app
 # Copy the requirements file into the container
 COPY requirements.txt .
 
+# Install the required packages
+RUN pip install --no-cache-dir -r requirements.txt
+
 # Copy the application code
 COPY . .
 
@@ -41,6 +44,7 @@ ENV INFO_TOKEN_URI=${INFO_TOKEN_URI}
 ENV INFO_CLIENT_ID=${INFO_CLIENT_ID}
 ENV INFO_CLIENT_SECRET=${INFO_CLIENT_SECRET}
 ENV INFO_SCOPES=${INFO_SCOPES}
+
 # firebase_adminsdk - Service Account Credentials
 ENV FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
 ENV FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL}
