@@ -30,15 +30,9 @@ class Firebase:
           "client_x509_cert_url": os.getenv('FIREBASE_CLIENT_X509_CERT_URL'),
           "universe_domain": os.getenv('FIREBASE_UNIVERSE_DOMAIN')
       })
-      logger.info(f'Initializing Firebase connection with credentials: {cred}')
       firebase_admin.initialize_app(cred)
       self.db = firestore.client()
       logger.announcement('Initialized Firebase connection.', type='success')
-    except ValueError:
-      try:
-        self.db = firestore.client()
-      except Exception as e:
-        logger.error(f"Error initializing Firebase: {str(e)}")
     except Exception as e:
       logger.error(f"Error initializing Firebase: {str(e)}")
 

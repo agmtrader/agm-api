@@ -1,23 +1,57 @@
-Flask-Limiter==3.5.0
-Flask==3.0.3
-Flask_Cors==4.0.0
-Flask_JWT_Extended==4.6.0
-gunicorn==23.0.0
-
-firebase_admin==6.5.0
-google_api_python_client==2.136.0
-google_auth_oauthlib==1.2.1
-
+# Core Python Dependencies
+certifi==2024.7.4
 numpy==2.0.2
 pandas==2.2.3
-Jinja2==3.1.4
-premailer==3.10.0
 python-dotenv==1.0.1
 pytz==2024.1
+
+# API and Web Framework
+Flask==3.1.0
+Flask-Caching==1.10.1
+Flask_Cors==4.0.0
+flask_jwt_extended==4.6.0
+Flask-Limiter==3.5.0
+Flask_RESTful==0.3.10
+gunicorn==23.0.0
+PyJWT==2.9.0
 Requests==2.32.3
-rich==13.9.3
-yfinance==0.2.37
-ib_insync==0.9.86
-sqlalchemy==2.0.35
+requests_cache==1.2.1
+retry_requests==2.0.0
+websocket_client==1.8.0
+Werkzeug==3.1.0
+
+# Database
+psycopg2-binary==2.9.9
+SQLAlchemy==2.0.35
+
+# Google Services
+google_api_python_client==2.136.0
+google_auth_oauthlib==1.2.1
+firebase_admin==6.5.0
+
+# Text Processing and Utilities
+beautifulsoup4==4.12.3
+Jinja2==3.1.4
+nltk==3.9.1
 openpyxl==3.1.5
+premailer==3.10.0
+protobuf==5.28.2
+rich==13.9.3
+tenacity==9.0.0
 xlrd==2.0.1
+
+# Text Processing and Utilities
+beautifulsoup4==4.12.3
+Jinja2==3.1.4
+nltk==3.9.1
+openpyxl==3.1.5
+premailer==3.10.0
+protobuf==5.28.2
+rich==13.9.3
+tenacity==9.0.0
+xlrd==2.0.1
+uuid==1.30
+
+# Financial Data
+ib_insync==0.9.86
+yfinance==0.2.37
