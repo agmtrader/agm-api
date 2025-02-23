@@ -7,6 +7,10 @@ bp = Blueprint('drive', __name__)
 
 Drive = GoogleDrive()
 
+@bp.route('/user-info', methods=['GET'])
+def get_user_info_route():
+    return Drive.get_user_info()
+
 @bp.route('/get_shared_drive_info', methods=['POST'])
 def get_shared_drive_info_route():
     payload = request.get_json(force=True)

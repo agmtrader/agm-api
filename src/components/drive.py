@@ -16,23 +16,47 @@ import base64
 from typing import Union
 
 class GoogleDrive:
-
+  
   def __init__(self):
-    logger.announcement('Initializing GoogleDrive connection.', type='info')
+    logger.announcement('Initializing Drive', type='info')
     try:
       SCOPES = ["https://www.googleapis.com/auth/drive"]
       creds = Credentials(
-        token=os.getenv('ADMIN_TOKEN'),
-        refresh_token=os.getenv('ADMIN_REFRESH_TOKEN'),
-        token_uri=os.getenv('ADMIN_TOKEN_URI'),
-        client_id=os.getenv('ADMIN_CLIENT_ID'),
-        client_secret=os.getenv('ADMIN_CLIENT_SECRET'),
+        token=os.getenv('GOOGLE_TOKEN'),
+        refresh_token=os.getenv('GOOGLE_REFRESH_TOKEN'),
+        token_uri=os.getenv('GOOGLE_TOKEN_URI'),
+        client_id=os.getenv('GOOGLE_CLIENT_ID'),
+        client_secret=os.getenv('GOOGLE_CLIENT_SECRET'),
         scopes=SCOPES
       )
       self.service = build('drive', 'v3', credentials=creds)
-      logger.announcement('Initialized GoogleDrive connection.', type='success')
+      logger.announcement('Initialized Drive', type='success')
     except Exception as e:
-      logger.error(f"Error initializing GoogleDrive: {str(e)}")
+      logger.error(f"Error initializing Drive: {str(e)}")
+
+  def get_user_info(self):
+    """
+    Gets information about the user, including storage quota and capabilities.
+    
+    Returns:
+        dict: A Response object containing:
+            - On success: {'status': 'success', 'content': user_info}
+                where user_info includes storage quota, user details, and other Drive capabilities
+            - On failure: {'status': 'error', 'content': error_message}
+    """
+    logger.info('Getting user information from Drive')
+    try:
+      fields = (
+        'storageQuota,user,appInstalled,maxUploadSize,'
+        'importFormats,exportFormats,canCreateDrives,'
+        'folderColorPalette,driveThemes'
+      )
+      about = self.service.about().get(fields=fields).execute()
+      logger.success('Successfully retrieved user information')
+      return Response.success(about)
+    except Exception as e:
+      logger.error(f"Error retrieving user information: {str(e)}")
+      return Response.error(f"Error retrieving user information: {str(e)}")
 
   def get_shared_drive_info(self, drive_name):
     logger.info(f'Getting shared drive info for drive: {drive_name}')
