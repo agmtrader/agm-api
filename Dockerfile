@@ -16,6 +16,14 @@ COPY requirements.txt .
 # Install the required packages
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Create directory for persistent database storage
+RUN mkdir -p /app/src/db
+RUN mkdir -p /app/cache
+
+# Create volume mount points
+VOLUME /app/src/db
+VOLUME /app/cache
+
 # Copy the application code
 COPY . .
 
