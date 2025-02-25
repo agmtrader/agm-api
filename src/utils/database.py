@@ -23,7 +23,10 @@ class DatabaseHandler:
         self.type = type
         self.base = base
 
-        self.base.metadata.create_all(self.engine)
+        try:
+            self.base.metadata.create_all(self.engine)
+        except Exception as e:
+            logger.error(f'Error creating tables: {str(e)}')
 
         self.metadata = MetaData()
         self.metadata.reflect(bind=self.engine)
