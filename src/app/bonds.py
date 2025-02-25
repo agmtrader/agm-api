@@ -1,6 +1,6 @@
 from flask import Blueprint
 
-from src.components.bonds import Bonds, db
+from src.components.bonds import Bonds
 
 bp = Blueprint('bonds', __name__)
 Bonds = Bonds()

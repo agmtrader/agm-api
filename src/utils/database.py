@@ -27,7 +27,6 @@ class DatabaseHandler:
 
         self.metadata = MetaData()
         self.metadata.reflect(bind=self.engine)
-        logger.success(f'Database initialized')
 
     def with_session(self, func):
         @wraps(func)

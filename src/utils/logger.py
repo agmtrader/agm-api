@@ -33,6 +33,7 @@ class Logger:
         logging.getLogger('chardet').setLevel(logging.ERROR)
         logging.getLogger('sqlalchemy').setLevel(logging.ERROR)
         logging.getLogger('ib_insync').setLevel(logging.ERROR)
+        logging.getLogger('selector_events').setLevel(logging.ERROR)
 
     def info(self, message):
         self.logger.debug(f"[blue]{message}[/blue]", extra={'markup': True})

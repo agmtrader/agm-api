@@ -1,7 +1,6 @@
 from ib_insync import *
 import pandas as pd
 from src.utils.logger import logger
-from datetime import datetime
 from src.utils.api import access_api
 from sqlalchemy import Column, Integer, String, Float
 from sqlalchemy.ext.declarative import declarative_base
@@ -14,11 +13,6 @@ import math
 import nest_asyncio
 
 nest_asyncio.apply()
-
-db_path = os.path.join(os.path.dirname(__file__), '..', 'db', 'bonds.db')
-db_url = f'sqlite:///{db_path}'
-
-engine = create_engine(db_url)
 Base = declarative_base()
 
 class AGMBond(Base):
@@ -79,12 +73,25 @@ class AGMBond(Base):
     updated = Column(String, nullable=False)
     created = Column(String, nullable=False)
 
-db = DatabaseHandler(Base, engine)
-
 class Bonds():
 
     def __init__(self):
+        logger.announcement('Initializing Bonds', 'info')
+
+        logger.info('Initializing database')
+        db_path = os.path.join(os.path.dirname(__file__), '..', 'db', 'bonds.db')
+        db_url = f'sqlite:///{db_path}'
+
+        engine = create_engine(db_url)
+
+        self.db = DatabaseHandler(Base, engine)
+        logger.success('Database initialized')
+
+        logger.info('Initializing IBKR')
         self.ib = IB()
+        logger.success('Connected to IBKR')
+
+        logger.announcement('Bonds initialized', 'success')
         
     async def connect(self):
         try:
@@ -101,7 +108,7 @@ class Bonds():
     def get(self):
 
         # Download Open Positions file
-        db.delete_all('bond')
+        self.db.delete_all('bond')
 
         logger.announcement('Downloading Open Positions file')
 
@@ -233,7 +240,7 @@ class Bonds():
                     bond_info['moodys'] = ''
                     bond_info['sp'] = ''
                     
-                    db.create('bond', bond_info)
+                    self.db.create('bond', bond_info)
                     logger.info(f'Successfully fetched data')
                     
                 except Exception as e:
