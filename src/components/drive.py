@@ -22,11 +22,11 @@ class GoogleDrive:
     try:
       SCOPES = ["https://www.googleapis.com/auth/drive"]
       creds = Credentials(
-        token=os.getenv('GOOGLE_TOKEN'),
-        refresh_token=os.getenv('GOOGLE_REFRESH_TOKEN'),
-        token_uri=os.getenv('GOOGLE_TOKEN_URI'),
-        client_id=os.getenv('GOOGLE_CLIENT_ID'),
-        client_secret=os.getenv('GOOGLE_CLIENT_SECRET'),
+        token=os.getenv('ADMIN_TOKEN'),
+        refresh_token=os.getenv('ADMIN_REFRESH_TOKEN'),
+        token_uri=os.getenv('ADMIN_TOKEN_URI'),
+        client_id=os.getenv('ADMIN_CLIENT_ID'),
+        client_secret=os.getenv('ADMIN_CLIENT_SECRET'),
         scopes=SCOPES
       )
       self.service = build('drive', 'v3', credentials=creds)
