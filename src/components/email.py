@@ -70,7 +70,7 @@ class Gmail:
         final_message.attach(message)
 
         # Attach the logo image
-        logo_path = 'public/assets/agm-logo.png'
+        logo_path = 'public/assets/brand/agm-logo.png'
         with open(logo_path, 'rb') as logo_file:
             logo_mime = MIMEImage(logo_file.read())
             logo_mime.add_header('Content-ID', '<logo>')
