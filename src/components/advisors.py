@@ -1,9 +1,12 @@
-from src.utils.api import access_api
-from src.utils.logger import logger
-from src.utils.response import Response
+from src.utils.exception import handle_exception
 
+from .drive import GoogleDrive
+from src.utils.logger import logger
+
+Drive = GoogleDrive()
+
+@handle_exception
 def get_commissions():
-    response = access_api('/drive/download_file', 'POST', {'file_id': '15tKbOtv3bLX0P6CXNsQ5nyKREyhxSXLR', 'parse': True})
-    if response['status'] != 'success':
-        raise Exception('Error fetching commissions')
-    return Response.success(response['content'])
+    response = Drive.download_file('1PAVYRFTbTqsRQFiFYW0Ro82BgGTe2X6g', True)
+    logger.info(response)
+    return response

@@ -1,5 +1,4 @@
 from flask import Blueprint
-
 from src.components.bonds import Bonds
 
 bp = Blueprint('bonds', __name__)

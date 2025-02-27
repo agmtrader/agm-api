@@ -1,7 +1,7 @@
 from ib_insync import *
 import pandas as pd
 from src.utils.logger import logger
-from src.utils.api import access_api
+from src.components.drive import GoogleDrive
 from sqlalchemy import Column, Integer, String, Float
 from sqlalchemy.ext.declarative import declarative_base
 from src.utils.database import DatabaseHandler
@@ -13,6 +13,8 @@ import math
 import nest_asyncio
 
 nest_asyncio.apply()
+
+Drive = GoogleDrive()
 
 class Bonds():
 
@@ -112,11 +114,7 @@ class Bonds():
         self.db.delete_all('bond')
 
         logger.announcement('Downloading Open Positions file')
-
-        response = access_api('/drive/download_file', 'POST', {
-            'file_id': '1WRONE8UxwgDphuL_ik3MnX_DejmnDjW0',
-            'parse': True
-        })
+        response = GoogleDrive.download_file('1WRONE8UxwgDphuL_ik3MnX_DejmnDjW0', True)
         logger.announcement('Downloading Open Positions file done', 'success')
 
         open_positions = pd.DataFrame(response['content'])

@@ -5,6 +5,7 @@ from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
 from src.utils.logger import logger
 from src.utils.response import Response
+from src.utils.exception import handle_exception
 
 import pandas as pd
 from io import BytesIO, StringIO
@@ -16,8 +17,27 @@ import base64
 from typing import Union
 
 class GoogleDrive:
+  # Class variable to store the singleton instance
+  _instance = None
+  
+  @classmethod
+  def get_instance(cls):
+    """
+    Get or create the singleton instance of GoogleDrive.
+    
+    Returns:
+        GoogleDrive: The singleton instance of GoogleDrive
+    """
+    if cls._instance is None:
+      cls._instance = cls()
+    return cls._instance
   
   def __init__(self):
+    # Skip initialization if instance already exists
+    if GoogleDrive._instance is not None:
+      logger.info('Using existing Drive instance')
+      return
+      
     logger.announcement('Initializing Drive', type='info')
     try:
       SCOPES = ["https://www.googleapis.com/auth/drive"]
@@ -361,18 +381,16 @@ class GoogleDrive:
             status, done = downloader.next_chunk()
             logger.info(f"Download {int(status.progress() * 100)}.")
 
-    except HttpError as error:
-        logger.error(f"An error occurred: {error}")
-        return Response.error(error)
+    except HttpError as e:
+        raise Exception(e)
     
     except Exception as e:
-        logger.error(f"Error downloading file: {str(e)}")
-        return Response.error(f"Error downloading file: {str(e)}")
-    
+       raise Exception(e)
+        
     logger.success("Successfully downloaded file.")
     
     if not parse:
-      return Response.success(downloaded_file.getvalue())
+      return downloaded_file.getvalue()
     else:
       logger.warning("Exporting parsed file. This may take a while.")
       if mime_type == 'text/csv':
@@ -380,10 +398,9 @@ class GoogleDrive:
       elif mime_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
         list_data = pd.read_excel(BytesIO(downloaded_file.getvalue())).fillna('').to_dict(orient='records')
       else:
-        logger.error("Unsupported MIME type for parsing.")
-        return Response.error("Unsupported MIME type for parsing.")
+        raise Exception("Unsupported MIME type for parsing.")
       logger.success("Successfully exported parsed file.")
-      return Response.success(list_data)
+      return list_data
     
   def export_file(self, file_id, mime_type, parse=False):
     logger.info(f"Exporting file with ID: {file_id} to MIME type: {mime_type}")

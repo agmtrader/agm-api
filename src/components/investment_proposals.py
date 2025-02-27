@@ -1,18 +1,25 @@
-from src.utils.api import access_api
 from src.utils.logger import logger
 from src.utils.response import Response
 
-import pandas as pd
+from src.components.drive import GoogleDrive
+from src.components.database import Firebase
 
+from src.utils.exception import handle_exception
+
+Drive = GoogleDrive()
+Database = Firebase()
+
+def read():
+    return Database.read('db/document_center/investment_proposals')
+
+@handle_exception
 def backup_investment_proposals():
 
     logger.announcement("Starting backup of investment proposals")
     
     files = []
 
-    response = access_api('/drive/get_files_in_folder', 'POST', {
-        'parent_id': '0ANt_SwXfHuoDUk9PVA'
-    })
+    response = Drive.get_files_in_folder('0ANt_SwXfHuoDUk9PVA')
     if response['status'] != 'success':
         logger.announcement("Failed to get yearly folders", 'error')
         return Response.error('Failed to get yearly folders')
@@ -21,9 +28,7 @@ def backup_investment_proposals():
 
     for yearly_folder in yearly_folders:
         logger.info(f"Getting files in folder: {yearly_folder['name']}")
-        response = access_api('/drive/get_files_in_folder', 'POST', {
-            'parent_id': yearly_folder['id']
-        })
+        response = Drive.get_files_in_folder(yearly_folder['id'])
 
         if response['status'] != 'success':
             logger.announcement("Failed to get files in folder", 'error')
@@ -34,9 +39,7 @@ def backup_investment_proposals():
         for proposal_folder in proposal_folders:
 
             logger.announcement(f"Getting files for client: {proposal_folder['name']}")
-            response = access_api('/drive/get_files_in_folder', 'POST', {
-                'parent_id': proposal_folder['id']
-            })
+            response = Drive.get_files_in_folder(proposal_folder['id'])
 
             for pdf_file in response['content']:
                 if pdf_file['name'].endswith('.pdf'):
@@ -69,10 +72,7 @@ def backup_investment_proposals():
                         'Accepted': False
                     })
 
-    response = access_api('/database/upload_collection', 'POST', {
-        'path': 'db/document_center/investment_proposals',
-        'data': files
-    })
+    Database.upload_collection('db/document_center/investment_proposals', files)
 
     if response['status'] != 'success':
         logger.announcement("Failed to upload investment proposals", 'error')
