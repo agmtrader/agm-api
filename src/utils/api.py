@@ -3,11 +3,10 @@ import os
 from src.utils.logger import logger
 
 # Use localhost instead of 0.0.0.0
-url = f'http://127.0.0.1:{os.getenv("API_PORT")}'
+url = f'http://127.0.0.1:{os.getenv("PORT")}'
 
 def access_api(endpoint, method='GET', data=None):
     try:
-        # Add timeout to prevent hanging
         auth = requests.post(
             url + '/login', 
             json={'username': 'admin', 'password': 'password'},
