@@ -8,6 +8,9 @@ from firebase_admin import firestore
 from src.utils.logger import logger
 from src.utils.response import Response
 from src.utils.exception import handle_exception
+from flask import jsonify
+
+
 
 class Firebase:
 
@@ -126,7 +129,7 @@ class Firebase:
     
     self.db.collection(path).document(id).set(data)
     logger.success(f'Document added successfully.')
-    return 'Document added successfully.'
+    return jsonify({'id': id})
 
   @handle_exception
   def read(self, path, query=None):
