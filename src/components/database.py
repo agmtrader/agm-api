@@ -181,7 +181,7 @@ class Firebase:
     
     batch.commit()
     logger.success(f'{updated_count} documents updated successfully.')
-    return updated_count
+    return jsonify({'count': updated_count})
 
   @handle_exception
   def delete(self, path, query=None):
@@ -209,4 +209,4 @@ class Firebase:
     
     batch.commit()
     logger.success(f'Deleted {deleted_count} documents.')
-    return Response.success(deleted_count)
+    return jsonify({'count': deleted_count})

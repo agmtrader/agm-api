@@ -271,28 +271,6 @@ class GoogleDrive:
       return Response.error(f"Error moving file: {str(e)}")
   
   def upload_file(self, file_name: str, mime_type: str, f: Union[str, list], parent_folder_id: str) -> dict:
-    """
-    Uploads a file to Google Drive in a specified folder.
-
-    Args:
-        file_name (str): The name to give the uploaded file in Google Drive
-        mime_type (str): The MIME type of the file being uploaded
-        f (Union[str, io.IOBase, list]): The file content to upload. Can be:
-            - base64 encoded string (from third parties)
-            - file object (io.IOBase)
-            - list (will be converted to CSV via pandas DataFrame)
-        parent_folder_id (str): The ID of the folder where the file should be uploaded
-
-    Returns:
-        dict: A Response object containing:
-            - On success: {'status': 'success', 'content': file_metadata}
-                where file_metadata includes id, name, parents, mimeType, size, modifiedTime, createdTime
-            - On failure: {'status': 'error', 'content': error_message}
-
-    Raises:
-        Exception: If an unsupported file type is provided or if upload fails
-
-    """
     logger.info(f"Uploading file: {file_name} to folder: {parent_folder_id}")
     file_metadata = {'name': file_name, 'mimeType': mime_type}
 

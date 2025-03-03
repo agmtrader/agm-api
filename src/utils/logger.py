@@ -34,6 +34,8 @@ class Logger:
         logging.getLogger('sqlalchemy').setLevel(logging.ERROR)
         logging.getLogger('ib_insync').setLevel(logging.ERROR)
         logging.getLogger('selector_events').setLevel(logging.ERROR)
+        logging.getLogger('google-auth').setLevel(logging.ERROR)
+        logging.getLogger('google.auth.transport.requests').setLevel(logging.ERROR)
 
     def info(self, message):
         self.logger.debug(f"[blue]{message}[/blue]", extra={'markup': True})
