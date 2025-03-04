@@ -157,7 +157,7 @@ class Firebase:
 
   @handle_exception
   def update(self, path, data, query=None):
-    logger.info(f'Updating documents in collection: {path} with updates: {data} and query: {query}')
+    logger.info(f'Updating documents in collection: {path} with query: {query}')
     if not path:
       raise ValueError("Path cannot be empty")
     if not data or not isinstance(data, dict):
