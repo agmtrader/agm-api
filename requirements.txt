@@ -31,7 +31,7 @@ firebase_admin==6.5.0
 
 # Text Processing and Utilities
 beautifulsoup4==4.12.3
-Jinja2==3.1.4
+Jinja2==3.1.5
 nltk==3.9.1
 openpyxl==3.1.5
 premailer==3.10.0
@@ -42,7 +42,7 @@ xlrd==2.0.1
 
 # Text Processing and Utilities
 beautifulsoup4==4.12.3
-Jinja2==3.1.4
+Jinja2==3.1.5
 nltk==3.9.1
 openpyxl==3.1.5
 premailer==3.10.0
