@@ -27,18 +27,6 @@ SQLAlchemy==2.0.35
 # Google Services
 google_api_python_client==2.136.0
 google_auth_oauthlib==1.2.1
-firebase_admin==6.5.0
-
-# Text Processing and Utilities
-beautifulsoup4==4.12.3
-Jinja2==3.1.5
-nltk==3.9.1
-openpyxl==3.1.5
-premailer==3.10.0
-protobuf==5.28.2
-rich==13.9.3
-tenacity==9.0.0
-xlrd==2.0.1
 
 # Text Processing and Utilities
 beautifulsoup4==4.12.3
