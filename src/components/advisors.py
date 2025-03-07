@@ -1,7 +1,6 @@
 from src.utils.exception import handle_exception
 
 from .drive import GoogleDrive
-from src.utils.logger import logger
 
 Drive = GoogleDrive()
 

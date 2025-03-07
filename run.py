@@ -1,15 +1,17 @@
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, verify_jwt_in_request, create_access_token, exceptions
-import os
 from dotenv import load_dotenv
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from src.utils.logger import logger
+from src.utils.secret_manager import get_secret
 
 load_dotenv()
 
 public_routes = ['docs', 'index', 'login']
+authentication_token = get_secret('AGM_AUTHENTICATION_TOKEN')
+jwt_secret_key = get_secret('JWT_SECRET_KEY')
 
 # JWT authentication middleware
 def jwt_required_except_login():
@@ -26,7 +28,7 @@ def start_api():
     app.config['CORS_HEADERS'] = 'Content-Type'
     
     # Add JWT configuration
-    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
+    app.config['JWT_SECRET_KEY'] = jwt_secret_key
     jwt = JWTManager(app)
 
     # Initialize Limiter
@@ -70,12 +72,11 @@ def start_api():
     def login():
         logger.info(f'Login request: {request.get_json(force=True)}')
         payload = request.get_json(force=True)
-        username = payload['username']
-        password = payload['password']
-        if username == 'admin' and password == 'password':
-            access_token = create_access_token(identity=username)
+        token = payload['token']
+        if token == authentication_token:
+            access_token = create_access_token(identity=token)
             return jsonify(access_token=access_token), 200
-        return jsonify({"msg": "Bad username or password"}), 401
+        return jsonify({"msg": "Bad token"}), 401
 
     @app.errorhandler(404)
     def not_found_error(error):

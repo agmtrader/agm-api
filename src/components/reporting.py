@@ -1,12 +1,9 @@
 from pandas.tseries.offsets import BDay
-
 from datetime import datetime
-
 from src.utils.dates import getCurrentCST
 from src.utils.logger import logger
 from src.utils.response import Response
 from src.utils.api import access_api  
-
 import pandas as pd
 from io import BytesIO
 import base64

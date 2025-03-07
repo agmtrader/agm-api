@@ -1,10 +1,8 @@
 import pandas as pd
 from flask import jsonify
 import numpy as np
-
 from src.utils.logger import logger
 from src.utils.exception import handle_exception
-
 import re
 from datetime import datetime
 
