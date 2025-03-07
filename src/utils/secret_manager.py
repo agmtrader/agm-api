@@ -7,7 +7,7 @@ from src.utils.logger import logger
 @handle_exception
 def get_secret(secret_id):
     try:
-        logger.info(f"Starting to fetch secret: {secret_id}")
+        logger.info(f"Fetching secret: {secret_id}")
 
         # Initialize the Secret Manager client
         client = secretmanager.SecretManagerServiceClient()
@@ -23,22 +23,22 @@ def get_secret(secret_id):
         response = client.access_secret_version(request={"name": secret_path})
         
         try:
-            logger.info(f"Attempting UTF-8 decode for: {secret_id}")
+            logger.info(f"Attempting UTF-8 decode")
             json_string = response.payload.data.decode("UTF-8")
             secrets = json.loads(json_string)
         except Exception as e:
-            logger.warning(f"UTF-8 decode failed for {secret_id}, trying ASCII: {str(e)}")
+            logger.warning(f"UTF-8 decode failed, trying ASCII")
             try:
-                logger.info(f"Attempting ASCII decode for: {secret_id}")
+                logger.info(f"Attempting ASCII decode")
                 json_string = response.payload.data.decode("ascii")
                 secrets = json_string
             except Exception as e:
-                logger.error(f"All decoding attempts failed for {secret_id}: {str(e)}")
+                logger.error(f"All decoding attempts failed")
                 raise Exception(f"Error fetching secret: {e}")
 
-        logger.success(f"Successfully fetched and decoded secret: {secret_id}")
+        logger.success(f"Successfully fetched and decoded secret")
         return secrets
         
     except Exception as e:
-        logger.error(f"Unexpected error while fetching secret {secret_id}: {str(e)}")
+        logger.error(f"Unexpected error while fetching secret")
         raise
