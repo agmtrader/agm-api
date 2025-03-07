@@ -3,9 +3,9 @@ import xml.etree.ElementTree as ET
 import time
 import pandas as pd
 import csv
-
 from src.utils.logger import logger
 from src.utils.exception import handle_exception
+
 logger.announcement('Initializing Flex Query Service', type='info')
 version='&v=3'
 url = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest?"

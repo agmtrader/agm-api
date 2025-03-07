@@ -1,9 +1,6 @@
 from src.utils.logger import logger
-from src.utils.response import Response
-
 from src.components.drive import GoogleDrive
 from src.components.database import Firebase
-
 from src.utils.exception import handle_exception
 
 Drive = GoogleDrive()

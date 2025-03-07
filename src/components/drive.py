@@ -6,12 +6,12 @@ from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 from src.utils.logger import logger
 from src.utils.response import Response
 from src.utils.exception import handle_exception
+from src.utils.secret_manager import get_secret
 
 import pandas as pd
 from io import BytesIO, StringIO
 import io
 
-import os
 import base64
 
 from typing import Union
@@ -39,14 +39,16 @@ class GoogleDrive:
       return
       
     logger.announcement('Initializing Drive', type='info')
+
+    admin_creds = get_secret('OAUTH_PYTHON_CREDENTIALS_ADMIN')
     try:
       SCOPES = ["https://www.googleapis.com/auth/drive"]
       creds = Credentials(
-        token=os.getenv('ADMIN_TOKEN'),
-        refresh_token=os.getenv('ADMIN_REFRESH_TOKEN'),
-        token_uri=os.getenv('ADMIN_TOKEN_URI'),
-        client_id=os.getenv('ADMIN_CLIENT_ID'),
-        client_secret=os.getenv('ADMIN_CLIENT_SECRET'),
+        token=admin_creds['token'],
+        refresh_token=admin_creds['refresh_token'],
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=admin_creds['client_id'],
+        client_secret=admin_creds['client_secret'],
         scopes=SCOPES
       )
       self.service = build('drive', 'v3', credentials=creds)
