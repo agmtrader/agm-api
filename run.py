@@ -1,15 +1,13 @@
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, verify_jwt_in_request, create_access_token, exceptions
-import os
 from dotenv import load_dotenv
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-
 from src.utils.logger import logger
 from src.utils.secret_manager import get_secret
+
 load_dotenv()
-import time
 
 public_routes = ['docs', 'index', 'login']
 authentication_token = get_secret('AGM_AUTHENTICATION_TOKEN')
