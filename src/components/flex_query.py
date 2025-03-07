@@ -5,14 +5,13 @@ import pandas as pd
 import csv
 
 from src.utils.logger import logger
-from src.utils.response import Response
-
+from src.utils.exception import handle_exception
 logger.announcement('Initializing Flex Query Service', type='info')
 version='&v=3'
 url = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest?"
 logger.announcement('Initialized Flex Query Service', type='success')
 
-# Returns flex query as df (internal use only)
+@handle_exception
 def getFlexQuery(token, queryId):
 
     logger.info(f'Getting Flex Query for queryId: {queryId}')
@@ -38,7 +37,7 @@ def getFlexQuery(token, queryId):
     
     except Exception as e:
         logger.error(f'Error requesting Flex Query Template: {str(e)}')
-        return Response.error(f'Error requesting Flex Query Template: {str(e)}')
+        raise Exception(f'Error requesting Flex Query Template: {str(e)}')
 
     logger.success('Flex Query Template Generated')
 
@@ -64,67 +63,50 @@ def getFlexQuery(token, queryId):
 
         if 'ErrorCode' in generatedReportResponse.text and 'Fail' in generatedReportResponse.text:
             logger.error(f'Flex Query Generation Failed. Error Code: {generatedReportResponse.text[0:100]}')
-            return Response.error(f'Flex Query Generation Failed. Error Code: {generatedReportResponse.text[0:100]}')
+            raise Exception(f'Flex Query Generation Failed. Error Code: {generatedReportResponse.text[0:100]}')
 
     except Exception as e:
         logger.error(f'Error generating Flex Query: {str(e)}')
-        return Response.error(f'Error generating Flex Query: {str(e)}')
+        raise Exception(f'Error generating Flex Query: {str(e)}')
     
     xml_data = generatedReportResponse.content
-    response = binaryXMLtoDF(xml_data)
-
-    if (response['status'] == 'error'):
-        return Response.error(f'Error generating Flex Query: {response.get("message")}')
-    
-    df = response['content']
-    
+    df = binaryXMLtoDF(xml_data)
     logger.success(f"Flex Query generated")
-    return Response.success(df)
+    return df
     
 # Returns dict of queryIds as keys and flex query as values
+@handle_exception
 def fetchFlexQueries(queryIds):
-    try:
-        agmToken = "t=949768708375319238802665"
-        flex_queries = {}
+    agmToken = "t=949768708375319238802665"
+    flex_queries = {}
 
-        for _, queryId in enumerate(queryIds):
+    for _, queryId in enumerate(queryIds):
 
-            response = getFlexQuery(agmToken, queryId)
-            if response['status'] == 'error':
-                return Response.error(f'Error fetching Flex Query for queryId {queryId}.')
-            
-            flex_query_df = response['content']
-            flex_query_df['file_name'] = queryId
+        flex_query_df = getFlexQuery(agmToken, queryId)
+        flex_query_df['file_name'] = queryId
 
-            try:
-                flex_query_dict = flex_query_df.to_dict(orient='records')
-                flex_queries[queryId] = flex_query_dict
-            except Exception as e:
-                logger.error(f'Flex Query Empty for queryId {queryId}: {str(e)}')
-                return Response.error(f'Flex Query Empty for queryId {queryId}: {str(e)}')
-        return Response.success(flex_queries)
-    
-    except Exception as e:
-        logger.error(f'Error fetching Flex Queries: {str(e)}')
-        return Response.error(f'Error fetching Flex Queries: {str(e)}')
+        try:
+            flex_query_dict = flex_query_df.to_dict(orient='records')
+            flex_queries[queryId] = flex_query_dict
+        except Exception as e:
+            logger.error(f'Flex Query Empty for queryId {queryId}: {str(e)}')
+            raise Exception(f'Flex Query Empty for queryId {queryId}: {str(e)}')
+        
+    return flex_queries
 
+@handle_exception
 def binaryXMLtoDF(binaryXMLData):
 
     logger.info(f'Converting binary XML to DF')
-    try:
-        xml_data = binaryXMLData.decode('utf-8')
-        reader = csv.reader(xml_data.splitlines(), skipinitialspace=True)
+    xml_data = binaryXMLData.decode('utf-8')
+    reader = csv.reader(xml_data.splitlines(), skipinitialspace=True)
 
-        rows = []
+    rows = []
 
-        for row in reader:
-            if ('BOA' not in row) and ('BOF' not in row) and ('BOS' not in row) and ('EOS' not in row) and ('EOA' not in row) and ('EOF' not in row) and ('MSG' not in row):
-                rows.append(row)
-        
-        df = pd.DataFrame(rows[1:], columns=rows[0])
-        logger.success(f'Successfully converted binary XML to DF')
-        return Response.success(df)
+    for row in reader:
+        if ('BOA' not in row) and ('BOF' not in row) and ('BOS' not in row) and ('EOS' not in row) and ('EOA' not in row) and ('EOF' not in row) and ('MSG' not in row):
+            rows.append(row)
     
-    except Exception as e:
-        logger.error(f"Error. Failed to convert binary XML to DF: {str(e)}")
-        return Response.error(f"Failed to convert binary XML to DF: {str(e)}")
+    df = pd.DataFrame(rows[1:], columns=rows[0])
+    logger.success(f'Successfully converted binary XML to DF')
+    return df

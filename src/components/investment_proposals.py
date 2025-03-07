@@ -16,13 +16,13 @@ def read():
 def backup_investment_proposals():
 
     logger.announcement("Starting backup of investment proposals")
-    
+
     files = []
 
     response = Drive.get_files_in_folder('0ANt_SwXfHuoDUk9PVA')
     if response['status'] != 'success':
         logger.announcement("Failed to get yearly folders", 'error')
-        return Response.error('Failed to get yearly folders')
+        raise Exception("Failed to get yearly folders")
     
     yearly_folders = response['content']
 
@@ -32,7 +32,7 @@ def backup_investment_proposals():
 
         if response['status'] != 'success':
             logger.announcement("Failed to get files in folder", 'error')
-            return Response.error('Failed to get files in folder')
+            raise Exception("Failed to get files in folder")
 
         proposal_folders = response['content']
 
@@ -76,7 +76,7 @@ def backup_investment_proposals():
 
     if response['status'] != 'success':
         logger.announcement("Failed to upload investment proposals", 'error')
-        return Response.error('Failed to upload investment proposals')
+        raise Exception("Failed to upload investment proposals")
 
     logger.announcement("Backup of investment proposals completed", 'success')
-    return Response.success('Backup of investment proposals completed')
+    raise Exception("Backup of investment proposals completed")

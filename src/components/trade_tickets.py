@@ -1,12 +1,14 @@
 import pandas as pd
+from flask import jsonify
 import numpy as np
 
-from src.utils.response import Response
 from src.utils.logger import logger
+from src.utils.exception import handle_exception
 
 import re
 from datetime import datetime
 
+@handle_exception
 def extract_bond_details(description):
     
     # Extract symbol (assuming it's always at the beginning)
@@ -39,6 +41,7 @@ def extract_bond_details(description):
     logger.success(f'Extracted bond details: symbol={symbol}, coupon={coupon}, maturity={maturity}')
     return symbol, coupon, maturity
 
+@handle_exception
 def generate_trade_ticket(flex_query_dict, indices):
 
     logger.info('Generating trade ticket. Processing data...')
@@ -50,13 +53,13 @@ def generate_trade_ticket(flex_query_dict, indices):
     # Check if all rows in the Description column have the same value
     if df_indexed['Description'].nunique() != 1:
         logger.error('Not all rows in the Description column have the same value.')
-        return Response.error('Not all rows in the Description column have the same value.')
+        raise Exception('Not all rows in the Description column have the same value.')
 
     symbol, coupon, maturity = extract_bond_details(df_indexed['Description'].iloc[0])
 
     if (df_indexed.loc[:,'AccruedInterest'] == 0).any():
         logger.error('At least one row has AccruedInterest value of 0.')
-        return Response.error('At least one row has AccruedInterest value of 0.')
+        raise Exception('At least one row has AccruedInterest value of 0.')
 
     df_indexed['Coupon'] = coupon
     df_indexed['Maturity'] = maturity
@@ -95,14 +98,15 @@ def generate_trade_ticket(flex_query_dict, indices):
         df_consolidated.loc[:,'Price (including Commissions)'] = round((df_consolidated['NetCash']/df_consolidated['Quantity']) * 100, 4).astype(float)
 
     if (len(df_consolidated) != 1):
-        return Response.error('Consolidated trade ticket must be one row.')
+        raise Exception('Consolidated trade ticket must be one row.')
 
     df_consolidated = df_consolidated.replace([np.inf, -np.inf], np.nan)
     df_consolidated = df_consolidated.fillna('')
     consolidated_dict = df_consolidated.to_dict(orient='records')[0]
     consolidated_dict['type'] = 'single' if len(df_indexed) == 1 else 'consolidated'
-    return Response.success(consolidated_dict)
+    return consolidated_dict
 
+@handle_exception
 def generate_client_confirmation_message(consolidated_dict):
 
     logger.info('Generating client confirmation message...')
@@ -148,7 +152,7 @@ def generate_client_confirmation_message(consolidated_dict):
         try:
             tradeData[key] = df_consolidated.iloc[0][key]
         except:
-            return Response.error(f'Column {key} not found in dataframe.')
+            raise Exception(f'Column {key} not found in dataframe.')
 
     # Create message from dictionary
     message = ''
@@ -160,4 +164,4 @@ def generate_client_confirmation_message(consolidated_dict):
             message += '\n'
 
     logger.success(f'Client confirmation message generated.')
-    return Response.success({'message':message})
+    return jsonify({'message':message})

@@ -8,5 +8,4 @@ Drive = GoogleDrive()
 @handle_exception
 def get_commissions():
     response = Drive.download_file('1PAVYRFTbTqsRQFiFYW0Ro82BgGTe2X6g', True)
-    logger.info(response)
     return response

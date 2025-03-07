@@ -10,8 +10,6 @@ from src.utils.response import Response
 from src.utils.exception import handle_exception
 from flask import jsonify
 
-
-
 class Firebase:
 
   def __init__(self):
