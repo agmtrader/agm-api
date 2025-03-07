@@ -2,7 +2,7 @@ from rich.logging import RichHandler
 from rich.console import Console
 from rich.theme import Theme
 import logging
-
+import os
 class Logger:
     def __init__(self):
         custom_theme = Theme({
@@ -12,30 +12,38 @@ class Logger:
             "critical": "bold white on red",
         })
         self.console = Console(theme=custom_theme)
+
+        level = logging.DEBUG
+        if os.environ.get('DEV_MODE') != 'true':
+            level = logging.INFO
+
         logging.basicConfig(
-            level=logging.DEBUG,
+            level=level,
             format="%(message)s",
             datefmt="[%X]",
             handlers=[RichHandler(console=self.console, rich_tracebacks=True)]
         )
         self.logger = logging.getLogger("rich")
 
-        # Suppress other logs
-        logging.getLogger('werkzeug').setLevel(logging.ERROR)
-        logging.getLogger('flask').setLevel(logging.ERROR)
-        logging.getLogger('requests').setLevel(logging.ERROR)
-        logging.getLogger('connectionpool').setLevel(logging.ERROR)
-        logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
-        logging.getLogger('googleapiclient.discovery').setLevel(logging.ERROR)
-        logging.getLogger('google_auth_httplib2').setLevel(logging.ERROR)
-        logging.getLogger('feedparser').setLevel(logging.ERROR)
-        logging.getLogger('nltk').setLevel(logging.ERROR)
-        logging.getLogger('chardet').setLevel(logging.ERROR)
-        logging.getLogger('sqlalchemy').setLevel(logging.ERROR)
-        logging.getLogger('ib_insync').setLevel(logging.ERROR)
-        logging.getLogger('selector_events').setLevel(logging.ERROR)
-        logging.getLogger('google-auth').setLevel(logging.ERROR)
-        logging.getLogger('google.auth.transport.requests').setLevel(logging.ERROR)
+        if os.environ.get('EXTRA_DEBUG') != 'false':
+
+            # Suppress other logs
+            logging.getLogger('werkzeug').setLevel(logging.ERROR)
+            logging.getLogger('flask').setLevel(logging.ERROR)
+            logging.getLogger('requests').setLevel(logging.ERROR)
+            logging.getLogger('connectionpool').setLevel(logging.ERROR)
+            logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
+            logging.getLogger('feedparser').setLevel(logging.ERROR)
+            logging.getLogger('nltk').setLevel(logging.ERROR)
+            logging.getLogger('chardet').setLevel(logging.ERROR)
+            logging.getLogger('sqlalchemy').setLevel(logging.ERROR)
+            logging.getLogger('ib_insync').setLevel(logging.ERROR)
+            logging.getLogger('selector_events').setLevel(logging.ERROR)
+
+            logging.getLogger('googleapiclient.discovery').setLevel(logging.ERROR)
+            logging.getLogger('google_auth_httplib2').setLevel(logging.ERROR)
+            logging.getLogger('google-auth').setLevel(logging.ERROR)
+            logging.getLogger('google.auth.transport.requests').setLevel(logging.ERROR)
 
     def info(self, message):
         self.logger.debug(f"[blue]{message}[/blue]", extra={'markup': True})
