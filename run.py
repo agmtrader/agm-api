@@ -6,12 +6,12 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from src.utils.logger import logger
 from src.utils.secret_manager import get_secret
+from datetime import timedelta
 
 load_dotenv()
 
 public_routes = ['docs', 'index', 'login']
-authentication_token = get_secret('AGM_AUTHENTICATION_TOKEN')
-jwt_secret_key = get_secret('JWT_SECRET_KEY')
+
 
 # JWT authentication middleware
 def jwt_required_except_login():
@@ -23,12 +23,25 @@ def jwt_required_except_login():
         
 def start_api():
     
+    try:
+        authentication_token = get_secret('AGM_AUTHENTICATION_TOKEN')
+    except Exception as e:
+        logger.error(f"Failed to fetch authentication token: {str(e)}")
+        raise Exception("Failed to initialize API - could not fetch authentication token")
+
+    try:
+        jwt_secret_key = get_secret('JWT_SECRET_KEY')
+    except Exception as e:
+        logger.error(f"Failed to fetch JWT secret key: {str(e)}")
+        raise Exception("Failed to initialize API - could not fetch JWT secret key")
+    
     app = Flask(__name__, static_folder='static')
     cors = CORS(app, resources={r"/*": {"origins": "*"}})
     app.config['CORS_HEADERS'] = 'Content-Type'
     
     # Add JWT configuration
     app.config['JWT_SECRET_KEY'] = jwt_secret_key
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(milliseconds=3600000)  # 1 hour in milliseconds
     jwt = JWTManager(app)
 
     # Initialize Limiter
@@ -70,7 +83,7 @@ def start_api():
     # Create backend routes
     @app.route('/login', methods=['POST'])
     def login():
-        logger.info(f'Login request: {request.get_json(force=True)}')
+        logger.info(f'Login request.')
         payload = request.get_json(force=True)
         token = payload['token']
         if token == authentication_token:
