@@ -36,17 +36,31 @@ class Gmail:
       raise Exception(f"Error initializing Gmail: {str(e)}")
 
   @handle_exception
-  def create_html_email(self, plain_text, subject, client_email):
-
-    logger.info(f'Creating HTML email with subject: {subject}')
+  def create_html_email(self, content, subject, client_email, email_template):
+    """
+    Create an HTML email that can handle both plain text and dictionary content.
+    
+    Args:
+        content: Can be either a string (plain text) or a dictionary (structured data)
+        subject: Email subject
+        client_email: Recipient email address
+        email_template: Name of the template file to use
+    """
+    logger.info(f'Creating {email_template} email with subject: {subject}')
 
     # Get the template html file
     current_dir = os.path.dirname(os.path.abspath(__file__))
     env = Environment(loader=FileSystemLoader(os.path.join(current_dir, '../lib/email_templates')))
-    template = env.get_template('trade_ticket.html')
+    template = env.get_template(f'{email_template}.html')
 
-    # Render the template with the plain text content
-    html_content = template.render(content=plain_text, subject=subject)
+    # Prepare the content based on its type
+    template_data = {
+        'subject': subject,
+        'content': content
+    }
+
+    # Render the template with the content
+    html_content = template.render(**template_data)
 
     # Inline the CSS
     html_content_inlined = transform(html_content)
@@ -56,9 +70,15 @@ class Gmail:
     message['Subject'] = subject
     message['From'] = "info@agmtechnology.com"
 
+    # Convert dictionary to readable plain text format
+    if isinstance(content, dict):
+        text_content = "\n".join(f"{key}: {value}" for key, value in content.items())
+    else:
+        text_content = str(content)
+
     # Attach plain text and HTML versions
-    text_part = MIMEText(plain_text, 'plain')
-    html_part = MIMEText(html_content_inlined, 'html')
+    text_part = MIMEText(text_content.encode('utf-8'), 'plain', 'utf-8')
+    html_part = MIMEText(html_content_inlined.encode('utf-8'), 'html', 'utf-8')
     
     message.attach(text_part)
     message.attach(html_part)
@@ -79,15 +99,23 @@ class Gmail:
         logo_mime.add_header('Content-ID', '<logo>')
         final_message.attach(logo_mime)
 
-    logger.success(f'Successfully created HTML email with subject: {subject}')
+    logger.success(f'Successfully created {email_template} email with subject: {subject}')
     raw_message = base64.urlsafe_b64encode(final_message.as_bytes()).decode()
     return {'raw': raw_message}
 
   @handle_exception
-  def send_client_email(self, plain_text, client_email, subject):
-
-    logger.info(f'Sending client email to: {client_email}')
-    raw_message = self.create_html_email(plain_text, subject, client_email)
+  def send_email(self, content, client_email, subject, email_template):
+    """
+    Send an email using either plain text or dictionary content.
+    
+    Args:
+        content: Can be either a string (plain text) or a dictionary (structured data)
+        client_email: Recipient email address
+        subject: Email subject
+        email_template: Name of the template file to use
+    """
+    logger.announcement(f'Sending {email_template} email to: {client_email}', type='info')
+    raw_message = self.create_html_email(content, subject, client_email, email_template)
 
     send_message = (
         self.service.users()
@@ -95,5 +123,5 @@ class Gmail:
         .send(userId="me", body=raw_message)
         .execute()
     )
-    logger.success(f'Successfully sent client email to: {client_email}')
+    logger.announcement(f'Successfully sent {email_template} email to: {client_email}', type='success')
     return {'emailId': send_message["id"]}
