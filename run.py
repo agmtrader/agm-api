@@ -12,7 +12,6 @@ load_dotenv()
 
 public_routes = ['docs', 'index', 'login']
 
-
 # JWT authentication middleware
 def jwt_required_except_login():
     if request.endpoint not in public_routes:
