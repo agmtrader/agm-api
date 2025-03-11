@@ -1,12 +1,14 @@
-from src.utils.response import Response
-from src.utils.logger import logger
+from .logger import logger
+from flask import Response
+import json
 
 def handle_exception(func):
     def wrapper(*args, **kwargs):
         try:
-            response = func(*args, **kwargs)
-            return response
+            data = func(*args, **kwargs)
+            return Response(json.dumps(data), status=200)
         except Exception as e:
             logger.error(f"Error in {func.__name__}: {e}")
-            return e
+            json_data = json.dumps({'error': str(e)})
+            return Response(json_data, status=500)
     return wrapper

@@ -54,7 +54,7 @@ def start_api():
     # Apply JWT authentication to all routes except login
     app.before_request(jwt_required_except_login)
 
-    from src.app import reporting, drive, database, flex_query, investment_proposals, bonds, advisors, email, trade_tickets
+    from src.app import reporting, drive, database, flex_query, investment_proposals, bonds, advisors, email, trade_tickets, document_center
     app.register_blueprint(reporting.bp, url_prefix='/reporting')
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
     app.register_blueprint(drive.bp, url_prefix='/drive')
@@ -64,6 +64,7 @@ def start_api():
     app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')
     app.register_blueprint(bonds.bp, url_prefix='/bonds')
     app.register_blueprint(advisors.bp, url_prefix='/advisors')
+    app.register_blueprint(document_center.bp, url_prefix='/document_center')
 
     # Create index route
     @app.route('/')

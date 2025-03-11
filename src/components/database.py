@@ -7,7 +7,6 @@ from firebase_admin import firestore
 from src.utils.logger import logger
 from src.utils.response import Response
 from src.utils.exception import handle_exception
-from flask import jsonify
 
 from src.utils.secret_manager import get_secret
 
@@ -27,56 +26,50 @@ class Firebase:
         raise Exception(e)
     self.db = firestore.client()
 
-  # listing subcollections basically lists all the csv files in a folder
+  @handle_exception
   def listSubcollections(self, path):
     logger.info(f'Listing subcollections in document: {path}')
-    try:
-        if not path:
-            raise ValueError("Path cannot be empty")
+    if not path:
+        raise ValueError("Path cannot be empty")
+    
+    # Get a reference to the document
+    doc_ref = self.db.document(path)
+    
+    # List the subcollections of the document
+    collections = doc_ref.collections()
+    
+    results = []
+    for collection in collections:
+        # For each subcollection, get its documents
+        docs = collection.stream()
+        subcollection_data = []
+        for doc in docs:
+            doc_dict = doc.to_dict()
+            doc_dict['id'] = doc.id
+            subcollection_data.append(doc_dict)
         
-        # Get a reference to the document
-        doc_ref = self.db.document(path)
-        
-        # List the subcollections of the document
-        collections = doc_ref.collections()
-        
-        results = []
-        for collection in collections:
-            # For each subcollection, get its documents
-            docs = collection.stream()
-            subcollection_data = []
-            for doc in docs:
-                doc_dict = doc.to_dict()
-                doc_dict['id'] = doc.id
-                subcollection_data.append(doc_dict)
-            
-            results.append({
-                'collection_id': collection.id,
-                'documents': subcollection_data
-            })
-        
-        logger.success(f'Successfully listed subcollections.')
-        return Response.success(results)
-    except Exception as e:
-        return Response.error(f"Error listing subcollections: {str(e)}")
+        results.append({
+            'collection_id': collection.id,
+            'documents': subcollection_data
+        })
+    
+    logger.success(f'Successfully listed subcollections.')
+    return results
 
   # collections are basically csv documents
+  @handle_exception
   def clear_collection(self, path):
     logger.info(f'Clearing collection: {path}')
-    try:
-      docs = self.db.collection(path).list_documents()
-      for i, doc in enumerate(docs):
-        doc.delete()
-        if i != 0:
-          if i % 10 == 0:
-            logger.info(f'Deleted {i} documents.')
-          elif i % 100 == 0:
-            logger.announcement(f'Deleted {i} documents.', type='info')
-      logger.success(f'Collection cleared successfully.')
-      return Response.success(f'Collection cleared successfully.')
-    except Exception as e: 
-      logger.error(f"Error clearing collection: {str(e)}")
-      return Response.error(f"Error clearing collection: {str(e)}")
+    docs = self.db.collection(path).list_documents()
+    for i, doc in enumerate(docs):
+      doc.delete()
+      if i != 0:
+        if i % 10 == 0:
+          logger.info(f'Deleted {i} documents.')
+        elif i % 100 == 0:
+          logger.announcement(f'Deleted {i} documents.', type='info')
+    logger.success(f'Collection cleared successfully.')
+    return {'status': 'success'}
   
   # upload collection is used to upload a list of dictionaries or pandas DataFrame to a folder
   def upload_collection(self, path, data):
@@ -108,6 +101,7 @@ class Firebase:
   @handle_exception
   def create(self, data, path, id):
     logger.info(f'Adding document to collection: {path} with id: {id}')
+    print(data)
     if not path:
       raise ValueError("Path cannot be empty")
     if not id:
@@ -117,7 +111,7 @@ class Firebase:
     
     self.db.collection(path).document(id).set(data)
     logger.success(f'Document added successfully.')
-    return jsonify({'id': id})
+    return {'id': id}
 
   @handle_exception
   def read(self, path, query=None):
@@ -169,7 +163,7 @@ class Firebase:
     
     batch.commit()
     logger.success(f'{updated_count} documents updated successfully.')
-    return jsonify({'count': updated_count})
+    return {'count': updated_count}
 
   @handle_exception
   def delete(self, path, query=None):
@@ -197,4 +191,4 @@ class Firebase:
     
     batch.commit()
     logger.success(f'Deleted {deleted_count} documents.')
-    return jsonify({'count': deleted_count})
+    return {'count': deleted_count}

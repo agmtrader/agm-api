@@ -4,7 +4,6 @@ import time
 from src.utils.exception import handle_exception
 from src.utils.logger import logger
 
-@handle_exception
 def get_secret(secret_id):
     try:
         logger.info(f"Fetching secret: {secret_id}")

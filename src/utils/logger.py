@@ -2,67 +2,71 @@ from rich.logging import RichHandler
 from rich.console import Console
 from rich.theme import Theme
 import logging
-import os
+
 class Logger:
     def __init__(self):
+
         custom_theme = Theme({
-            "info": "cyan",
-            "warning": "yellow",
-            "error": "bold red",
-            "critical": "bold white on red",
+            "primary": "#F26C0D",
+            "secondary": "#2571A5",
+            "warning": "#FFB300",
+            "success": "#00C853",
+            "error": "#FF4B4B",
+            "white": "#FFFFFF",
+            "bold primary": "#F26C0D",
+            "bold secondary": "#2571A5",
+            "bold warning": "#FFB300",
+            "bold success": "#00C853",
+            "bold error": "#FF4B4B",
+            "bold white": "#FFFFFF",
         })
-        self.console = Console(theme=custom_theme)
 
-        level = logging.DEBUG
-        if os.environ.get('DEV_MODE') != 'true':
-            level = logging.INFO
-
+        self.console = Console(
+            theme=custom_theme,
+            color_system="truecolor"
+        )
+        
         logging.basicConfig(
-            level=level,
+            level=logging.DEBUG,
             format="%(message)s",
             datefmt="[%X]",
             handlers=[RichHandler(console=self.console, rich_tracebacks=True)]
         )
         self.logger = logging.getLogger("rich")
 
-        if os.environ.get('EXTRA_DEBUG') != 'false':
-
-            # Suppress other logs
-            logging.getLogger('werkzeug').setLevel(logging.ERROR)
-            logging.getLogger('flask').setLevel(logging.ERROR)
-            logging.getLogger('requests').setLevel(logging.ERROR)
-            logging.getLogger('connectionpool').setLevel(logging.ERROR)
-            logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
-            logging.getLogger('feedparser').setLevel(logging.ERROR)
-            logging.getLogger('nltk').setLevel(logging.ERROR)
-            logging.getLogger('chardet').setLevel(logging.ERROR)
-            logging.getLogger('sqlalchemy').setLevel(logging.ERROR)
-            logging.getLogger('ib_insync').setLevel(logging.ERROR)
-            logging.getLogger('selector_events').setLevel(logging.ERROR)
-
-            logging.getLogger('googleapiclient.discovery').setLevel(logging.ERROR)
-            logging.getLogger('google_auth_httplib2').setLevel(logging.ERROR)
-            logging.getLogger('google-auth').setLevel(logging.ERROR)
-            logging.getLogger('google.auth.transport.requests').setLevel(logging.ERROR)
+        # Suppress other logs
+        logging.getLogger('werkzeug').setLevel(logging.ERROR)
+        logging.getLogger('flask').setLevel(logging.ERROR)
+        logging.getLogger('requests').setLevel(logging.ERROR)
+        logging.getLogger('connectionpool').setLevel(logging.ERROR)
+        logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
+        logging.getLogger('googleapiclient.discovery').setLevel(logging.ERROR)
+        logging.getLogger('google_auth_httplib2').setLevel(logging.ERROR)
+        logging.getLogger('feedparser').setLevel(logging.ERROR)
+        logging.getLogger('nltk').setLevel(logging.ERROR)
+        logging.getLogger('chardet').setLevel(logging.ERROR)
+        logging.getLogger('sqlalchemy').setLevel(logging.ERROR)
+        logging.getLogger('geventwebsocket').setLevel(logging.ERROR)
 
     def info(self, message):
-        self.logger.debug(f"[blue]{message}[/blue]", extra={'markup': True})
+        self.logger.debug(f"[white]{message}[/white]", extra={'markup': True})
 
     def success(self, message):
-        self.logger.debug(f"[green]{message}[/green]", extra={'markup': True})
-
-    def warning(self, message):
-        self.logger.warning(f"[yellow]{message}[/yellow]\n", extra={'markup': True})
+        self.logger.debug(f"[success]{message}[/success]", extra={'markup': True})
 
     def announcement(self, message, type='info'):
         if type == 'info':
-            self.logger.info(f"\n[blue][bold]{message}[/bold][/blue]", extra={'markup': True})
+            self.logger.info(f"[bold secondary]{message}[/bold secondary]", extra={'markup': True})
         elif type == 'success':
-            self.logger.info(f"[bold][green]{message}[/green][/bold]\n", extra={'markup': True})
+            self.logger.info(f"[bold primary]{message}[/bold primary]\n", extra={'markup': True})
         else:
             raise ValueError("Invalid type. Choose 'info' or 'success'.")
+        
+    def warning(self, message):
+        self.logger.warning(f"[bold warning]{message}[/bold warning]", extra={'markup': True})
 
     def error(self, message):
-        self.logger.error(f"[red]{message}[/red]\n", extra={'markup': True})
+        self.logger.error(f"[bold error on white]{message}[/bold error on white]", extra={'markup': True})
+
 
 logger = Logger()
