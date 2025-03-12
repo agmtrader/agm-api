@@ -8,6 +8,9 @@ from src.lib.entities.document import Document
 drive = GoogleDrive()
 database = Firebase()
 
+
+# TODO MAKE THIS A SINGLETON
+
 class DocumentCenter:
 
     def __init__(self):

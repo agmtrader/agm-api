@@ -66,7 +66,7 @@ class Logger:
         self.logger.warning(f"[bold warning]{message}[/bold warning]", extra={'markup': True})
 
     def error(self, message):
-        self.logger.error(f"[bold error on white]{message}[/bold error on white]", extra={'markup': True})
+        self.logger.error(f"[on white][error]{message}[/error][/on white]", extra={'markup': True})
 
 
 logger = Logger()
