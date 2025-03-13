@@ -12,7 +12,26 @@ version='&v=3'
 url = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest?"
 logger.announcement('Initialized Flex Query Service', type='success')
 
+# Returns dict of queryIds as keys and flex query as values
 @handle_exception
+def fetchFlexQueries(queryIds):
+    agmToken = "t=949768708375319238802665"
+    flex_queries = {}
+
+    for _, queryId in enumerate(queryIds):
+
+        flex_query_df = getFlexQuery(agmToken, queryId)
+        flex_query_df['file_name'] = queryId
+
+        try:
+            flex_query_dict = flex_query_df.to_dict(orient='records')
+            flex_queries[queryId] = flex_query_dict
+        except Exception as e:
+            logger.error(f'Flex Query Empty for queryId {queryId}: {str(e)}')
+            raise Exception(f'Flex Query Empty for queryId {queryId}: {str(e)}')
+        
+    return flex_queries
+
 def getFlexQuery(token, queryId):
 
     logger.info(f'Getting Flex Query for queryId: {queryId}')
@@ -74,28 +93,7 @@ def getFlexQuery(token, queryId):
     df = binaryXMLtoDF(xml_data)
     logger.success(f"Flex Query generated")
     return df
-    
-# Returns dict of queryIds as keys and flex query as values
-@handle_exception
-def fetchFlexQueries(queryIds):
-    agmToken = "t=949768708375319238802665"
-    flex_queries = {}
 
-    for _, queryId in enumerate(queryIds):
-
-        flex_query_df = getFlexQuery(agmToken, queryId)
-        flex_query_df['file_name'] = queryId
-
-        try:
-            flex_query_dict = flex_query_df.to_dict(orient='records')
-            flex_queries[queryId] = flex_query_dict
-        except Exception as e:
-            logger.error(f'Flex Query Empty for queryId {queryId}: {str(e)}')
-            raise Exception(f'Flex Query Empty for queryId {queryId}: {str(e)}')
-        
-    return flex_queries
-
-@handle_exception
 def binaryXMLtoDF(binaryXMLData):
 
     logger.info(f'Converting binary XML to DF')

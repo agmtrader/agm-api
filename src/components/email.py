@@ -34,8 +34,30 @@ class Gmail:
     except Exception as e:
       logger.error(f"Error initializing Gmail: {str(e)}")
       raise Exception(f"Error initializing Gmail: {str(e)}")
-
+    
   @handle_exception
+  def send_email(self, content, client_email, subject, email_template):
+    """
+    Send an email using either plain text or dictionary content.
+    
+    Args:
+        content: Can be either a string (plain text) or a dictionary (structured data)
+        client_email: Recipient email address
+        subject: Email subject
+        email_template: Name of the template file to use
+    """
+    logger.announcement(f'Sending {email_template} email to: {client_email}', type='info')
+    raw_message = self.create_html_email(content, subject, client_email, email_template)
+
+    sent_message = (
+        self.service.users()
+        .messages()
+        .send(userId="me", body=raw_message)
+        .execute()
+    )
+    logger.announcement(f'Successfully sent {email_template} email to: {client_email}', type='success')
+    return sent_message['id']
+
   def create_html_email(self, content, subject, client_email, email_template):
     """
     Create an HTML email that can handle both plain text and dictionary content.
@@ -102,26 +124,3 @@ class Gmail:
     logger.success(f'Successfully created {email_template} email with subject: {subject}')
     raw_message = base64.urlsafe_b64encode(final_message.as_bytes()).decode()
     return {'raw': raw_message}
-
-  @handle_exception
-  def send_email(self, content, client_email, subject, email_template):
-    """
-    Send an email using either plain text or dictionary content.
-    
-    Args:
-        content: Can be either a string (plain text) or a dictionary (structured data)
-        client_email: Recipient email address
-        subject: Email subject
-        email_template: Name of the template file to use
-    """
-    logger.announcement(f'Sending {email_template} email to: {client_email}', type='info')
-    raw_message = self.create_html_email(content, subject, client_email, email_template)
-
-    send_message = (
-        self.service.users()
-        .messages()
-        .send(userId="me", body=raw_message)
-        .execute()
-    )
-    logger.announcement(f'Successfully sent {email_template} email to: {client_email}', type='success')
-    return {'emailId': send_message["id"]}

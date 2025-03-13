@@ -1,43 +1,9 @@
 import pandas as pd
-from flask import jsonify
 import numpy as np
 from src.utils.logger import logger
 from src.utils.exception import handle_exception
 import re
 from datetime import datetime
-
-@handle_exception
-def extract_bond_details(description):
-    
-    # Extract symbol (assuming it's always at the beginning)
-    logger.info(f'Extracting bond details from description: {description}')
-    symbol = description.split()[0]
-    
-    # Extract coupon (handling both mixed number and decimal formats)
-    coupon_match = re.search(r'(\d+(?:\s+\d+/\d+|\.\d+)|\d+)', description)
-    if coupon_match:
-        coupon_str = coupon_match.group(1)
-        print(coupon_str)
-        if '/' in coupon_str:
-            whole, fraction = coupon_str.split(' ')
-            numerator, denominator = fraction.split('/')
-            coupon = float(whole) + (float(numerator) / float(denominator))
-        else:
-            coupon = float(coupon_str)
-    else:
-        coupon = None
-    
-    # Extract date (assuming it's always at the end)
-    date_match = re.search(r'(\d{2}/\d{2}/\d{2,4})$', description)
-    if date_match:
-        date_str = date_match.group(1)
-        date_obj = datetime.strptime(date_str, '%m/%d/%y' if len(date_str) == 8 else '%m/%d/%Y')
-        maturity = date_obj.strftime('%Y-%m-%d')
-    else:
-        maturity = None
-    
-    logger.success(f'Extracted bond details: symbol={symbol}, coupon={coupon}, maturity={maturity}')
-    return symbol, coupon, maturity
 
 @handle_exception
 def generate_trade_ticket(flex_query_dict, indices):
@@ -162,4 +128,35 @@ def generate_client_confirmation_message(consolidated_dict):
             message += '\n'
 
     logger.success(f'Client confirmation message generated.')
-    return jsonify({'message':message})
+    return message
+
+def extract_bond_details(description):
+    
+    # Extract symbol (assuming it's always at the beginning)
+    logger.info(f'Extracting bond details from description: {description}')
+    symbol = description.split()[0]
+    
+    # Extract coupon (handling both mixed number and decimal formats)
+    coupon_match = re.search(r'(\d+(?:\s+\d+/\d+|\.\d+)|\d+)', description)
+    if coupon_match:
+        coupon_str = coupon_match.group(1)
+        if '/' in coupon_str:
+            whole, fraction = coupon_str.split(' ')
+            numerator, denominator = fraction.split('/')
+            coupon = float(whole) + (float(numerator) / float(denominator))
+        else:
+            coupon = float(coupon_str)
+    else:
+        coupon = None
+    
+    # Extract date (assuming it's always at the end)
+    date_match = re.search(r'(\d{2}/\d{2}/\d{2,4})$', description)
+    if date_match:
+        date_str = date_match.group(1)
+        date_obj = datetime.strptime(date_str, '%m/%d/%y' if len(date_str) == 8 else '%m/%d/%Y')
+        maturity = date_obj.strftime('%Y-%m-%d')
+    else:
+        maturity = None
+    
+    logger.success(f'Extracted bond details: symbol={symbol}, coupon={coupon}, maturity={maturity}')
+    return symbol, coupon, maturity
