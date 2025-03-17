@@ -7,7 +7,7 @@ from flask_limiter.util import get_remote_address
 from src.utils.logger import logger
 from src.utils.secret_manager import get_secret
 from datetime import timedelta
-
+import os
 load_dotenv()
 
 public_routes = ['docs', 'index', 'login']
@@ -29,7 +29,7 @@ def start_api():
         raise Exception("Failed to initialize API - could not fetch authentication token")
 
     try:
-        jwt_secret_key = get_secret('JWT_SECRET_KEY')
+        jwt_secret_key = os.getenv('JWT_SECRET_KEY')
     except Exception as e:
         logger.error(f"Failed to fetch JWT secret key: {str(e)}")
         raise Exception("Failed to initialize API - could not fetch JWT secret key")
@@ -119,5 +119,4 @@ def start_api():
 app = start_api()
 
 logger.announcement('Running safety checks...', type='info')
-
 logger.announcement('Successfully started API', type='success')
