@@ -17,22 +17,15 @@ from typing import Union
 
 class GoogleDrive:
   _instance = None
-  
-  @classmethod
-  def get_instance(cls):
-    """
-    Get or create the singleton instance of GoogleDrive.
-    
-    Returns:
-        GoogleDrive: The singleton instance of GoogleDrive
-    """
+
+  def __new__(cls):
     if cls._instance is None:
-      cls._instance = cls()
+      cls._instance = super(GoogleDrive, cls).__new__(cls)
+      cls._instance._initialized = False
     return cls._instance
   
   def __init__(self):
-    if GoogleDrive._instance is not None:
-      logger.info('Using existing Drive instance')
+    if self._initialized:
       return
       
     logger.announcement('Initializing Drive', type='info')
@@ -52,6 +45,7 @@ class GoogleDrive:
       logger.announcement('Initialized Drive', type='success')
     except Exception as e:
       raise Exception(e)
+    self._initialized = True
 
   @handle_exception
   def get_user_info(self):

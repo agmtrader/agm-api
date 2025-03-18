@@ -11,8 +11,18 @@ from src.utils.exception import handle_exception
 from src.utils.secret_manager import get_secret
 
 class Firebase:
+  _instance = None
+
+  def __new__(cls):
+    if cls._instance is None:
+      cls._instance = super(Firebase, cls).__new__(cls)
+      cls._instance._initialized = False
+    return cls._instance
 
   def __init__(self):
+    if self._initialized:
+      return
+      
     logger.announcement('Initializing Firebase connection.', type='info')
     try:
       secret = get_secret('FIREBASE_ADMINSDK_CREDENTIALS')
@@ -25,6 +35,7 @@ class Firebase:
       except:
         raise Exception(e)
     self.db = firestore.client()
+    self._initialized = True
 
   @handle_exception
   def listSubcollections(self, path):

@@ -9,4 +9,4 @@ if [ -f .env ]; then
     done < .env
 fi
 
-gunicorn --bind 0.0.0.0:${PORT} --timeout 120 --workers 1 --threads 2 run:app
+gunicorn --bind 0.0.0.0:${PORT} --timeout 180 run:app
