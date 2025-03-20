@@ -12,7 +12,7 @@ load_dotenv()
 public_routes = ['docs', 'index', 'token', 'oauth.login', 'oauth.create', 'yfinance.get_scroller_data']
 
 def jwt_required_except_login():
-    print(request.endpoint)
+    logger.info(f'\nRequest endpoint: {request.endpoint}')
     if request.endpoint not in public_routes:
         try:
             verify_jwt_in_request()
@@ -53,8 +53,8 @@ def start_api():
 
     # Helpers
     from src.app.misc import drive, database
-    app.register_blueprint(drive.bp, url_prefix='/drive')
-    app.register_blueprint(database.bp, url_prefix='/database')
+    #app.register_blueprint(drive.bp, url_prefix='/drive')
+    #app.register_blueprint(database.bp, url_prefix='/database')
 
     # Apps
     from src.app import account_management, accounts, advisors, document_center, email, flex_query, investment_proposals, notifications, reporting, risk_profiles, tickets, trade_tickets, users
@@ -86,7 +86,6 @@ def start_api():
     from src.components.users import read_user_by_id
     @app.route('/token', methods=['POST'])
     def token():
-        print(request)
         logger.announcement('Token request.')
         payload = request.get_json(force=True)
         token = payload['token']
