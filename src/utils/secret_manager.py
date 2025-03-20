@@ -4,7 +4,7 @@ import time
 from src.utils.exception import handle_exception
 from src.utils.logger import logger
 from threading import Lock
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Union
 import time
 
 # Thread-safe cache implementation
@@ -12,7 +12,7 @@ _secret_cache: Dict[str, Tuple[str, float]] = {}
 _cache_lock = Lock()
 _CACHE_EXPIRATION_SECONDS = 3600  # 1 hour cache expiration
 
-def _get_cached_secret(secret_id: str) -> str | None:
+def _get_cached_secret(secret_id: str) -> Union[str, None]:
     """
     Retrieve a secret from cache if it exists and hasn't expired.
     Returns None if secret is not in cache or has expired.
