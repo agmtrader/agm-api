@@ -9,7 +9,7 @@ from datetime import timedelta
 import os
 
 load_dotenv()
-public_routes = ['docs', 'index', 'token', 'oauth.login', 'oauth.create']
+public_routes = ['docs', 'index', 'token', 'oauth.login', 'oauth.create', 'yfinance.get_scroller_data']
 
 def jwt_required_except_login():
     print(request.endpoint)
@@ -49,29 +49,29 @@ def start_api():
 
     # Apply JWT authentication to all routes except login
     app.before_request(jwt_required_except_login)
+    
 
     # Helpers
     from src.app.misc import drive, database
     app.register_blueprint(drive.bp, url_prefix='/drive')
     app.register_blueprint(database.bp, url_prefix='/database')
 
-    # Entities
-    from src.app import users, tickets
-    app.register_blueprint(users.bp, url_prefix='/users')
-    app.register_blueprint(tickets.bp, url_prefix='/tickets')
-
     # Apps
-    from src.app import reporting, trade_tickets, flex_query, email, investment_proposals, advisors, document_center, account_management, notifications
-    app.register_blueprint(reporting.bp, url_prefix='/reporting')
-    app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
-    app.register_blueprint(flex_query.bp, url_prefix='/flex_query')
-    app.register_blueprint(email.bp, url_prefix='/email')
-    app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')
+    from src.app import account_management, accounts, advisors, document_center, email, flex_query, investment_proposals, notifications, reporting, risk_profiles, tickets, trade_tickets, users
+    app.register_blueprint(account_management.bp, url_prefix='/account_management')
+    app.register_blueprint(accounts.bp, url_prefix='/accounts')
     app.register_blueprint(advisors.bp, url_prefix='/advisors')
     app.register_blueprint(document_center.bp, url_prefix='/document_center')
-    app.register_blueprint(account_management.bp, url_prefix='/account_management')
+    app.register_blueprint(email.bp, url_prefix='/email')
+    app.register_blueprint(flex_query.bp, url_prefix='/flex_query')
+    app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')
     app.register_blueprint(notifications.bp, url_prefix='/notifications')
-
+    app.register_blueprint(reporting.bp, url_prefix='/reporting')
+    app.register_blueprint(risk_profiles.bp, url_prefix='/risk_profiles')
+    app.register_blueprint(tickets.bp, url_prefix='/tickets')
+    app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
+    app.register_blueprint(users.bp, url_prefix='/users')
+    
     # Create index route
     @app.route('/')
     def index():
@@ -86,6 +86,7 @@ def start_api():
     from src.components.users import read_user_by_id
     @app.route('/token', methods=['POST'])
     def token():
+        print(request)
         logger.announcement('Token request.')
         payload = request.get_json(force=True)
         token = payload['token']

@@ -4,9 +4,13 @@ from src.utils.exception import handle_exception
 from src.helpers.drive import GoogleDrive
 from src.helpers.database import Firebase
 
+logger.announcement('Initializing Investment Proposals Service', type='info')
+logger.announcement('Initialized Investment Proposals Service', type='success')
+
 Drive = GoogleDrive()
 Database = Firebase()
 
+@handle_exception
 def read():
     return Database.read('db/document_center/investment_proposals')
 

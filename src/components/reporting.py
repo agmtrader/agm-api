@@ -9,8 +9,9 @@ from io import BytesIO
 import base64
 import yfinance as yf
 
-logger.announcement('Initializing Reporting Module', type='info')
-logger.announcement('Initialized Reporting Module', type='success')
+logger.announcement('Initializing Reporting Service', type='info')
+logger.announcement('Initialized Reporting Service', type='success')
+
 cst_time = getCurrentCST()
 
 def get_clients_report():

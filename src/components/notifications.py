@@ -3,6 +3,9 @@ import json
 from src.helpers.database import Firebase
 from src.utils.logger import logger
 
+logger.announcement('Initializing Notifications Service', type='info')
+logger.announcement('Initialized Notifications Service', type='success')
+
 Database = Firebase()
 
 notification_types = [

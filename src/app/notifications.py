@@ -12,14 +12,14 @@ def create():
     t = data['type']
     return create_notification(notification, t)
 
+@bp.route('/read', methods=['GET'])
+@verify_scope('notifications/read')
+def read():
+    return read_all_notifications()
+
 @bp.route('/read_by_type', methods=['POST'])
 @verify_scope('notifications/read_by_type')
 def read_by_type():
     data = request.get_json(force=True)
     t = data['type']
     return read_notifications_by_type(t) 
-
-@bp.route('/read', methods=['GET'])
-@verify_scope('notifications/read')
-def read():
-    return read_all_notifications()

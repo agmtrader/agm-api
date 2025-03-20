@@ -6,6 +6,9 @@ from src.utils.exception import handle_exception
 from src.utils.logger import logger
 from src.utils.secret_manager import get_secret
 
+logger.announcement('Initializing Account Management Service', type='info')
+logger.announcement('Initialized Account Management Service', type='success')
+
 class AccountManagement:
 
     def __init__(self):

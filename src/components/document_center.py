@@ -5,7 +5,7 @@ from src.lib.entities.document import Document
 from src.utils.exception import handle_exception
 from src.helpers.drive import GoogleDrive
 from src.helpers.database import Firebase
-
+from src.utils.logger import logger
 drive = GoogleDrive()
 database = Firebase()
 
@@ -15,6 +15,8 @@ database = Firebase()
 class DocumentCenter:
 
     def __init__(self):
+        logger.announcement('Initializing Document Center', type='info')
+        logger.announcement('Initialized Document Center', type='success')
         self.default_folder_dictionary = [
             {
                 'drive_id': '1tuS0EOHoFm9TiJlv3uyXpbMrSgIKC2QL',

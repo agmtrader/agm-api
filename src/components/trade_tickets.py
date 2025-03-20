@@ -5,6 +5,9 @@ from src.utils.exception import handle_exception
 import re
 from datetime import datetime
 
+logger.announcement('Initializing Trade Tickets Service', type='info')
+logger.announcement('Initialized Trade Tickets Service', type='success')
+
 @handle_exception
 def generate_trade_ticket(flex_query_dict, indices):
 

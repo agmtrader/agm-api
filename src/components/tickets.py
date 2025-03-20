@@ -1,8 +1,11 @@
 from src.utils.exception import handle_exception
 import json
 from src.helpers.database import Firebase
-
+from src.utils.logger import logger
 Database = Firebase()
+
+logger.announcement('Initializing Tickets Service', type='info')
+logger.announcement('Initialized Tickets Service', type='success')
 
 @handle_exception
 def create_ticket(data, id):
