@@ -3,7 +3,7 @@ from flask import request, jsonify
 from flask_jwt_extended import get_jwt
 from src.utils.logger import logger
 
-public_routes = ['docs', 'index', 'login']
+public_routes = ['docs', 'index', 'token', 'oauth.login', 'oauth.create']
 
 def verify_scope(required_scope):
     def decorator(fn):
