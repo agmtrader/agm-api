@@ -3,10 +3,48 @@ import json
 import time
 from src.utils.exception import handle_exception
 from src.utils.logger import logger
+from threading import Lock
+from typing import Dict, Tuple
+import time
 
-def get_secret(secret_id):
+# Thread-safe cache implementation
+_secret_cache: Dict[str, Tuple[str, float]] = {}
+_cache_lock = Lock()
+_CACHE_EXPIRATION_SECONDS = 3600  # 1 hour cache expiration
+
+def _get_cached_secret(secret_id: str) -> str | None:
+    """
+    Retrieve a secret from cache if it exists and hasn't expired.
+    Returns None if secret is not in cache or has expired.
+    """
+    with _cache_lock:
+        if secret_id not in _secret_cache:
+            return None
+        
+        secret_value, expiration_time = _secret_cache[secret_id]
+        if time.time() > expiration_time:
+            del _secret_cache[secret_id]
+            return None
+            
+        return secret_value
+
+def _cache_secret(secret_id: str, secret_value: str) -> None:
+    """
+    Store a secret in cache with expiration time.
+    """
+    with _cache_lock:
+        expiration_time = time.time() + _CACHE_EXPIRATION_SECONDS
+        _secret_cache[secret_id] = (secret_value, expiration_time)
+
+def get_secret(secret_id: str):
     try:
-        logger.info(f"Fetching secret: {secret_id}")
+        # Check cache first
+        cached_secret = _get_cached_secret(secret_id)
+        if cached_secret is not None:
+            logger.info(f"Retrieved secret from cache: {secret_id}")
+            return cached_secret
+
+        logger.info(f"Fetching secret from Secret Manager: {secret_id}")
 
         # Initialize the Secret Manager client
         client = secretmanager.SecretManagerServiceClient()
@@ -35,6 +73,9 @@ def get_secret(secret_id):
                 logger.error(f"All decoding attempts failed")
                 raise Exception(f"Error fetching secret: {e}")
 
+        # Cache the successfully retrieved secret
+        _cache_secret(secret_id, secrets)
+        
         logger.success(f"Successfully fetched and decoded secret")
         return secrets
         

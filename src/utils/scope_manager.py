@@ -1,0 +1,33 @@
+from functools import wraps
+from flask import request, jsonify
+from flask_jwt_extended import get_jwt
+from src.utils.logger import logger
+
+public_routes = ['docs', 'index', 'login']
+
+def verify_scope(required_scope):
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            if request.endpoint in public_routes:
+                return fn(*args, **kwargs)
+            
+            claims = get_jwt()
+            user_scopes = claims.get('scopes', '').split()
+            
+            # "all" scope has access to everything
+            if 'all' in user_scopes:
+                return fn(*args, **kwargs)
+            
+            # Check if user has the exact scope or a parent scope
+            scope_parts = required_scope.split('/')
+            for i in range(len(scope_parts)):
+                partial_scope = '/'.join(scope_parts[:i+1])
+                if partial_scope in user_scopes:
+                    return fn(*args, **kwargs)
+            
+            logger.warning(f'User attempted to access {required_scope} without proper authorization. User scopes: {user_scopes}')
+            return jsonify({"error": "Insufficient scope"}), 403
+        return wrapper
+    return decorator
+       

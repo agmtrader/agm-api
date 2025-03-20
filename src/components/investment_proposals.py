@@ -1,8 +1,8 @@
 from src.utils.logger import logger
 from src.utils.exception import handle_exception
 
-from src.components.drive import GoogleDrive
-from src.components.database import Firebase
+from src.helpers.drive import GoogleDrive
+from src.helpers.database import Firebase
 
 Drive = GoogleDrive()
 Database = Firebase()

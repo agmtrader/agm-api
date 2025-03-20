@@ -1,5 +1,6 @@
 from flask import request, Blueprint
-from src.components.database import Firebase
+from src.helpers.database import Firebase
+from src.utils.scope_manager import verify_scope
 
 bp = Blueprint('database', __name__)
 
@@ -33,6 +34,7 @@ def create_route():
     return Database.create(data, path, id)
 
 @bp.route('/read', methods=['POST'])
+@verify_scope('database/read')
 def read_route():
     body = request.get_json(force=True)
     path = body['path']

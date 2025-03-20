@@ -6,9 +6,9 @@ def handle_exception(func):
     def wrapper(*args, **kwargs):
         try:
             data = func(*args, **kwargs)
-            return Response(json.dumps(data), status=200)
+            return Response(json.dumps(data), status=200, mimetype='application/json')
         except Exception as e:
             logger.error(f"Error in {func.__name__}: {e}")
             json_data = json.dumps({'error': str(e)})
-            return Response(json_data, status=500)
+            return Response(json_data, status=500, mimetype='application/json')
     return wrapper

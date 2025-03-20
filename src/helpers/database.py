@@ -112,7 +112,6 @@ class Firebase:
   @handle_exception
   def create(self, data, path, id):
     logger.info(f'Adding document to collection: {path} with id: {id}')
-    print(data)
     if not path:
       raise ValueError("Path cannot be empty")
     if not id:

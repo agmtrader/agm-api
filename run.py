@@ -5,28 +5,21 @@ from dotenv import load_dotenv
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from src.utils.logger import logger
-from src.utils.secret_manager import get_secret
 from datetime import timedelta
 import os
+
 load_dotenv()
+public_routes = ['docs', 'index', 'token', 'oauth.login', 'oauth.create']
 
-public_routes = ['docs', 'index', 'login']
-
-# JWT authentication middleware
 def jwt_required_except_login():
+    print(request.endpoint)
     if request.endpoint not in public_routes:
         try:
             verify_jwt_in_request()
         except exceptions.JWTExtendedException as e:
             return jsonify({"msg": str(e)}), 401
-        
+ 
 def start_api():
-    
-    try:
-        authentication_token = get_secret('AGM_AUTHENTICATION_TOKEN')
-    except Exception as e:
-        logger.error(f"Failed to fetch authentication token: {str(e)}")
-        raise Exception("Failed to initialize API - could not fetch authentication token")
 
     try:
         jwt_secret_key = os.getenv('JWT_SECRET_KEY')
@@ -40,7 +33,10 @@ def start_api():
     
     # Add JWT configuration
     app.config['JWT_SECRET_KEY'] = jwt_secret_key
-    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(milliseconds=3600000)  # 1 hour in milliseconds
+
+    # Default expiration time (1 hour)
+    DEFAULT_TOKEN_EXPIRES = timedelta(hours=1)
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = DEFAULT_TOKEN_EXPIRES
     jwt = JWTManager(app)
 
     # Initialize Limiter
@@ -54,19 +50,27 @@ def start_api():
     # Apply JWT authentication to all routes except login
     app.before_request(jwt_required_except_login)
 
-    from src.app import drive, database
+    # Helpers
+    from src.app.misc import drive, database
     app.register_blueprint(drive.bp, url_prefix='/drive')
     app.register_blueprint(database.bp, url_prefix='/database')
 
-    from src.app import reporting, trade_tickets, flex_query, email, investment_proposals, bonds, advisors, document_center
+    # Entities
+    from src.app import users, tickets
+    app.register_blueprint(users.bp, url_prefix='/users')
+    app.register_blueprint(tickets.bp, url_prefix='/tickets')
+
+    # Apps
+    from src.app import reporting, trade_tickets, flex_query, email, investment_proposals, advisors, document_center, account_management, notifications
     app.register_blueprint(reporting.bp, url_prefix='/reporting')
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
     app.register_blueprint(flex_query.bp, url_prefix='/flex_query')
     app.register_blueprint(email.bp, url_prefix='/email')
     app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')
-    app.register_blueprint(bonds.bp, url_prefix='/bonds')
     app.register_blueprint(advisors.bp, url_prefix='/advisors')
     app.register_blueprint(document_center.bp, url_prefix='/document_center')
+    app.register_blueprint(account_management.bp, url_prefix='/account_management')
+    app.register_blueprint(notifications.bp, url_prefix='/notifications')
 
     # Create index route
     @app.route('/')
@@ -78,20 +82,34 @@ def start_api():
     def docs():
         return send_from_directory('public/static', 'docs.html')
     
-    @app.route('/docs/drive')
-    def drive():
-        return send_from_directory('public/static/docs', 'drive.html')
-
     # Create backend routes
-    @app.route('/login', methods=['POST'])
-    def login():
-        logger.info(f'Login request.')
+    from src.components.users import read_user_by_id
+    @app.route('/token', methods=['POST'])
+    def token():
+        logger.announcement('Token request.')
         payload = request.get_json(force=True)
         token = payload['token']
-        if token == authentication_token:
-            access_token = create_access_token(identity=token)
-            return jsonify(access_token=access_token), 200
-        return jsonify({"msg": "Bad token"}), 401
+        scopes = payload['scopes']
+
+        expires_delta = DEFAULT_TOKEN_EXPIRES
+        user = read_user_by_id(token)
+
+        if user:
+            logger.info(f'Generating access token for user {token} with scopes {scopes} and expiration {expires_delta}')
+            access_token = create_access_token(
+                identity=token,
+                additional_claims={"scopes": scopes},
+                expires_delta=expires_delta
+            )
+            logger.announcement(f'Authenticated user {token}', 'success')
+            return jsonify(
+                access_token=access_token,
+                expires_in=int(expires_delta.total_seconds())
+            ), 200
+        return jsonify({"msg": "Unauthorized"}), 401
+    
+    from src.app.misc import oauth
+    app.register_blueprint(oauth.bp, url_prefix='/oauth')
 
     @app.errorhandler(404)
     def not_found_error(error):
@@ -119,6 +137,5 @@ def start_api():
     return app
 
 app = start_api()
-
 logger.announcement('Running safety checks...', type='info')
 logger.announcement('Successfully started API', type='success')
