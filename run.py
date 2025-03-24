@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, g
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, verify_jwt_in_request, create_access_token, exceptions
 from dotenv import load_dotenv
@@ -43,11 +43,16 @@ def start_api():
     limiter = Limiter(
         get_remote_address,
         app=app,
-        default_limits=["60 per minute"],
-        storage_uri='memory://'
+        default_limits=["120 per minute"],
+        storage_uri='memory://',
+        strategy="fixed-window"
     )
 
-    #limiter.limit("120 per minute")(app)
+    # Apply rate limit decorator to all routes
+    @app.after_request
+    def after_request(response):
+        response.headers['X-RateLimit-Remaining'] = str(getattr(g, 'rate_limit_remaining', 120))
+        return response
 
     # Apply JWT authentication to all routes except login
     app.before_request(jwt_required_except_login)
