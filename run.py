@@ -47,6 +47,8 @@ def start_api():
         storage_uri='memory://'
     )
 
+    #limiter.limit("120 per minute")(app)
+
     # Apply JWT authentication to all routes except login
     app.before_request(jwt_required_except_login)
     
