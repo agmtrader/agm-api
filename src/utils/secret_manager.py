@@ -44,7 +44,7 @@ def get_secret(secret_id: str):
             logger.info(f"Retrieved secret from cache: {secret_id}")
             return cached_secret
 
-        logger.info(f"Fetching secret from Secret Manager: {secret_id}")
+        logger.info(f"Fetching secret: {secret_id}")
 
         # Initialize the Secret Manager client
         client = secretmanager.SecretManagerServiceClient()

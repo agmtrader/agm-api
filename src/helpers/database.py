@@ -25,7 +25,7 @@ class Firebase:
       
     logger.announcement('Initializing Firebase connection.', type='info')
     try:
-      secret = get_secret('FIREBASE_ADMINSDK_CREDENTIALS')
+      secret = get_secret('FIREBASE_SERVICE_ACCOUNT')
       cred = credentials.Certificate(secret)
       firebase_admin.initialize_app(cred)
       logger.announcement('Initialized Firebase connection.', type='success')

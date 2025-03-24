@@ -6,5 +6,5 @@ bp = Blueprint('secret_manager', __name__)
 @bp.route('/get_secret', methods=['POST'])
 def get_secret_route():
     payload = request.get_json(force=True)
-    secret_name = payload['secret_name']
+    secret_name = payload['name']
     return get_secret(secret_name)
