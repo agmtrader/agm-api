@@ -47,6 +47,8 @@ class Logger:
         logging.getLogger('chardet').setLevel(logging.ERROR)
         logging.getLogger('sqlalchemy').setLevel(logging.ERROR)
         logging.getLogger('geventwebsocket').setLevel(logging.ERROR)
+        logging.getLogger('pytz').setLevel(logging.ERROR)
+        logging.getLogger('ib_insync').setLevel(logging.ERROR)
 
     def info(self, message):
         self.logger.debug(f"[white]{message}[/white]", extra={'markup': True})
