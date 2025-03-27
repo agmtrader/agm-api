@@ -20,7 +20,7 @@ def create_route():
 @enforce_user_filter()
 def read_route():
     payload = request.get_json(force=True)
-    query = payload.get('query', {})
+    query = payload.get('query', None)
     return read_tickets(query=query)
 
 @bp.route('/update', methods=['POST'])
@@ -29,5 +29,5 @@ def read_route():
 def update_route():
     payload = request.get_json(force=True)
     data = payload['data']
-    query = payload.get('query', {})
+    query = payload.get('query', None)
     return update_ticket(data=data, query=query)

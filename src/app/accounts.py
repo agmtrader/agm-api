@@ -1,7 +1,7 @@
 
 from flask import Blueprint, request
-from src.components.accounts import read_accounts, update_account, create_account
-from src.utils.scope_manager import verify_scope
+from src.components.accounts import read_accounts, update_account, create_account, delete_account
+from src.utils.scope_manager import verify_scope, enforce_user_filter
 
 bp = Blueprint('accounts', __name__)
 
@@ -15,9 +15,10 @@ def create_account_route():
 
 @bp.route('/read', methods=['POST'])
 @verify_scope('accounts/read')
+@enforce_user_filter()
 def read_accounts_route():
     payload = request.get_json(force=True)
-    query = payload['query']
+    query = payload.get('query', None)
     return read_accounts(query=query)
 
 @bp.route('/update', methods=['POST'])
@@ -25,5 +26,12 @@ def read_accounts_route():
 def update_account_route():
     payload = request.get_json(force=True)
     data = payload['data']
-    query = payload['query']
+    query = payload.get('query', None)
     return update_account(data=data, query=query)
+
+@bp.route('/delete', methods=['POST'])
+@verify_scope('accounts/delete')
+def delete_account_route():
+    payload = request.get_json(force=True)
+    query = payload.get('query', None)
+    return delete_account(query=query)

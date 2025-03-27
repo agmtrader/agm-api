@@ -8,3 +8,8 @@ account_management = AccountManagement()
 @verify_scope('account_management/accounts')
 def accounts_route():
     return account_management.get_accounts()
+
+@bp.route('/accounts/<account_id>', methods=['GET'])
+@verify_scope('account_management/accounts')
+def account_details_route(account_id):
+    return account_management.get_account_details(account_id)

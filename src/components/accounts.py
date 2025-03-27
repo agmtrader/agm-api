@@ -24,3 +24,9 @@ def update_account(data, query=None):
     account = Database.update(path='db/clients/accounts', data=data, query=query)
     account = json.loads(account.data.decode('utf-8'))
     return account
+
+@handle_exception
+def delete_account(query=None):
+    account = Database.delete(path='db/clients/accounts', query=query)
+    account = json.loads(account.data.decode('utf-8'))
+    return account

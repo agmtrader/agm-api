@@ -49,10 +49,6 @@ def start_api():
     )
 
     # Apply rate limit decorator to all routes
-    @app.after_request
-    def after_request(response):
-        response.headers['X-RateLimit-Remaining'] = str(getattr(g, 'rate_limit_remaining', 120))
-        return response
 
     # Apply JWT authentication to all routes except login
     app.before_request(jwt_required_except_login)

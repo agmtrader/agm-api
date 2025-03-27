@@ -9,8 +9,8 @@ bp = Blueprint('users', __name__)
 @enforce_user_filter(field_name='id')
 def create_user_route():
     payload = request.get_json(force=True)
-    data = payload['data']
-    id = payload['id']
+    data = payload.get('data', None)
+    id = payload.get('id', None)
     return create_user(data=data, id=id)
 
 @bp.route('/read', methods=['POST'])
@@ -18,7 +18,7 @@ def create_user_route():
 @enforce_user_filter(field_name='id')
 def read_users_route():
     payload = request.get_json(force=True)
-    query = payload['query']
+    query = payload.get('query', None)
     return read_users(query=query)
 
 @bp.route('/update', methods=['POST'])
@@ -26,6 +26,6 @@ def read_users_route():
 @enforce_user_filter(field_name='id')
 def update_user_route():
     payload = request.get_json(force=True)
-    data = payload['data']
-    query = payload['query']
+    data = payload.get('data', None)
+    query = payload.get('query', None)
     return update_user(data=data, query=query)

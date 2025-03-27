@@ -68,6 +68,9 @@ def enforce_user_filter(field_name='UserID'):
                     if not isinstance(payload['query'], dict):
                         payload['query'] = {}
                     payload['query'][field_name] = current_user
+                else:
+                    # If no query exists, create one with the user filter
+                    payload['query'] = {field_name: current_user}
             
             logger.success(f'Enforced user filter for {field_name}')
             return fn(*args, **kwargs)

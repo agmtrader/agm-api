@@ -1,8 +1,16 @@
 from flask import request, Blueprint
-from src.components.trade_tickets import generate_trade_ticket, generate_client_confirmation_message
-from src.utils.scope_manager import verify_scope
+from src.components.trade_tickets import generate_trade_ticket, generate_client_confirmation_message, list_trade_tickets
+from src.utils.scope_manager import verify_scope, enforce_user_filter
 
 bp = Blueprint('trade_tickets', __name__)
+
+@bp.route('/list', methods=['POST'])
+@verify_scope('trade_tickets/list')
+@enforce_user_filter()
+def list():
+    payload = request.get_json(force=True)
+    query = payload.get('query', {})
+    return list_trade_tickets(query=query)
 
 @bp.route('/generate_trade_ticket', methods=['POST'])
 @verify_scope('trade_tickets/generate_trade_ticket')

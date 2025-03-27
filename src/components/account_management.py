@@ -41,6 +41,25 @@ class AccountManagement:
         
         logger.success(f"Accounts fetched successfully")
         return response.json()
+    
+    @handle_exception
+    def get_account_details(self, account_id):
+        logger.info(f"Getting account details for {account_id}")
+        url = f"{self.BASE_URL}/gw/api/v1/accounts/{account_id}/details"
+        token = self.get_bearer_token()
+        if not token:
+            raise Exception("No token found")
+        
+        headers = {
+            "Authorization": f"Bearer {token}"
+        }
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            raise Exception(f"Error {response.status_code}: {response.text}")
+        
+        logger.success(f"Account details fetched successfully")
+        return response.json()
+        
 
     def get_bearer_token(self):
         current_time = int(time.time())

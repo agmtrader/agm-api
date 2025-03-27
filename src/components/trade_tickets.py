@@ -1,12 +1,34 @@
 import pandas as pd
 import numpy as np
+import json
 from src.utils.logger import logger
 from src.utils.exception import handle_exception
 import re
 from datetime import datetime
 
+from src.helpers.database import Firebase
+
 logger.announcement('Initializing Trade Tickets Service', type='info')
+Database = Firebase()
 logger.announcement('Initialized Trade Tickets Service', type='success')
+
+@handle_exception
+def list_trade_tickets(query = None):
+    logger.info(f"Getting trade tickets for {query}")
+
+    # Get all trade tickets
+    trade_tickets = Database.read('db/trade_tickets/dictionary', query={})
+    trade_tickets = json.loads(trade_tickets.data.decode('utf-8'))
+
+    # Make sure the client has access to the trade tickets
+    if query is not None and 'UserID' in query:
+        trade_ticket_access = Database.read('db/clients/trade_tickets', query={'UserID': query['UserID']})
+        available_trade_tickets = json.loads(trade_ticket_access.data.decode('utf-8'))[0]['TradeTicketIDs']
+        filtered_tickets = [ticket for ticket in trade_tickets if ticket['TradeTicketID'] in available_trade_tickets]
+    else:
+        filtered_tickets = trade_tickets
+        
+    return filtered_tickets
 
 @handle_exception
 def generate_trade_ticket(flex_query_dict, indices):
