@@ -5,8 +5,6 @@ from firebase_admin import credentials
 from firebase_admin import firestore
 
 from src.utils.logger import logger
-from src.utils.response import Response
-from src.utils.exception import handle_exception
 
 from src.utils.secret_manager import get_secret
 
@@ -37,7 +35,6 @@ class Firebase:
     self.db = firestore.client()
     self._initialized = True
 
-  @handle_exception
   def listSubcollections(self, path):
     logger.info(f'Listing subcollections in document: {path}')
     if not path:
@@ -68,7 +65,6 @@ class Firebase:
     return results
 
   # collections are basically csv documents
-  @handle_exception
   def clear_collection(self, path):
     logger.info(f'Clearing collection: {path}')
     docs = self.db.collection(path).list_documents()
@@ -103,13 +99,12 @@ class Firebase:
             logger.announcement(f'Uploaded {i} documents.', type='info')
           
       logger.success(f'Collection uploaded successfully.')
-      return Response.success(f'Collection uploaded successfully.')
+      return {'status': 'success'}
     
     except Exception as e:
       logger.error(f"Error uploading collection: {str(e)}")
-      return Response.error(f"Error uploading collection: {str(e)}")
+      return str(e)
 
-  @handle_exception
   def create(self, data, path, id):
     logger.info(f'Adding document to collection: {path} with id: {id}')
     if not path:
@@ -123,7 +118,6 @@ class Firebase:
     logger.success(f'Document added successfully.')
     return {'id': id}
 
-  @handle_exception
   def read(self, path, query=None):
     logger.info(f'Querying documents in collection: {path} with query: {query}')
     if not path:
@@ -147,7 +141,6 @@ class Firebase:
     logger.info(f'Retrieved {len(results)} documents.')
     return results
 
-  @handle_exception
   def update(self, path, data, query=None):
     logger.info(f'Updating documents in collection: {path} with query: {query}')
     if not path:
@@ -175,7 +168,6 @@ class Firebase:
     logger.success(f'{updated_count} documents updated successfully.')
     return {'count': updated_count}
 
-  @handle_exception
   def delete(self, path, query=None):
     logger.info(f'Deleting documents in collection: {path} with query: {query}')
     if not path:

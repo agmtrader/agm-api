@@ -10,23 +10,19 @@ logger.announcement('Initialized Accounts Service', type='success')
 @handle_exception
 def create_account(data, id):
     account = Database.create(path='db/clients/accounts', data=data, id=id)
-    account = json.loads(account.data.decode('utf-8'))
     return account
 
 @handle_exception
 def read_accounts(query=None):
     accounts = Database.read(path='db/clients/accounts', query=query)
-    accounts = json.loads(accounts.data.decode('utf-8'))
     return accounts
 
 @handle_exception
 def update_account(data, query=None):
     account = Database.update(path='db/clients/accounts', data=data, query=query)
-    account = json.loads(account.data.decode('utf-8'))
     return account
 
 @handle_exception
 def delete_account(query=None):
     account = Database.delete(path='db/clients/accounts', query=query)
-    account = json.loads(account.data.decode('utf-8'))
     return account

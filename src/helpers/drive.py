@@ -10,7 +10,7 @@ from src.utils.secret_manager import get_secret
 import pandas as pd
 from io import BytesIO, StringIO
 import io
-
+import json
 import base64
 
 from typing import Union
@@ -122,15 +122,15 @@ class GoogleDrive:
 
   @handle_exception
   def reset_folder(self, folder_id):
-      response = self.get_files_in_folder(folder_id)
-      if response['status'] == 'error':
+      try:
+        response = self.get_files_in_folder(folder_id)
+        files = json.loads(response.data.decode('utf-8'))
+      except Exception as e:
         raise Exception(f'Error fetching files in folder.')
-      files = response['content']
+
       if len(files) > 0:
           for f in files:
-              response = self.delete_file(f['id'])
-              if response['status'] == 'error':
-                  raise Exception(f'Error deleting file.')
+              self.delete_file(f['id'])
               
       logger.success('Folder reset.')
       return {'status': 'success'}
@@ -325,11 +325,10 @@ class GoogleDrive:
     try:
         request = self.service.files().get_media(fileId=file_id)
 
-        file_info = self.get_file_info_by_id(file_id)
-        if file_info['status'] == 'error':
-          raise Exception(file_info['content'])
+        file_info_response = self.get_file_info_by_id(file_id)
+        file_info = json.loads(file_info_response.data.decode('utf-8'))
         
-        mime_type = file_info['content']['mimeType']
+        mime_type = file_info['mimeType']
 
         downloaded_file = io.BytesIO()
         downloader = MediaIoBaseDownload(downloaded_file, request)
@@ -352,7 +351,7 @@ class GoogleDrive:
       logger.warning("Exporting parsed file. This may take a while.")
       if mime_type == 'text/csv':
         list_data = pd.read_csv(StringIO(downloaded_file.getvalue().decode('latin1'))).fillna('').to_dict(orient='records')
-      elif mime_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+      elif mime_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mime_type == 'application/vnd.ms-excel':
         list_data = pd.read_excel(BytesIO(downloaded_file.getvalue())).fillna('').to_dict(orient='records')
       else:
         raise Exception("Unsupported MIME type for parsing.")

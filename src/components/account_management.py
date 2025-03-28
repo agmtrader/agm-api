@@ -13,7 +13,7 @@ class AccountManagement:
 
     def __init__(self):
         logger.announcement("Initializing Account Management")
-        self.BASE_URL = "https://qa.interactivebrokers.com"
+        self.BASE_URL = "https://api.ibkr.com"
         self.CLIENT_ID = "AGMTechnology-FD-QA"
         self.KEY_ID = "main"
         self.CLIENT_PRIVATE_KEY = get_secret("IBKR_ACCOUNT_MANAGEMENT_PRIVATE_KEY")
@@ -27,6 +27,7 @@ class AccountManagement:
     @handle_exception
     def get_accounts(self):
         logger.info("Getting accounts")
+        logger.info(f"Base URL: {self.BASE_URL}")
         url = f"{self.BASE_URL}/gw/api/v1/accounts/status?startDate=2022-03-01&endDate=2024-10-31"
         token = self.get_bearer_token()
         if not token:

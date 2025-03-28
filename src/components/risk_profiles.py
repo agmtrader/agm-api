@@ -6,15 +6,14 @@ import json
 logger.announcement('Initializing Risk Profile Service', type='info')
 logger.announcement('Initialized Risk Profile Service', type='success')
 
-database = Firebase()
+Database = Firebase()
 
 @handle_exception
 def create_risk_profile(data: dict, id: str):
-    database.create(path='db/clients/risk_profiles', data=data, id=id)
+    Database.create(path='db/clients/risk_profiles', data=data, id=id)
     return
 
 @handle_exception
 def read_risk_profiles():
-    risk_profiles = database.read(path='db/clients/risk_profiles')
-    risk_profiles = json.loads(risk_profiles.data.decode('utf-8'))
+    risk_profiles = Database.read(path='db/clients/risk_profiles')
     return risk_profiles

@@ -43,7 +43,7 @@ def start_api():
     limiter = Limiter(
         get_remote_address,
         app=app,
-        default_limits=["120 per minute"],
+        default_limits=["600 per minute"],
         storage_uri='memory://',
         strategy="fixed-window"
     )
@@ -53,14 +53,7 @@ def start_api():
     # Apply JWT authentication to all routes except login
     app.before_request(jwt_required_except_login)
     
-
-    # Helpers
-    from src.app.misc import drive, database
-    #app.register_blueprint(drive.bp, url_prefix='/drive')
-    #app.register_blueprint(database.bp, url_prefix='/database')
-
-    # Apps
-    from src.app import account_management, accounts, advisors, document_center, email, flex_query, investment_proposals, notifications, reporting, risk_profiles, tickets, trade_tickets, users
+    from src.app import account_management, accounts, advisors, document_center, email, flex_query, investment_proposals, leads, notifications, reporting, risk_profiles, tickets, trade_tickets, users
     app.register_blueprint(account_management.bp, url_prefix='/account_management')
     app.register_blueprint(accounts.bp, url_prefix='/accounts')
     app.register_blueprint(advisors.bp, url_prefix='/advisors')
@@ -68,6 +61,7 @@ def start_api():
     app.register_blueprint(email.bp, url_prefix='/email')
     app.register_blueprint(flex_query.bp, url_prefix='/flex_query')
     app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')
+    app.register_blueprint(leads.bp, url_prefix='/leads')
     app.register_blueprint(notifications.bp, url_prefix='/notifications')
     app.register_blueprint(reporting.bp, url_prefix='/reporting')
     app.register_blueprint(risk_profiles.bp, url_prefix='/risk_profiles')

@@ -1,4 +1,3 @@
-import json
 from datetime import datetime
 from src.lib.entities.document import Document
 
@@ -6,8 +5,9 @@ from src.utils.exception import handle_exception
 from src.helpers.drive import GoogleDrive
 from src.helpers.database import Firebase
 from src.utils.logger import logger
-drive = GoogleDrive()
-database = Firebase()
+
+Drive = GoogleDrive()
+Database = Firebase()
 
 
 # TODO MAKE THIS A SINGLETON
@@ -54,8 +54,8 @@ class DocumentCenter:
         files = {}
 
         for folder in self.default_folder_dictionary:
-            files_in_folder = database.read(path=f'db/document_center/{folder["id"]}', query=query)
-            files[folder['id']] = json.loads(files_in_folder.data.decode("utf-8"))
+            files_in_folder = Database.read(path=f'db/document_center/{folder["id"]}', query=query)
+            files[folder['id']] = files_in_folder
 
         if len(files) == 0:
             raise Exception("No files found")
@@ -64,15 +64,14 @@ class DocumentCenter:
     
     @handle_exception
     def delete_file(self, document: Document, parent_folder_id: str):
-        database.delete(path=f'db/document_center/{parent_folder_id}', query={'DocumentID': document['DocumentID']})
-        drive.delete_file(document['FileInfo']['id'])
+        Database.delete(path=f'db/document_center/{parent_folder_id}', query={'DocumentID': document['DocumentID']})
+        Drive.delete_file(document['FileInfo']['id'])
         return {'status': 'success'}
     
     @handle_exception
     def upload_file(self, file_name, mime_type, file_data, parent_folder_id, document_info, uploader):
 
-        file_info = drive.upload_file(file_name=file_name, mime_type=mime_type, file_data=file_data, parent_folder_id=parent_folder_id)
-        file_info = json.loads(file_info.data.decode("utf-8"))
+        file_info = Drive.upload_file(file_name=file_name, mime_type=mime_type, file_data=file_data, parent_folder_id=parent_folder_id)
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
         for folder in self.default_folder_dictionary:
@@ -90,5 +89,5 @@ class DocumentCenter:
             category=category
         )
         
-        database.create(data=document.to_dict(), path=f'db/document_center/{category}', id=timestamp)
+        Database.create(data=document.to_dict(), path=f'db/document_center/{category}', id=timestamp)
         return {'status': 'success'}
