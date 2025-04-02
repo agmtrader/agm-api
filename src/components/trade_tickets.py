@@ -18,7 +18,6 @@ def list_trade_tickets(query = None):
 
     # Get all trade tickets
     trade_tickets = Database.read('db/trade_tickets/dictionary', query={})
-    trade_tickets = json.loads(trade_tickets.data.decode('utf-8'))
 
     # Make sure the client has access to the trade tickets
     if query is not None and 'UserID' in query:

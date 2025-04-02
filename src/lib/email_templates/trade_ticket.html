@@ -6,54 +6,81 @@
     <title>{{ subject }}</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #000000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.8;
+            color: #2D3748;
+            margin: 0;
+            padding: 0;
+            background-color: #F7FAFC;
         }
         .container {
-            max-width: 100%;
-            margin: 0 auto;
-            padding: 20px;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 40px;
             background-color: #FFFFFF;
-            text-align: center;
-            box-shadow: 0 5px 10px 0 rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
         }
         .logo {
             text-align: center;
-            margin: 20px;
-            max-width: 300px;
-            width: 300px;
+            margin: 0 auto 40px;
+            max-width: 240px;
+        }
+        .logo img {
+            max-width: 100%;
+            height: auto;
         }
         .content {
-            width: 100%;
-            height: 100%;
+            padding: 0 20px;
+        }
+        h1 {
+            color: #1A365D;
+            font-size: 24px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        .transaction-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .transaction-details {
+            background-color: #F8F9FA;
+            border: 1px solid #E2E8F0;
+            border-radius: 8px;
             padding: 20px;
-            border-radius: 100px;
-            text-align: left;
+            margin: 16px 0;
+        }
+        .transaction-details p {
+            margin: 8px 0;
+        }
+        .transaction-details strong {
+            color: #1A365D;
         }
     </style>
 </head>
 <body>
-    <div class="container" >
+    <div class="container">
         <div class="logo">
-            <img src="cid:logo" alt="AGM Logo" style="max-width: 100%; height: auto;">
+            <img src="cid:logo" alt="AGM Logo">
         </div>
         <div class="content">
-            <p style="font-weight: bold; color: #F26C0D; font-size: 3em;">Confirmación de transacción</p>
-            {% for line in content.split('\n') %}
-                {% set parts = line.split(':') %}
-                <div style="text-align: left; width: 100%;">
+            <h1 class="transaction-title">Confirmación de transacción</h1>
+            <div class="transaction-details">
+                {% for line in content.split('\n') %}
+                    {% set parts = line.split(':') %}
                     <p>
-                        <strong>
-                            {{ parts[0] }}
-                        </strong>
+                        <strong>{{ parts[0] }}</strong>
                         {% if parts|length > 1 %}
-                        :
-                            {{ parts[1:] | join(':') }}
+                            : {{ parts[1:] | join(':') }}
                         {% endif %}
                     </p>
-                </div>
-            {% endfor %}
+                {% endfor %}
+            </div>
         </div>
     </div>
 </body>

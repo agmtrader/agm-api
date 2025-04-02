@@ -36,7 +36,7 @@ class Gmail:
       raise Exception(f"Error initializing Gmail: {str(e)}")
     
   @handle_exception
-  def send_email(self, content, client_email, subject, email_template):
+  def send_email(self, content, client_email, subject, email_template, bcc="aa@agmtechnology.com,cr@agmtechnology.com,jc@agmtechnology.com,hc@agmtechnology.com,rc@agmtechnology.com", cc=""):
     """
     Send an email using either plain text or dictionary content.
     
@@ -45,9 +45,11 @@ class Gmail:
         client_email: Recipient email address
         subject: Email subject
         email_template: Name of the template file to use
+        bcc: Bcc email address
+        cc: Cc email address
     """
     logger.announcement(f'Sending {email_template} email to: {client_email}', type='info')
-    raw_message = self.create_html_email(content, subject, client_email, email_template)
+    raw_message = self.create_html_email(content, subject, client_email, email_template, bcc, cc)
 
     sent_message = (
         self.service.users()
@@ -58,7 +60,7 @@ class Gmail:
     logger.announcement(f'Successfully sent {email_template} email to: {client_email}', type='success')
     return sent_message['id']
 
-  def create_html_email(self, content, subject, client_email, email_template):
+  def create_html_email(self, content, subject, client_email, email_template, bcc, cc):
     """
     Create an HTML email that can handle both plain text and dictionary content.
     
@@ -105,12 +107,15 @@ class Gmail:
     message.attach(text_part)
     message.attach(html_part)
 
+    print(bcc, cc)
+
     # Create the final multipart message
     final_message = MIMEMultipart('related')
     final_message['Subject'] = subject
     final_message['To'] = client_email
     final_message['From'] = "info@agmtechnology.com"
-    final_message['Bcc'] = "cr@agmtechnology.com,aa@agmtechnology.com,jc@agmtechnology.com,hc@agmtechnology.com,rc@agmtechnology.com"
+    final_message['Bcc'] = bcc
+    final_message['Cc'] = cc
 
     final_message.attach(message)
 
