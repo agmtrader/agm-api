@@ -22,7 +22,7 @@ def list_trade_tickets(query = None):
     # Make sure the client has access to the trade tickets
     if query is not None and 'UserID' in query:
         trade_ticket_access = Database.read('db/clients/trade_tickets', query={'UserID': query['UserID']})
-        available_trade_tickets = json.loads(trade_ticket_access.data.decode('utf-8'))[0]['TradeTicketIDs']
+        available_trade_tickets = trade_ticket_access[0]['TradeTicketIDs']
         filtered_tickets = [ticket for ticket in trade_tickets if ticket['TradeTicketID'] in available_trade_tickets]
     else:
         filtered_tickets = trade_tickets
