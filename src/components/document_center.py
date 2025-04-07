@@ -9,15 +9,21 @@ from src.utils.logger import logger
 Drive = GoogleDrive()
 Database = Firebase()
 
-
-# TODO MAKE THIS A SINGLETON
-
 class DocumentCenter:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(DocumentCenter, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
 
     def __init__(self):
+        if self._initialized:
+            return
+            
         logger.announcement('Initializing Document Center', type='info')
-        logger.announcement('Initialized Document Center', type='success')
-        self.default_folder_dictionary = [
+        self.bucket_dictionary = [
             {
                 'drive_id': '1tuS0EOHoFm9TiJlv3uyXpbMrSgIKC2QL',
                 'id': 'poa',
@@ -44,16 +50,18 @@ class DocumentCenter:
                 'label': 'Manifests'
             }
         ]
+        logger.announcement('Initialized Document Center', type='success')
+        self._initialized = True
 
     @handle_exception
     def get_folder_dictionary(self):
-        return self.default_folder_dictionary
+        return self.bucket_dictionary
 
     @handle_exception
     def read_files(self, query):
         files = {}
 
-        for folder in self.default_folder_dictionary:
+        for folder in self.bucket_dictionary:
             files_in_folder = Database.read(path=f'db/document_center/{folder["id"]}', query=query)
             files[folder['id']] = files_in_folder
 
@@ -69,25 +77,16 @@ class DocumentCenter:
         return {'status': 'success'}
     
     @handle_exception
-    def upload_file(self, file_name, mime_type, file_data, parent_folder_id, document_info, uploader):
-
+    def upload_file(self, file_name, mime_type, file_data, parent_folder_id, document_info, uploader, bucket_id):
         file_info = Drive.upload_file(file_name=file_name, mime_type=mime_type, file_data=file_data, parent_folder_id=parent_folder_id)
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-
-        for folder in self.default_folder_dictionary:
-            if folder['drive_id'] == parent_folder_id:
-                category = folder['id']
-                break
-            else:
-                category = 'other'
 
         document = Document(
             document_id=timestamp,
             document_info=document_info,
             file_info=file_info,
-            uploader=uploader,
-            category=category
+            uploader=uploader
         )
         
-        Database.create(data=document.to_dict(), path=f'db/document_center/{category}', id=timestamp)
+        Database.create(data=document.to_dict(), path=f'db/document_center/{bucket_id}', id=timestamp)
         return {'status': 'success'}

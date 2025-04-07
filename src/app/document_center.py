@@ -6,7 +6,7 @@ bp = Blueprint('document_center', __name__)
 DocumentCenter = DocumentCenter()
 
 @bp.route('/get_folder_dictionary', methods=['GET'])
-@verify_scope('document_center/get_folder_dictionary')
+@verify_scope('document_center/read')
 def get_folder_dictionary_route():
   return DocumentCenter.get_folder_dictionary()
 
@@ -35,4 +35,5 @@ def upload_route():
   parent_folder_id = body['parent_folder_id']
   document_info = body['document_info']
   uploader = body['uploader']
-  return DocumentCenter.upload_file(file_name, mime_type, file_data, parent_folder_id, document_info, uploader)
+  bucket_id = body['bucket_id']
+  return DocumentCenter.upload_file(file_name, mime_type, file_data, parent_folder_id, document_info, uploader, bucket_id)
