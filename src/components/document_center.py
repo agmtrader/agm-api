@@ -87,6 +87,8 @@ class DocumentCenter:
             file_info=file_info,
             uploader=uploader
         )
+
+        print(document.to_dict())
         
         Database.create(data=document.to_dict(), path=f'db/document_center/{bucket_id}', id=timestamp)
         return {'status': 'success'}

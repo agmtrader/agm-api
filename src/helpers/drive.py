@@ -239,7 +239,6 @@ class GoogleDrive:
     logger.success(f'Successfully moved file: {f["name"]}')
     return moved_file
 
-  @handle_exception
   def upload_file(self, file_name: str, mime_type: str, file_data: Union[str, list[dict]], parent_folder_id: str) -> dict:
     """
     Upload a file to Google Drive. Supports two types of uploads:
