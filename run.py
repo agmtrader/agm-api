@@ -53,10 +53,11 @@ def start_api():
     # Apply JWT authentication to all routes except login
     app.before_request(jwt_required_except_login)
     
-    from src.app import account_management, accounts, advisors, document_center, email, flex_query, investment_proposals, leads, notifications, reporting, risk_profiles, tickets, trade_tickets, users
+    from src.app import account_management, accounts, advisors, contacts, document_center, email, flex_query, investment_proposals, leads, notifications, reporting, risk_profiles, tickets, trade_tickets, users
     app.register_blueprint(account_management.bp, url_prefix='/account_management')
     app.register_blueprint(accounts.bp, url_prefix='/accounts')
     app.register_blueprint(advisors.bp, url_prefix='/advisors')
+    app.register_blueprint(contacts.bp, url_prefix='/contacts')
     app.register_blueprint(document_center.bp, url_prefix='/document_center')
     app.register_blueprint(email.bp, url_prefix='/email')
     app.register_blueprint(flex_query.bp, url_prefix='/flex_query')

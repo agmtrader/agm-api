@@ -64,47 +64,6 @@ class Firebase:
     logger.success(f'Successfully listed subcollections.')
     return results
 
-  # collections are basically csv documents
-  def clear_collection(self, path):
-    logger.info(f'Clearing collection: {path}')
-    docs = self.db.collection(path).list_documents()
-    for i, doc in enumerate(docs):
-      doc.delete()
-      if i != 0:
-        if i % 10 == 0:
-          logger.info(f'Deleted {i} documents.')
-        elif i % 100 == 0:
-          logger.announcement(f'Deleted {i} documents.', type='info')
-    logger.success(f'Collection cleared successfully.')
-    return {'status': 'success'}
-  
-  # upload collection is used to upload a list of dictionaries or pandas DataFrame to a folder
-  def upload_collection(self, path, data):
-    try:
-      # Clear the collection before uploading
-      self.clear_collection(path)
-      
-      logger.info(f'Uploading collection: {path}')
-      # Convert pandas DataFrame to list of dictionaries if necessary
-      if isinstance(data, pd.DataFrame):
-        data = data.to_dict('records')
-      
-      # Iterate through the data and add each row as a document
-      for i, row in enumerate(data):
-        self.db.collection(path).add(row)
-        if i != 0:
-          if i % 10 == 0:
-            logger.info(f'Uploaded {i} documents.')
-          elif i % 100 == 0:
-            logger.announcement(f'Uploaded {i} documents.', type='info')
-          
-      logger.success(f'Collection uploaded successfully.')
-      return {'status': 'success'}
-    
-    except Exception as e:
-      logger.error(f"Error uploading collection: {str(e)}")
-      return str(e)
-
   def create(self, data, path, id):
     logger.info(f'Adding document to collection: {path} with id: {id}')
     if not path:
@@ -142,6 +101,21 @@ class Firebase:
     return results
 
   def update(self, path, data, query=None):
+    """
+    Updates a document in the database.
+
+    Args:
+      path (str): The path to the collection.
+      data (dict): The data to update. Does not need to be the entire entity, only the properties you want to update.
+      query (dict): The query to filter the documents. All documents that match the query will be updated.
+
+    Returns:
+      dict: The updated documents count.
+    """
+
+    if query is None:
+      raise ValueError("Query cannot be empty")
+
     logger.info(f'Updating documents in collection: {path} with query: {query}')
     if not path:
       raise ValueError("Path cannot be empty")
@@ -169,6 +143,20 @@ class Firebase:
     return {'count': updated_count}
 
   def delete(self, path, query=None):
+    """
+    Deletes documents from the database.
+
+    Args:
+      path (str): The path to the collection.
+      query (dict): The query to filter the documents.
+
+    Returns:
+      dict: The number of documents deleted.
+    """
+
+    if query is None:
+      raise ValueError("Query cannot be empty")
+
     logger.info(f'Deleting documents in collection: {path} with query: {query}')
     if not path:
       raise ValueError("Path cannot be empty")

@@ -121,7 +121,24 @@ class GoogleDrive:
     return folders[0]
 
   @handle_exception
-  def reset_folder(self, folder_id):
+  def create_folder(self, folderName, parentFolderId):
+    logger.info(f"Creating folder: {folderName} in folder: {parentFolderId}")
+
+    fileMetadata = {
+        'name': folderName,
+        'mimeType': 'application/vnd.google-apps.folder'
+    }
+    if parentFolderId is not None:
+        fileMetadata['parents'] = [parentFolderId]
+    else:
+        raise Exception('No parent folder ID provided.')
+    
+    folder = self.service.files().create(body=fileMetadata, fields='id, name, parents, mimeType, size, modifiedTime, createdTime').execute()
+    logger.success(f"Successfully created folder: {folderName} in folder: {parentFolderId}")
+    return folder
+
+  @handle_exception
+  def clear_folder(self, folder_id):
       try:
         response = self.get_files_in_folder(folder_id)
         files = json.loads(response.data.decode('utf-8'))
@@ -156,23 +173,6 @@ class GoogleDrive:
     
     logger.success(f'{len(files)} files found in folder: {parent_id}')
     return files
-
-  @handle_exception
-  def create_folder(self, folderName, parentFolderId):
-    logger.info(f"Creating folder: {folderName} in folder: {parentFolderId}")
-
-    fileMetadata = {
-        'name': folderName,
-        'mimeType': 'application/vnd.google-apps.folder'
-    }
-    if parentFolderId is not None:
-        fileMetadata['parents'] = [parentFolderId]
-    else:
-        raise Exception('No parent folder ID provided.')
-    
-    folder = self.service.files().create(body=fileMetadata, fields='id, name, parents, mimeType, size, modifiedTime, createdTime').execute()
-    logger.success(f"Successfully created folder: {folderName} in folder: {parentFolderId}")
-    return folder
 
   @handle_exception
   def get_file_info(self, parent_id, file_name):

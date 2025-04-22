@@ -245,10 +245,10 @@ def transform():
     logger.announcement('Transforming reports.', type='info')
     resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
 
-    # Reset resources folder
-    logger.announcement('Resetting resources folder.', type='info')
-    Drive.reset_folder(folder_id=resources_folder_id)
-    logger.announcement('Resources folder reset.', type='success')
+    # Clear resources folder
+    logger.announcement('Clearing resources folder.', type='info')
+    Drive.clear_folder(folder_id=resources_folder_id)
+    logger.announcement('Resources folder cleared.', type='success')
 
     # Process files in each backup folder
     logger.announcement('Processing files.', type='info')
