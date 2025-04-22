@@ -32,5 +32,5 @@ def update_contact(data, query=None):
 
 @handle_exception
 def delete_contact(id):
-    contact = Database.delete(path='db/clients/contacts', id=id)
+    contact = Database.delete(path='db/clients/contacts', query={'ContactID': id})
     return contact

@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.contacts import read_contacts, update_contact, create_contact
+from src.components.contacts import read_contacts, update_contact, create_contact, delete_contact
 from src.utils.scope_manager import verify_scope, enforce_user_filter
 
 bp = Blueprint('contacts', __name__)
@@ -35,3 +35,6 @@ def update_contact_route():
 @enforce_user_filter(field_name='id')
 def delete_contact_route():
     payload = request.get_json(force=True)
+    id = payload.get('id', None)
+    print(id)
+    return delete_contact(id=id)
