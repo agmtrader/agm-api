@@ -13,6 +13,7 @@ class Contact:
         self.email = data.get('ContactEmail', '')
         self.phone = data.get('ContactPhone', '')
         self.country = data.get('ContactCountry', '')
+        self.business_name = data.get('CompanyName', '')
     
 @handle_exception
 def create_contact(data, id):
