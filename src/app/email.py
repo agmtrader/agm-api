@@ -11,6 +11,8 @@ def send_email_route():
   payload = request.get_json(force=True)
   return Email.send_email(payload['content'], payload['client_email'], payload['subject'], payload['email_template'])
 
+
+""" Custom emails """
 @bp.route('/send_email/account_access', methods=['POST'])
 @verify_scope('email/send_email')
 def send_email_account_access_route():
@@ -22,7 +24,6 @@ def send_email_account_access_route():
 def send_email_trade_ticket_route():
   payload = request.get_json(force=True)
   return Email.send_email(payload['content'], payload['client_email'], 'Confirmación de Transacción', 'trade_ticket')
-
 
 @bp.route('/send_email/email_change', methods=['POST'])
 @verify_scope('email/send_email')
