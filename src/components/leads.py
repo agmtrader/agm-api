@@ -7,25 +7,39 @@ Database = Firebase()
 logger.announcement('Initializing Leads Service', type='info')
 logger.announcement('Initialized Leads Service', type='success')
 
+class FollowUp:
+    def __init__(self, data):
+        self.date = data['Date']
+        self.description = data['Description']
+        self.completed = data['Completed']
+    def to_dict(self):
+        return {
+            'date': self.date,
+            'description': self.description,
+            'completed': self.completed
+        }
+
 class Lead:
     def __init__(self, data):
         self.lead_id = data['LeadID']
-        self.contact_date = data['ContactDate']
         self.contact_id = data['ContactID']
-        self.referrer = data['ReferrerID']
+        self.referrer_id = data['ReferrerID']
+        self.contact_date = data['ContactDate']
         self.description = data['Description']
         self.followups = data['FollowUps']
         self.completed = data['Completed']
+        self.status = data['Status']
 
     def to_dict(self):
         return {
             'LeadID': self.lead_id,
-            'ContactDate': self.contact_date,
             'ContactID': self.contact_id,
-            'ReferrerID': self.referrer,
+            'ReferrerID': self.referrer_id,
+            'ContactDate': self.contact_date,
             'Description': self.description,
             'FollowUps': self.followups,
-            'Completed': self.completed
+            'Completed': self.completed,
+            'Status': self.status
         }
         
 @handle_exception
