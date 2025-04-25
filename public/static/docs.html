@@ -73,215 +73,75 @@
     <h1>AGM API Documentation</h1>
 
     <div>
-        <p>All endpoints except /login require JWT authentication. Include the JWT token in the Authorization header:</p>
+        <h2>API Overview</h2>
+        <p>All endpoints except the following public routes require JWT authentication:</p>
+        <ul>
+            <li><code>/docs</code> - API documentation</li>
+            <li><code>/</code> - Index page</li>
+            <li><code>/token</code> - Token generation</li>
+            <li><code>/oauth/login</code> - OAuth login</li>
+            <li><code>/oauth/create</code> - OAuth account creation</li>
+            <li><code>/yfinance/get_scroller_data</code> - Market data</li>
+        </ul>
+
+        <p>For authenticated endpoints, include the JWT token in the Authorization header:</p>
         <code>Authorization: Bearer your_jwt_token</code>
+
+        <h3>Rate Limiting</h3>
+        <p>The API implements rate limiting with the following configuration:</p>
+        <ul>
+            <li>600 requests per minute per IP address</li>
+            <li>Fixed window strategy</li>
+        </ul>
+
+        <h3>Token Expiration</h3>
+        <p>JWT tokens expire after 1 hour by default.</p>
     </div>
 
     <div>
         <h2>Authentication</h2>
         <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/login</span>
-        <p>Authenticate and receive a JWT token.</p>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "username": "string",
-    "password": "string"
+            <span class="method post">POST</span>
+            <span class="route">/token</span>
+            <p>Generate a JWT access token for authenticated users.</p>
+            <h4>Request Body:</h4>
+            <pre><code>{
+    "token": "string",  // User identifier
+    "scopes": ["string"]  // Array of permission scopes
 }</code></pre>
-        <h4>Response:</h4>
-        <pre><code>{
-    "access_token": "string"
+            <h4>Response:</h4>
+            <pre><code>{
+    "access_token": "string",
+    "expires_in": 3600  // Token expiration time in seconds (1 hour)
 }</code></pre>
-    </div>
+            <p>Note: The token will expire after 1 hour. Include the access token in the Authorization header for subsequent requests:</p>
+            <code>Authorization: Bearer your_access_token</code>
+        </div>
 
-    <div>
-        <h1>Drive API Documentation</h1>
-        <div class="endpoint">
-            <span class="method get">GET</span>
-            <span class="route">/drive/shared_drive_info</span>
-            <p>Get information about a shared Google Drive by name.</p>
-            <h4>Request Body:</h4>
-            <pre><code>{
-        "drive_name": "string"
-    }</code></pre>
-            <h4>Response:</h4>
-            <pre><code>{
-        "id": "string",
-        "name": "string"
-    }</code></pre>
-        </div>
-    
-        <div class="endpoint">
-            <span class="method get">GET</span>
-            <span class="route">/drive/folder_info</span>
-            <p>Get information about a folder within a parent folder.</p>
-            <h4>Request Body:</h4>
-            <pre><code>{
-        "parent_id": "string",
-        "folder_name": "string"
-    }</code></pre>
-            <h4>Response:</h4>
-            <pre><code>{
-        "id": "string",
-        "name": "string",
-        "parents": ["string"]
-    }</code></pre>
-        </div>
-    
         <div class="endpoint">
             <span class="method post">POST</span>
-            <span class="route">/drive/reset_folder</span>
-            <p>Delete all files within a specified folder.</p>
-            <h4>Request Body:</h4>
-            <pre><code>{
-        "folder_id": "string"
-    }</code></pre>
+            <span class="route">/oauth/login</span>
+            <p>OAuth login endpoint.</p>
+            <h4>Required Scope:</h4>
+            <code>oauth.login</code>
         </div>
-    
-        <div class="endpoint">
-            <span class="method get">GET</span>
-            <span class="route">/drive/files_in_folder</span>
-            <p>List all files within a specified folder.</p>
-            <h4>Request Body:</h4>
-            <pre><code>{
-        "parent_id": "string"
-    }</code></pre>
-            <h4>Response:</h4>
-            <pre><code>[{
-        "id": "string",
-        "name": "string",
-        "parents": ["string"],
-        "mimeType": "string",
-        "size": "string",
-        "modifiedTime": "string",
-        "createdTime": "string"
-    }]</code></pre>
-        </div>
-    
+
         <div class="endpoint">
             <span class="method post">POST</span>
-            <span class="route">/drive/create_folder</span>
-            <p>Create a new folder in a specified parent folder.</p>
-            <h4>Request Body:</h4>
-            <pre><code>{
-        "folder_name": "string",
-        "parent_folder_id": "string"
-    }</code></pre>
-            <h4>Response:</h4>
-            <pre><code>{
-        "id": "string",
-        "name": "string",
-        "parents": ["string"],
-        "mimeType": "application/vnd.google-apps.folder"
-    }</code></pre>
-        </div>
-    
-        <div class="endpoint">
-            <span class="method get">GET</span>
-            <span class="route">/drive/file_info</span>
-            <p>Get information about a specific file by name and parent folder.</p>
-            <h4>Request Body:</h4>
-            <pre><code>{
-        "parent_id": "string",
-        "file_name": "string"
-    }</code></pre>
-            <h4>Response:</h4>
-            <pre><code>{
-        "id": "string",
-        "name": "string",
-        "parents": ["string"]
-    }</code></pre>
-        </div>
-    
-        <div class="endpoint">
-            <span class="method patch">PATCH</span>
-            <span class="route">/drive/rename_file</span>
-            <p>Rename an existing file.</p>
-            <h4>Request Body:</h4>
-            <pre><code>{
-        "file_id": "string",
-        "new_name": "string"
-    }</code></pre>
-        </div>
-    
-        <div class="endpoint">
-            <span class="method patch">PATCH</span>
-            <span class="route">/drive/move_file</span>
-            <p>Move a file to a new parent folder.</p>
-            <h4>Request Body:</h4>
-            <pre><code>{
-        "file": {
-            "id": "string",
-            "parents": ["string"]
-        },
-        "new_parent_id": "string"
-    }</code></pre>
-        </div>
-    
-        <div class="endpoint">
-            <span class="method post">POST</span>
-            <span class="route">/drive/upload_file</span>
-            <p>Upload a new file to a specified folder. Supports base64 encoded files, CSV data, and more.</p>
-            <h4>Request Body:</h4>
-            <pre><code>{
-        "file_name": "string",
-        "mime_type": "string",
-        "file": "string | array",  // base64 encoded string or array for CSV
-        "parent_folder_id": "string"
-    }</code></pre>
-            <h4>Response:</h4>
-            <pre><code>{
-        "id": "string",
-        "name": "string",
-        "parents": ["string"],
-        "mimeType": "string",
-        "size": "string",
-        "modifiedTime": "string",
-        "createdTime": "string"
-    }</code></pre>
-        </div>
-    
-        <div class="endpoint">
-            <span class="method delete">DELETE</span>
-            <span class="route">/drive/delete_file</span>
-            <p>Delete a file from Google Drive.</p>
-            <h4>Request Body:</h4>
-            <pre><code>{
-        "file_id": "string"
-    }</code></pre>
-        </div>
-    
-        <div class="endpoint">
-            <span class="method get">GET</span>
-            <span class="route">/drive/download_file</span>
-            <p>Download a file from Google Drive. Optionally parse CSV or Excel files into JSON.</p>
-            <h4>Request Body:</h4>
-            <pre><code>{
-        "file_id": "string",
-        "parse": "boolean"  // Optional, defaults to false
-    }</code></pre>
-        </div>
-        
-        <div class="endpoint">
-                <span class="method get">GET</span>
-                <span class="route">/drive/export_file</span>
-                <p>Export a Google Workspace file (Docs, Sheets, etc.) to a specified format.</p>
-                <h4>Request Body:</h4>
-                <pre><code>{
-            "file_id": "string",
-            "mime_type": "string",
-            "parse": "boolean"  // Optional, defaults to false
-        }</code></pre>
+            <span class="route">/oauth/create</span>
+            <p>OAuth account creation endpoint.</p>
+            <h4>Required Scope:</h4>
+            <code>oauth.create</code>
         </div>
     </div>
 
-    <h1>Users API</h1>
+    <h1>Contacts API</h1>
     <div class="endpoint">
         <span class="method post">POST</span>
-        <span class="route">/users/create</span>
-        <p>Create a new user.</p>
+        <span class="route">/contacts/create</span>
+        <p>Create a new contact.</p>
         <h4>Required Scope:</h4>
-        <code>users/create</code>
+        <code>contacts/create</code>
         <h4>Request Body:</h4>
         <pre><code>{
     "data": "object",
@@ -292,10 +152,10 @@
 
     <div class="endpoint">
         <span class="method post">POST</span>
-        <span class="route">/users/read</span>
-        <p>Read user information.</p>
+        <span class="route">/contacts/read</span>
+        <p>Read contacts.</p>
         <h4>Required Scope:</h4>
-        <code>users/read</code>
+        <code>contacts/read</code>
         <h4>Request Body:</h4>
         <pre><code>{
     "query": "object"
@@ -305,10 +165,10 @@
 
     <div class="endpoint">
         <span class="method post">POST</span>
-        <span class="route">/users/update</span>
-        <p>Update user information.</p>
+        <span class="route">/contacts/update</span>
+        <p>Update a contact.</p>
         <h4>Required Scope:</h4>
-        <code>users/update</code>
+        <code>contacts/update</code>
         <h4>Request Body:</h4>
         <pre><code>{
     "data": "object",
@@ -317,29 +177,207 @@
         <p>Note: Requires user filter enforcement on 'id' field</p>
     </div>
 
-    <h1>Trade Tickets API</h1>
     <div class="endpoint">
         <span class="method post">POST</span>
-        <span class="route">/trade_tickets/generate_trade_ticket</span>
-        <p>Generate a trade ticket.</p>
+        <span class="route">/contacts/delete</span>
+        <p>Delete a contact.</p>
         <h4>Required Scope:</h4>
-        <code>trade_tickets/generate_trade_ticket</code>
+        <code>contacts/delete</code>
         <h4>Request Body:</h4>
         <pre><code>{
-    "indices": "string",  // Comma-separated indices
-    "flex_query_dict": "object"
+    "id": "string"
+}</code></pre>
+        <p>Note: Requires user filter enforcement on 'id' field</p>
+    </div>
+
+    <h1>Email API</h1>
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/email/send_email</span>
+        <p>Send a generic email.</p>
+        <h4>Required Scope:</h4>
+        <code>email/send_email</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "content": "object",
+    "client_email": "string",
+    "subject": "string",
+    "email_template": "string"
 }</code></pre>
     </div>
 
     <div class="endpoint">
         <span class="method post">POST</span>
-        <span class="route">/trade_tickets/generate_client_confirmation_message</span>
-        <p>Generate a client confirmation message.</p>
+        <span class="route">/email/send_email/account_access</span>
+        <p>Send account access email.</p>
         <h4>Required Scope:</h4>
-        <code>trade_tickets/generate_client_confirmation_message</code>
+        <code>email/send_email</code>
         <h4>Request Body:</h4>
         <pre><code>{
-    "trade_data": "object"
+    "content": "object",
+    "client_email": "string"
+}</code></pre>
+    </div>
+
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/email/send_email/trade_ticket</span>
+        <p>Send trade ticket confirmation.</p>
+        <h4>Required Scope:</h4>
+        <code>email/send_email</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "content": "object",
+    "client_email": "string"
+}</code></pre>
+    </div>
+
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/email/send_email/email_change</span>
+        <p>Send email change notification.</p>
+        <h4>Required Scope:</h4>
+        <code>email/send_email</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "client_email": "string"
+}</code></pre>
+    </div>
+
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/email/send_email/two_factor_reminder</span>
+        <p>Send 2FA reminder.</p>
+        <h4>Required Scope:</h4>
+        <code>email/send_email</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "content": "object",
+    "client_email": "string"
+}</code></pre>
+    </div>
+
+    <h1>Investment Proposals API</h1>
+    <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="route">/investment_proposals/read</span>
+        <p>Read investment proposals.</p>
+        <h4>Required Scope:</h4>
+        <code>investment_proposals/read</code>
+    </div>
+
+    <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="route">/investment_proposals/backup_investment_proposals</span>
+        <p>Backup investment proposals.</p>
+        <h4>Required Scope:</h4>
+        <code>investment_proposals/backup_investment_proposals</code>
+    </div>
+
+    <h1>Leads API</h1>
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/leads/create</span>
+        <p>Create a new lead.</p>
+        <h4>Required Scope:</h4>
+        <code>leads/create</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "data": "object",
+    "id": "string"
+}</code></pre>
+        <p>Note: Requires user filter enforcement</p>
+    </div>
+
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/leads/read</span>
+        <p>Read leads.</p>
+        <h4>Required Scope:</h4>
+        <code>leads/read</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "query": "object"
+}</code></pre>
+        <p>Note: Requires user filter enforcement</p>
+    </div>
+
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/leads/update</span>
+        <p>Update a lead.</p>
+        <h4>Required Scope:</h4>
+        <code>leads/update</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "data": "object",
+    "query": "object"
+}</code></pre>
+        <p>Note: Requires user filter enforcement</p>
+    </div>
+
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/leads/delete</span>
+        <p>Delete a lead.</p>
+        <h4>Required Scope:</h4>
+        <code>leads/delete</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "query": "object"
+}</code></pre>
+        <p>Note: Requires user filter enforcement</p>
+    </div>
+
+    <h1>Document Center API</h1>
+    <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="route">/document_center/get_folder_dictionary</span>
+        <p>Get folder dictionary.</p>
+        <h4>Required Scope:</h4>
+        <code>document_center/read</code>
+    </div>
+
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/document_center/read</span>
+        <p>Read files.</p>
+        <h4>Required Scope:</h4>
+        <code>document_center/read</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "query": "object"
+}</code></pre>
+    </div>
+
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/document_center/delete</span>
+        <p>Delete a file.</p>
+        <h4>Required Scope:</h4>
+        <code>document_center/delete</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "document": "object",
+    "parent_folder_id": "string"
+}</code></pre>
+    </div>
+
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/document_center/upload</span>
+        <p>Upload a file.</p>
+        <h4>Required Scope:</h4>
+        <code>document_center/upload</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "file_name": "string",
+    "mime_type": "string",
+    "file_data": "string",
+    "parent_folder_id": "string",
+    "document_info": "object",
+    "uploader": "string",
+    "bucket_id": "string"
 }</code></pre>
     </div>
 
@@ -366,7 +404,7 @@
         <code>tickets/read</code>
         <h4>Request Body:</h4>
         <pre><code>{
-    "query": "object"  // Optional, defaults to empty object
+    "query": "object"
 }</code></pre>
         <p>Note: Requires user filter enforcement</p>
     </div>
@@ -380,31 +418,9 @@
         <h4>Request Body:</h4>
         <pre><code>{
     "data": "object",
-    "query": "object"  // Optional, defaults to empty object
+    "query": "object"
 }</code></pre>
         <p>Note: Requires user filter enforcement</p>
-    </div>
-
-    <h1>Risk Profiles API</h1>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/risk_profiles/create</span>
-        <p>Create a new risk profile.</p>
-        <h4>Required Scope:</h4>
-        <code>risk_profiles/create</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "data": "object",
-    "id": "string"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method get">GET</span>
-        <span class="route">/risk_profiles/read</span>
-        <p>Read all risk profiles.</p>
-        <h4>Required Scope:</h4>
-        <code>risk_profiles/read</code>
     </div>
 
     <h1>Accounts API</h1>
@@ -431,6 +447,7 @@
         <pre><code>{
     "query": "object"
 }</code></pre>
+        <p>Note: Requires user filter enforcement</p>
     </div>
 
     <div class="endpoint">
@@ -444,6 +461,151 @@
     "data": "object",
     "query": "object"
 }</code></pre>
+    </div>
+
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/accounts/delete</span>
+        <p>Delete an account.</p>
+        <h4>Required Scope:</h4>
+        <code>accounts/delete</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "query": "object"
+}</code></pre>
+    </div>
+
+    <h1>Flex Query API</h1>
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/flex_query/fetch</span>
+        <p>Fetch flex queries.</p>
+        <h4>Required Scope:</h4>
+        <code>flex_query/fetch</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "queryIds": "array"
+}</code></pre>
+    </div>
+
+    <h1>Account Management API</h1>
+    <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="route">/account_management/accounts</span>
+        <p>Get all accounts.</p>
+        <h4>Required Scope:</h4>
+        <code>account_management/accounts</code>
+    </div>
+
+    <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="route">/account_management/accounts/<account_id></span>
+        <p>Get specific account details.</p>
+        <h4>Required Scope:</h4>
+        <code>account_management/accounts</code>
+    </div>
+
+    <h1>Trade Tickets API</h1>
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/trade_tickets/list</span>
+        <p>List trade tickets.</p>
+        <h4>Required Scope:</h4>
+        <code>trade_tickets/list</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "query": "object"
+}</code></pre>
+        <p>Note: Requires user filter enforcement</p>
+    </div>
+
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/trade_tickets/generate_trade_ticket</span>
+        <p>Generate a trade ticket.</p>
+        <h4>Required Scope:</h4>
+        <code>trade_tickets/generate_trade_ticket</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "indices": "string",  // Comma-separated indices
+    "flex_query_dict": "object"
+}</code></pre>
+    </div>
+
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/trade_tickets/generate_client_confirmation_message</span>
+        <p>Generate a client confirmation message.</p>
+        <h4>Required Scope:</h4>
+        <code>trade_tickets/generate_client_confirmation_message</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "trade_data": "object"
+}</code></pre>
+    </div>
+
+    <h1>Users API</h1>
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/users/create</span>
+        <p>Create a new user.</p>
+        <h4>Required Scope:</h4>
+        <code>users/create</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "data": "object",
+    "id": "string"
+}</code></pre>
+        <p>Note: Requires user filter enforcement on 'id' field</p>
+    </div>
+
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/users/read</span>
+        <p>Read users.</p>
+        <h4>Required Scope:</h4>
+        <code>users/read</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "query": "object"
+}</code></pre>
+        <p>Note: Requires user filter enforcement on 'id' field</p>
+    </div>
+
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/users/update</span>
+        <p>Update a user.</p>
+        <h4>Required Scope:</h4>
+        <code>users/update</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "data": "object",
+    "query": "object"
+}</code></pre>
+        <p>Note: Requires user filter enforcement on 'id' field</p>
+    </div>
+
+    <h1>Risk Profiles API</h1>
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="route">/risk_profiles/create</span>
+        <p>Create a new risk profile.</p>
+        <h4>Required Scope:</h4>
+        <code>risk_profiles/create</code>
+        <h4>Request Body:</h4>
+        <pre><code>{
+    "data": "object",
+    "id": "string"
+}</code></pre>
+    </div>
+
+    <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="route">/risk_profiles/read</span>
+        <p>Read all risk profiles.</p>
+        <h4>Required Scope:</h4>
+        <code>risk_profiles/read</code>
     </div>
 
     <h1>Notifications API</h1>
@@ -513,103 +675,6 @@
         <code>reporting/get_accrued_interest</code>
     </div>
 
-    <h1>Investment Proposals API</h1>
-    <div class="endpoint">
-        <span class="method get">GET</span>
-        <span class="route">/investment_proposals/read</span>
-        <p>Read investment proposals.</p>
-        <h4>Required Scope:</h4>
-        <code>investment_proposals/read</code>
-    </div>
-
-    <div class="endpoint">
-        <span class="method get">GET</span>
-        <span class="route">/investment_proposals/backup_investment_proposals</span>
-        <p>Backup investment proposals.</p>
-        <h4>Required Scope:</h4>
-        <code>investment_proposals/backup_investment_proposals</code>
-    </div>
-
-    <h1>Flex Query API</h1>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/flex_query/fetch</span>
-        <p>Fetch flex queries.</p>
-        <h4>Required Scope:</h4>
-        <code>flex_query/fetch</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "queryIds": "array"
-}</code></pre>
-    </div>
-
-    <h1>Email API</h1>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/email/send_email</span>
-        <p>Send an email.</p>
-        <h4>Required Scope:</h4>
-        <code>email/send_email</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "content": "object",
-    "client_email": "string",
-    "subject": "string",
-    "email_template": "string"
-}</code></pre>
-    </div>
-
-    <h1>Document Center API</h1>
-    <div class="endpoint">
-        <span class="method get">GET</span>
-        <span class="route">/document_center/get_folder_dictionary</span>
-        <p>Get folder dictionary.</p>
-        <h4>Required Scope:</h4>
-        <code>document_center/get_folder_dictionary</code>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/document_center/read</span>
-        <p>Read files.</p>
-        <h4>Required Scope:</h4>
-        <code>document_center/read</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "query": "object"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/document_center/delete</span>
-        <p>Delete a file.</p>
-        <h4>Required Scope:</h4>
-        <code>document_center/delete</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "document": "object",
-    "parent_folder_id": "string"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/document_center/upload</span>
-        <p>Upload a file.</p>
-        <h4>Required Scope:</h4>
-        <code>document_center/upload</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "file_name": "string",
-    "mime_type": "string",
-    "file_data": "string",
-    "parent_folder_id": "string",
-    "document_info": "object",
-    "uploader": "string"
-}</code></pre>
-    </div>
-
     <h1>Advisors API</h1>
     <div class="endpoint">
         <span class="method get">GET</span>
@@ -629,15 +694,6 @@
         <pre><code>{
     "query": "object"
 }</code></pre>
-    </div>
-
-    <h1>Account Management API</h1>
-    <div class="endpoint">
-        <span class="method get">GET</span>
-        <span class="route">/account_management/accounts</span>
-        <p>Get accounts.</p>
-        <h4>Required Scope:</h4>
-        <code>account_management/accounts</code>
     </div>
 
 </body>
