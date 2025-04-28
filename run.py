@@ -48,8 +48,6 @@ def start_api():
         strategy="fixed-window"
     )
 
-    # Apply rate limit decorator to all routes
-
     # Apply JWT authentication to all routes except login
     app.before_request(jwt_required_except_login)
     
@@ -69,6 +67,9 @@ def start_api():
     app.register_blueprint(tickets.bp, url_prefix='/tickets')
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
     app.register_blueprint(users.bp, url_prefix='/users')
+
+    from src.app.helpers import drive
+    app.register_blueprint(drive.bp, url_prefix='/drive')
     
     # Create index route
     @app.route('/')
