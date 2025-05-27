@@ -6,8 +6,8 @@ python-dotenv==1.0.1
 pytz==2024.1
 
 # API and Web Framework
-Flask==3.1.0
-Flask_Cors==4.0.0
+Flask==3.1.1
+Flask_Cors==6.0.0
 flask_jwt_extended==4.6.0
 Flask-Limiter==3.5.0
 Flask_RESTful==0.3.10
