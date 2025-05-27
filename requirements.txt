@@ -18,6 +18,8 @@ requests_cache==1.2.1
 retry_requests==2.0.0
 websocket_client==1.8.0
 Werkzeug==3.1.0
+gevent==25.4.2
+flask_socketio==5.5.1
 
 # Database
 psycopg2-binary==2.9.9
