@@ -1,39 +1,50 @@
 from flask import Blueprint, request
-from src.components.leads import read_leads, update_lead, create_lead, delete_lead
-from src.utils.scope_manager import verify_scope, enforce_user_filter
+from src.components.leads import read_leads, update_lead, create_lead, delete_lead, read_follow_ups, update_follow_up
+from src.utils.managers.scope_manager import verify_scope
 
 bp = Blueprint('leads', __name__)
 
 @bp.route('/create', methods=['POST'])
 @verify_scope('leads/create')
-@enforce_user_filter()
-def create_route():
+def create_lead_route():
     payload = request.get_json(force=True)
-    data = payload['data']
-    id = payload['id']
-    return create_lead(data=data, id=id)
+    lead = payload.get('lead', None)
+    follow_ups = payload.get('follow_ups', None)
+    return create_lead(lead=lead, follow_ups=follow_ups)
 
 @bp.route('/read', methods=['POST'])
 @verify_scope('leads/read')
-@enforce_user_filter()
-def read_route():
+def read_leads_route():
     payload = request.get_json(force=True)
     query = payload.get('query', None)
     return read_leads(query=query)
 
+@bp.route('/read_follow_ups', methods=['POST'])
+@verify_scope('leads/read_follow_ups')
+def read_follow_ups_route():
+    payload = request.get_json(force=True)
+    query = payload.get('query', None)
+    return read_follow_ups(query=query)
+
 @bp.route('/update', methods=['POST'])
 @verify_scope('leads/update')
-@enforce_user_filter()
-def update_route():
+def update_lead_route():
     payload = request.get_json(force=True)
-    data = payload['data']
+    lead = payload.get('lead', None)
     query = payload.get('query', None)
-    return update_lead(data=data, query=query)
+    return update_lead(query=query, lead=lead)
+
+@bp.route('/update_follow_up', methods=['POST'])
+@verify_scope('leads/update_follow_up')
+def update_follow_up_route():
+    payload = request.get_json(force=True)
+    follow_up = payload.get('follow_up', None)
+    lead_id = payload.get('lead_id', None)
+    return update_follow_up(lead_id=lead_id, follow_up=follow_up)
 
 @bp.route('/delete', methods=['POST'])
 @verify_scope('leads/delete')
-@enforce_user_filter()
-def delete_route():
+def delete_lead_route():
     payload = request.get_json(force=True)
     query = payload.get('query', None)
     return delete_lead(query=query)

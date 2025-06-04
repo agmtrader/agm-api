@@ -1,15 +1,13 @@
 import pandas as pd
 import numpy as np
-import json
 from src.utils.logger import logger
 from src.utils.exception import handle_exception
 import re
 from datetime import datetime
-
-from src.helpers.database import Firebase
+from src.utils.flex_query import fetchFlexQueries
+from src.utils.connectors.supabase import db
 
 logger.announcement('Initializing Trade Tickets Service', type='info')
-Database = Firebase()
 logger.announcement('Initialized Trade Tickets Service', type='success')
 
 @handle_exception
@@ -17,17 +15,14 @@ def list_trade_tickets(query = None):
     logger.info(f"Getting trade tickets for {query}")
 
     # Get all trade tickets
-    trade_tickets = Database.read('db/trade_tickets/dictionary', query={})
+    trade_tickets = db.read('trade_ticket', query={})
 
-    # Make sure the client has access to the trade tickets
-    if query is not None and 'UserID' in query:
-        trade_ticket_access = Database.read('db/clients/trade_tickets', query={'UserID': query['UserID']})
-        available_trade_tickets = trade_ticket_access[0]['TradeTicketIDs']
-        filtered_tickets = [ticket for ticket in trade_tickets if ticket['TradeTicketID'] in available_trade_tickets]
-    else:
-        filtered_tickets = trade_tickets
-        
-    return filtered_tickets
+    return trade_tickets
+
+@handle_exception
+def fetch_trade_ticket(query_id):
+    trades = fetchFlexQueries([query_id])
+    return trades[query_id]
 
 @handle_exception
 def generate_trade_ticket(flex_query_dict, indices):
@@ -102,35 +97,35 @@ def generate_client_confirmation_message(consolidated_dict):
 
     # Generate email message
     trade_confirmation_columns = [
-    "ClientAccountID",
-    "AccountAlias",
-    "CurrencyPrimary",
+        "ClientAccountID",
+        "AccountAlias",
+        "CurrencyPrimary",
 
-    "AssetClass",
-    "Symbol",
-    "Description",
-    "Conid",
-    "SecurityID",
-    "SecurityIDType",
-    "CUSIP",
-    "ISIN",
-    "FIGI",
-    "Issuer",
-    "Maturity",
+        "AssetClass",
+        "Symbol",
+        "Description",
+        "Conid",
+        "SecurityID",
+        "SecurityIDType",
+        "CUSIP",
+        "ISIN",
+        "FIGI",
+        "Issuer",
+        "Maturity",
 
-    "Buy/Sell",
-    "SettleDate",
-    "TradeDate",
-    "Exchange",
-    "Quantity",
-    "AccruedInterest",
-    "Accrued (Days)",
-    "Price",
-    "Price (including Commissions)",
-    "Amount",
-    "SettleDate",
-    "TradeDate",
-    "TotalAmount"
+        "Buy/Sell",
+        "SettleDate",
+        "TradeDate",
+        "Exchange",
+        "Quantity",
+        "AccruedInterest",
+        "Accrued (Days)",
+        "Price",
+        "Price (including Commissions)",
+        "Amount",
+        "SettleDate",
+        "TradeDate",
+        "TotalAmount"
     ]
 
     # Fill dictionary with trade data
@@ -152,7 +147,7 @@ def generate_client_confirmation_message(consolidated_dict):
             message += '\n'
 
     logger.success(f'Client confirmation message generated.')
-    return message
+    return {'message': message}
 
 def extract_bond_details(description):
     

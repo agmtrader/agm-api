@@ -1,42 +1,37 @@
 from src.utils.exception import handle_exception
-import json
-from src.helpers.database import Firebase
+from src.utils.connectors.supabase import db
 from src.utils.logger import logger
-Database = Firebase()
 
 logger.announcement('Initializing Users Service', type='info')
 logger.announcement('Initialized Users Service', type='success')
 
 @handle_exception
-def create_user(data, id):
-    user = Database.create(path='users', data=data, id=id)
-    return user
+def create_user(user: dict = None):
+    user_id = db.create(table='user', data=user)
+    return user_id
 
 @handle_exception
 def read_users(query=None):
-    users = Database.read(path='users', query=query)
+    users = db.read(table='user', query=query)
     return users
 
 @handle_exception
-def update_user(data, query=None):
-    user = Database.update(path='users', data=data, query=query)
+def read_user_by_id(id: str) -> dict:
+    user = db.read(table='user', query={'id': id})
+    if len(user) == 1:
+        return user[0]
+    else:
+        raise Exception(f'Single entry has {len(user)} matches.')
+
+@handle_exception
+def read_user_by_credentials(email, password):
+    user = db.read(table='user', query={'email': email, 'password': password})
+    if len(user) == 1:
+        return user[0]
+    else:
+        raise Exception(f'Single entry has {len(user)} matches.')
+
+@handle_exception
+def update_user(user):
+    user = db.update(table='user', data=user)
     return user
-
-# Backend
-@handle_exception
-def read_user_by_id(id):
-    user = Database.read(path='users', query={'id': id})
-    if len(user) > 1:
-        raise Exception('Multiple users found for id: ' + id)
-    if len(user) == 0:
-        return None
-    return user[0]
-
-@handle_exception
-def read_user_by_credentials(username, password):
-    user = Database.read(path='users', query={'username': username, 'password': password})
-    if len(user) > 1:
-        raise Exception('Multiple users found for username: ' + username)
-    if len(user) == 0:
-        return None
-    return user[0]

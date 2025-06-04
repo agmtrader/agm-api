@@ -1,19 +1,16 @@
 from src.utils.logger import logger
-from src.helpers.database import Firebase
+from src.utils.connectors.supabase import db
 from src.utils.exception import handle_exception
-import json
 
 logger.announcement('Initializing Risk Profile Service', type='info')
 logger.announcement('Initialized Risk Profile Service', type='success')
 
-Database = Firebase()
+@handle_exception
+def create_risk_profile(data: dict):
+    risk_profile_id = db.create(table='account_risk_profile', data=data)
+    return {'id': risk_profile_id}
 
 @handle_exception
-def create_risk_profile(data: dict, id: str):
-    Database.create(path='db/clients/risk_profiles', data=data, id=id)
-    return
-
-@handle_exception
-def read_risk_profiles():
-    risk_profiles = Database.read(path='db/clients/risk_profiles')
+def read_risk_profiles(query: dict = None):
+    risk_profiles = db.read(table='account_risk_profile', query=query)
     return risk_profiles
