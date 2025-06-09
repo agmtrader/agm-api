@@ -1,6 +1,6 @@
 from flask import Blueprint, request
 from src.components.contacts import read_contacts, update_contact, create_contact, delete_contact
-from src.utils.managers.scope_manager import verify_scope, enforce_user_filter
+from src.utils.managers.scope_manager import verify_scope
 
 bp = Blueprint('contacts', __name__)
 

@@ -15,13 +15,9 @@ def create_application(application: dict = None) -> dict:
 
 @handle_exception
 def read_applications(query=None) -> list:
-    applications = db.read(path='applications')
+    applications = db.read(path='applications', query=query)
     return applications
 
 @handle_exception
 def send_to_ibkr(application: dict = None) -> dict:
     return account_management.send_to_ibkr(application=application)
-
-@handle_exception
-def get_forms(forms: list = None) -> dict:
-    return account_management.get_forms(forms=forms)

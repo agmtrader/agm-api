@@ -10,6 +10,48 @@ logger.announcement('Initialized Account Management Service', type='success')
 
 class AccountManagement:
 
+    def create_sso_browser_session(self, credential: str, ip: str) -> str:
+        """
+        Create an SSO browser session for IBKR Client Portal.
+        Args:
+            credential (str): IBKR username associated with the user.
+            ip (str): The user's actual IP address (REMOTE_ADDR).
+        Returns:
+            str: The SSO URL to be opened in the browser.
+        """
+        logger.info(f"Creating SSO browser session for credential: {credential}, ip: {ip}")
+        url = f"{self.BASE_URL}/gw/api/v1/sso-browser-sessions"
+        token = self.get_bearer_token()
+        if not token:
+            logger.error("No token found for SSO session creation")
+            return None
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/jwt"
+        }
+        payload = {
+            "credential": credential,
+            "ip": ip
+        }
+
+        signed_jwt = self.sign_request(payload)
+        try:
+            response = requests.post(url, data=signed_jwt, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                return None
+            data = response.json()
+            sso_url = data.get("url") or data.get("redirectUrl") or next((v for v in data.values() if isinstance(v, str) and v.startswith("http")), None)
+            if not sso_url:
+                logger.error(f"No SSO URL found in response: {data}")
+                return None
+            logger.success(f"SSO URL created: {sso_url}")
+            return sso_url
+        except Exception as e:
+            logger.error(f"Exception during SSO session creation: {e}")
+            return None
+
+
     def __init__(self):
         logger.announcement("Initializing Account Management")
         self.BASE_URL = "https://qa.interactivebrokers.com"
@@ -84,6 +126,7 @@ class AccountManagement:
         token = self.get_bearer_token()
         if not token:
             raise Exception("No token found")
+
         headers = {
             "Authorization": f"Bearer {token}"
         }
@@ -91,6 +134,26 @@ class AccountManagement:
         if response.status_code != 200:
             raise Exception(f"Error {response.status_code}: {response.text}")
         logger.success(f"Pending tasks fetched successfully")
+        return response.json()
+
+    @handle_exception
+    def update_account(self, account_management_requests):
+        logger.info(f"Updating account.")
+        url = f"{self.BASE_URL}/gw/api/v1/accounts"
+        token = self.get_bearer_token()
+        if not token:
+            raise Exception("No token found")
+
+        account_management_requests = self.sign_request(account_management_requests)
+        
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/jwt"
+        }
+        response = requests.patch(url, headers=headers, data=account_management_requests)
+        if response.status_code != 200:
+            raise Exception(f"Error {response.status_code}: {response.text}")
+        logger.success(f"Account updated successfully")
         return response.json()
 
     @handle_exception
@@ -124,7 +187,7 @@ class AccountManagement:
     @handle_exception
     def get_forms(self, forms: list = None):
         logger.info("Getting forms")
-        url = f"{self.BASE_URL}/gw/api/v1/forms?fromDate=2016-10-20&toDate="
+        url = f"{self.BASE_URL}/gw/api/v1/forms?fromDate=2016-10-20&toDate=&getDocs=T"
         if forms:
             forms = ",".join(forms)
             url += f"&formNo={forms}"
@@ -135,11 +198,56 @@ class AccountManagement:
         headers = {
             "Authorization": f"Bearer {token}"
         }
+        import base64
+        import io
+        import zipfile
+
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
             raise Exception(f"Error {response.status_code}: {response.text}")
         logger.success(f"Form fetched successfully")
-        return response.json()
+        result = response.json()
+
+        # Filter formDetails to only English forms
+        form_details = result.get('formDetails')
+        if form_details and isinstance(form_details, list):
+            en_forms = [f for f in form_details if f.get('language') == 'en']
+            result['formDetails'] = en_forms
+        else:
+            en_forms = []
+
+        file_data = result.get('fileData')
+        if file_data and 'data' in file_data:
+            file_name = file_data.get('name')
+            data_b64 = file_data['data']
+            if file_name and file_name.endswith('.zip') and en_forms:
+                # Extract the PDF matching the English form fileName
+                pdf_file_name = en_forms[0].get('fileName')
+                zip_bytes = base64.b64decode(data_b64)
+                with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+                    if pdf_file_name and pdf_file_name in zf.namelist():
+                        with zf.open(pdf_file_name) as pdf_file:
+                            pdf_bytes = pdf_file.read()
+                            pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
+                            file_data['data'] = pdf_b64
+                            file_data['name'] = pdf_file_name
+                    else:
+                        logger.error(f'English PDF file {pdf_file_name} not found in ZIP archive')
+                        # fallback: first PDF in zip
+                        for name in zf.namelist():
+                            if name.lower().endswith('.pdf'):
+                                with zf.open(name) as pdf_file:
+                                    pdf_bytes = pdf_file.read()
+                                    pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
+                                    file_data['data'] = pdf_b64
+                                    file_data['name'] = name
+                                    break
+            elif file_name and file_name.endswith('.pdf') and en_forms:
+                # Only keep fileData if it matches an English form
+                if file_name != en_forms[0].get('fileName'):
+                    logger.info(f'PDF file {file_name} does not match English form {en_forms[0].get("fileName")}')
+                    file_data['data'] = ''
+        return result
 
     def get_bearer_token(self):
         current_time = int(time.time())

@@ -1,12 +1,11 @@
 from flask import request, Blueprint
 from src.components.trade_tickets import generate_trade_ticket, generate_client_confirmation_message, list_trade_tickets, fetch_trade_ticket
-from src.utils.managers.scope_manager import verify_scope, enforce_user_filter
+from src.utils.managers.scope_manager import verify_scope
 
 bp = Blueprint('trade_tickets', __name__)
 
 @bp.route('/list', methods=['POST'])
 @verify_scope('trade_tickets/list')
-@enforce_user_filter()
 def list():
     payload = request.get_json(force=True)
     query = payload.get('query', {})

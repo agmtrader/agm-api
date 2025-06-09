@@ -34,45 +34,45 @@ def verify_scope(required_scope):
         return wrapper
     return decorator
 
-def enforce_user_filter(field_name='user_id'):
+def enforce_user_filter():
     """
-    Decorator that enforces user-specific filtering for routes.
+    Decorator that prepares user-specific filtering for routes by injecting `invoking_user_id`.
     This decorator should be applied after @verify_scope.
-    
-    :param field_name: The field name to filter by (defaults to 'user_id')
+    The wrapped function (and subsequently the component layer) is responsible for using 
+    the `invoking_user_id` to filter data according to the relational schema.
     """
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
-            claims = get_jwt()
-            current_user = get_jwt_identity()
-            user_scopes = claims.get('scopes', '').split()
-            logger.info(f'Enforcing user filter for current user: {current_user}')
-            
-            # If user has 'all' scope, no filtering needed
-            if 'all' in user_scopes:
-                logger.success(f'User has all scope, no filtering needed')
+            # Access public_routes from the module's scope
+            # If the route is public, it might not have JWT context or require user filtering.
+            if request.endpoint in public_routes:
+                logger.info(f'Endpoint {request.endpoint} is public. Injecting invoking_user_id=None.')
+                kwargs['invoking_user_id'] = None
                 return fn(*args, **kwargs)
+
+            # For non-public routes, JWT is expected (as verify_scope would have run and checked)
+            claims = get_jwt()
+            current_user_id = get_jwt_identity()
+            user_scopes = claims.get('scopes', '').split()
             
-            # Get the request payload
-            payload = request.get_json(force=True)
+            logger.info(f'Preparing user filter for current user: {current_user_id} on endpoint {request.endpoint} for function {fn.__name__}')
             
-            # Handle different HTTP methods and payload structures
-            if request.method == 'POST':
-                # For create operations, add user ID to data
-                if 'data' in payload:
-                    payload['data'][field_name] = current_user
-                
-                # For read/update operations with query
-                if 'query' in payload:
-                    if not isinstance(payload['query'], dict):
-                        payload['query'] = {}
-                    payload['query'][field_name] = current_user
+            # If user has 'all' scope, pass None as invoking_user_id.
+            # Components can use this to bypass user-specific filtering if applicable.
+            if 'all' in user_scopes:
+                logger.success(f'User has "all" scope. Injecting invoking_user_id=None.')
+                kwargs['invoking_user_id'] = None
+            else:
+                if current_user_id is None:
+                    # This scenario (no user_id for a non-'all' scope user on a non-public route)
+                    # might indicate an issue or require specific error handling.
+                    logger.warning(f'User ID is None for a non-"all" scope user on non-public route {request.endpoint}. Injecting invoking_user_id=None.')
+                    kwargs['invoking_user_id'] = None # Or raise an error, e.g., return jsonify({"error": "User identity not found"}), 401
                 else:
-                    # If no query exists, create one with the user filter
-                    payload['query'] = {field_name: current_user}
+                    logger.success(f'Injecting invoking_user_id={current_user_id} for {fn.__name__}')
+                    kwargs['invoking_user_id'] = current_user_id
             
-            logger.success(f'Enforced user filter for {field_name}')
             return fn(*args, **kwargs)
             
         return wrapper
