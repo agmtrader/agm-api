@@ -26,6 +26,5 @@ jobs:
     - name: Run endpoint tests
       env:
         FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
-        API_TOKEN: ${{ secrets.API_TOKEN }}
       run: |
         python check_endpoints.py

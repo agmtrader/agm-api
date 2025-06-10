@@ -8,7 +8,7 @@ bp = Blueprint('accounts', __name__)
 @bp.route('/create', methods=['POST'])
 @verify_scope('accounts/create')
 @format_response
-def create_route(invoking_user_id=None, **kwargs):
+def create_route():
     payload = request.get_json(force=True)
     account_data = payload.get('account', None)
     return create_account(account=account_data)
