@@ -19,6 +19,7 @@ retry_requests==2.0.0
 websocket_client==1.8.0
 Werkzeug==3.1.0
 gevent==25.4.2
+gevent-websocket==0.10.1
 flask_socketio==5.5.1
 
 # Database

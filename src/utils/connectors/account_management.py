@@ -5,8 +5,8 @@ from src.utils.managers.secret_manager import get_secret
 from src.utils.exception import handle_exception
 from src.utils.logger import logger
 
-logger.announcement('Initializing Account Management Service', type='info')
-logger.announcement('Initialized Account Management Service', type='success')
+logger.announcement('Initializing Interactive Brokers Account Management API Service', type='info')
+logger.announcement('Initialized Interactive Brokers Account Management API Service', type='success')
 
 class AccountManagement:
 
@@ -51,9 +51,7 @@ class AccountManagement:
             logger.error(f"Exception during SSO session creation: {e}")
             return None
 
-
     def __init__(self):
-        logger.announcement("Initializing Account Management")
         self.BASE_URL = "https://qa.interactivebrokers.com"
         self.CLIENT_ID = "AGMTechnology-FD-QA"
         self.KEY_ID = "main"
@@ -63,7 +61,6 @@ class AccountManagement:
         self._token = None
         self._token_expiry = 0
         self.TOKEN_REFRESH_BUFFER = 300
-        logger.announcement(f"Initialized Account Management", "success")
 
     @handle_exception
     def get_accounts(self):

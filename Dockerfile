@@ -30,18 +30,7 @@ COPY . .
 # Make run script executable
 RUN chmod +x run.sh
 
-# Define build arguments for all environment variables
-# JWT Authentication
-ARG JWT_SECRET_KEY
-ENV JWT_SECRET_KEY=${JWT_SECRET_KEY}
-
-# Development Mode
-ARG DEV_MODE
-ARG EXTRA_DEBUG
-ENV DEV_MODE=${DEV_MODE}
-ENV EXTRA_DEBUG=${EXTRA_DEBUG}
-
-# API
+# ARGS
 ARG PORT
 ENV PORT=${PORT}
 EXPOSE ${PORT}
