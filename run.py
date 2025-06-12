@@ -134,11 +134,12 @@ def start_api():
     #app.register_blueprint(client_documents.bp, url_prefix='/documents/clients')
 
     # Tools
-    from src.app.tools import email, reporting, risk_profiles, trade_tickets
+    from src.app.tools import email, reporting, risk_profiles, trade_tickets, tws
     app.register_blueprint(email.bp, url_prefix='/email')
     #app.register_blueprint(reporting.bp, url_prefix='/reporting')
     app.register_blueprint(risk_profiles.bp, url_prefix='/risk_profiles')
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
+    app.register_blueprint(tws.bp, url_prefix='/tws')
 
     # CRUD
     from src.app import accounts, advisors, applications, contacts, leads, users
