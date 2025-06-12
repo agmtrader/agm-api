@@ -148,4 +148,4 @@ def start_api():
 
 app = start_api()
 logger.announcement('Running safety checks...', type='info')
-logger.announcement('Successfully started API', type='success')
+logger.announcement('Successfully started AGM API', type='success')
