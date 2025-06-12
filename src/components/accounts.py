@@ -3,11 +3,11 @@ from src.utils.connectors.supabase import db
 from src.utils.managers.document_center import DocumentCenter
 from src.utils.logger import logger
 from src.components.documents.client_documents import upload_poa, upload_poi
-from src.utils.connectors.account_management import AccountManagement
+from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 
 logger.announcement('Initializing Accounts Service', type='info')
 documents = DocumentCenter('clients')
-account_management = AccountManagement()
+ibkr_web_api = IBKRWebAPI()
 logger.announcement('Initialized Accounts Service', type='success')
 
 @handle_exception
@@ -110,24 +110,24 @@ def upload_account_poi(f: dict = None, document_info: dict = None, user_id_from_
 # Account Management
 @handle_exception
 def read_account_details(account_id: str = None) -> dict:
-    return account_management.get_account_details(account_id=account_id)
+    return ibkr_web_api.get_account_details(account_id=account_id)
 
 @handle_exception
 def update_account(account_management_requests: dict = None) -> dict:
-    return account_management.update_account(account_management_requests=account_management_requests)
+    return ibkr_web_api.update_account(account_management_requests=account_management_requests)
 
 @handle_exception
 def get_pending_tasks(account_id: str = None) -> list:
-    return account_management.get_pending_tasks(account_id=account_id)
+    return ibkr_web_api.get_pending_tasks(account_id=account_id)
 
 @handle_exception
 def get_registration_tasks(account_id: str = None) -> list:
-    return account_management.get_registration_tasks(account_id=account_id)
+    return ibkr_web_api.get_registration_tasks(account_id=account_id)
 
 @handle_exception
 def get_forms(forms: list = None) -> dict:
-    return account_management.get_forms(forms=forms)
+    return ibkr_web_api.get_forms(forms=forms)
 
 @handle_exception
 def create_sso_browser_session() -> str:
-    return account_management.create_sso_browser_session()
+    return ibkr_web_api.create_sso_browser_session()

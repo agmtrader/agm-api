@@ -5,10 +5,10 @@ from src.utils.managers.secret_manager import get_secret
 from src.utils.exception import handle_exception
 from src.utils.logger import logger
 
-logger.announcement('Initializing Interactive Brokers Account Management API Service', type='info')
-logger.announcement('Initialized Interactive Brokers Account Management API Service', type='success')
+logger.announcement('Initializing Interactive Brokers Web API Service', type='info')
+logger.announcement('Initialized Interactive Brokers Web API Service', type='success')
 
-class AccountManagement:
+class IBKRWebAPI:
 
     def create_sso_browser_session(self, credential: str, ip: str) -> str:
         """
