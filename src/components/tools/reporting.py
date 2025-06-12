@@ -1,6 +1,5 @@
 from pandas.tseries.offsets import BDay
 from datetime import datetime
-from src.utils.dates import getCurrentCST
 from src.utils.logger import logger
 import pandas as pd
 from io import BytesIO
@@ -10,10 +9,13 @@ import time
 from src.utils.flex_query import fetchFlexQueries
 from src.components.accounts import read_accounts
 from src.utils.connectors.drive import GoogleDrive
+import pytz
+from datetime import datetime
 
 logger.announcement('Initializing Reporting Service', type='info')
 Drive = GoogleDrive()
-cst_time = getCurrentCST()
+cst = pytz.timezone('America/Costa_Rica')
+cst_time = datetime.now(cst)
 logger.announcement('Initialized Reporting Service', type='success')
 
 def get_clients_report():

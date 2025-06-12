@@ -1,6 +1,6 @@
 
 from flask import Blueprint, request
-from src.components.risk_profiles import create_risk_profile, read_risk_profiles
+from src.components.tools.risk_profiles import create_risk_profile, read_risk_profiles
 from src.utils.managers.scope_manager import verify_scope
 
 bp = Blueprint('risk_profiles', __name__)

@@ -1,6 +1,5 @@
 from flask import Blueprint, request
 from src.utils.logger import logger
-import json
 from src.components.users import read_user_by_credentials, create_user, read_users
 
 bp = Blueprint('oauth', __name__)

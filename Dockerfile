@@ -16,7 +16,7 @@ COPY requirements.txt .
 # Install the required packages
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Create directory for persistent database storage
+# Create directories for persistent storage
 RUN mkdir -p /app/src/db
 RUN mkdir -p /app/cache
 

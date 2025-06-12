@@ -121,28 +121,32 @@ def start_api():
         logger.error(f'Failed to authenticate user {token}')
         return jsonify({"msg": "Unauthorized"}), 401
     
-    # OAuth
+    # Ada
+    from src.app.ada import gemini
+    app.register_blueprint(gemini.bp, url_prefix='/ada')
+
+    # Auth
     from src.app.auth import oauth
     app.register_blueprint(oauth.bp, url_prefix='/oauth')
-    
+
     # Documents
-    from src.app.documents import client_documents
-    app.register_blueprint(client_documents.bp, url_prefix='/documents/clients')
+    #from src.app.documents import client_documents
+    #app.register_blueprint(client_documents.bp, url_prefix='/documents/clients')
 
     # Tools
-    from src.app.tools import reporting, email
-    app.register_blueprint(reporting.bp, url_prefix='/reporting')
+    from src.app.tools import email, reporting, risk_profiles, trade_tickets
     app.register_blueprint(email.bp, url_prefix='/email')
+    #app.register_blueprint(reporting.bp, url_prefix='/reporting')
+    app.register_blueprint(risk_profiles.bp, url_prefix='/risk_profiles')
+    app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
 
     # CRUD
-    from src.app import accounts, advisors, applications, contacts, leads, risk_profiles, trade_tickets, users
+    from src.app import accounts, advisors, applications, contacts, leads, users
     app.register_blueprint(accounts.bp, url_prefix='/accounts')
     app.register_blueprint(advisors.bp, url_prefix='/advisors')
     app.register_blueprint(applications.bp, url_prefix='/applications')
     app.register_blueprint(contacts.bp, url_prefix='/contacts')
     app.register_blueprint(leads.bp, url_prefix='/leads')
-    app.register_blueprint(risk_profiles.bp, url_prefix='/risk_profiles')
-    app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
     app.register_blueprint(users.bp, url_prefix='/users')
 
     return app
