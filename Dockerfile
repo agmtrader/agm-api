@@ -30,7 +30,7 @@ COPY . .
 # Make run script executable
 RUN chmod +x run.sh
 
-# ARGS
+# API
 ARG PORT
 ENV PORT=${PORT}
 EXPOSE ${PORT}

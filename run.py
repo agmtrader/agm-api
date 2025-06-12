@@ -9,6 +9,7 @@ from datetime import timedelta
 from src.utils.managers.secret_manager import get_secret
 
 load_dotenv()
+
 public_routes = ['docs', 'index', 'token', 'oauth.login', 'oauth.create', 'yfinance.get_scroller_data']
 
 def jwt_required_except_login():
