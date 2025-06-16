@@ -58,27 +58,27 @@ def get_secret(secret_id: str):
 
         # Fetch the secret (ADC credentials are used here)
         response = client.access_secret_version(request={"name": secret_path})
+
+        logger.info(f"Attempting to decode secret...")
         
         try:
-            logger.info(f"Attempting UTF-8 decode")
             json_string = response.payload.data.decode("UTF-8")
             secrets = json.loads(json_string)
         except Exception as e:
-            logger.warning(f"UTF-8 decode failed, trying ASCII")
+            logger.warning(f"UTF-8 decode failed: {e}")
             try:
-                logger.info(f"Attempting ASCII decode")
                 json_string = response.payload.data.decode("ascii")
                 secrets = json_string
             except Exception as e:
-                logger.error(f"All decoding attempts failed")
+                logger.error(f"All decoding attempts failed: {e}")
                 raise Exception(f"Error fetching secret: {e}")
 
         # Cache the successfully retrieved secret
         _cache_secret(secret_id, secrets)
         
-        logger.success(f"Successfully fetched and decoded secret")
+        logger.success(f"Successfully fetched and decoded secret.\n")
         return secrets
         
     except Exception as e:
-        logger.error(f"Unexpected error while fetching secret")
+        logger.error(f"Unexpected error while fetching secret: {e}")
         raise

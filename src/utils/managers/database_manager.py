@@ -32,20 +32,19 @@ class DatabaseManager:
         model_tables = self.base.metadata.tables.keys()
         
         # Compare and log differences
-        logger.info("=== Database Schema Validation ===")
-        logger.info(f"Database tables: {sorted(db_tables)}")
-        logger.info(f"Model tables: {sorted(model_tables)}")
+        logger.info("Validating database schema...")
         
         # Check for missing tables in models
         missing_in_models = set(db_tables) - set(model_tables)
         if missing_in_models:
             logger.error(f"Tables in database but missing in models: {missing_in_models}")
+            raise Exception(f"Tables in database but missing in models: {missing_in_models}")
         
         # Check for extra tables in models
         extra_in_models = set(model_tables) - set(db_tables)
         if extra_in_models:
             logger.error(f"Tables in models but missing in database: {extra_in_models}")
-            
+            raise Exception(f"Tables in models but missing in database: {extra_in_models}")
         # Check column differences for each table
         for table_name in set(db_tables) & set(model_tables):
             db_columns = {col['name']: col for col in inspector.get_columns(table_name)}
@@ -55,16 +54,19 @@ class DatabaseManager:
             missing_cols = set(db_columns.keys()) - set(model_columns.keys())
             if missing_cols:
                 logger.error(f"Table '{table_name}' missing columns in model: {missing_cols}")
+                raise Exception(f"Table '{table_name}' missing columns in model: {missing_cols}")
             
             # Check for extra columns in models
             extra_cols = set(model_columns.keys()) - set(db_columns.keys())
             if extra_cols:
                 logger.error(f"Table '{table_name}' has extra columns in model: {extra_cols}")
+                raise Exception(f"Table '{table_name}' has extra columns in model: {extra_cols}")
         
         try:
             self.base.metadata.create_all(self.engine)
         except Exception as e:
             logger.error(f'Error creating tables: {str(e)}')
+            raise Exception(f'Error creating tables: {str(e)}')
 
         self.metadata = MetaData()
         self.metadata.reflect(bind=self.engine)

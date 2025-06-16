@@ -3,18 +3,29 @@ from src.utils.logger import logger
 import time
 import math
 import os
+from datetime import datetime
 
 logger.announcement("Initializing TWS Connector", 'info')
 logger.announcement("TWS Connector initialized", 'success')
 
-class TWS:
+class TWSConnector:
+    _instance = None
+    _initialized = False
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(TWSConnector, cls).__new__(cls)
+        return cls._instance
 
     def __init__(self):
+        if TWSConnector._initialized:
+            return
+        
         self.ib = IB()
-        self.account_summary = None
         self.host = os.getenv('IBKR_HOST', None)
         self.port = int(os.getenv('IBKR_PORT', None))
         self.connect()
+        TWSConnector._initialized = True
 
     def connect(self):
         logger.info(f"Connecting to IBKR at {self.host}:{self.port}")
@@ -45,13 +56,15 @@ class TWS:
                 return False
         return False
 
-    def get_historical_data(self, contract: Contract):
-        logger.info(f"Getting historical data")
+    # Market
+    def historical_data(self, contract: Contract, period: str = '1 Y'):
+        logger.info(f"Getting historical data for {contract} to {period}")
+        current_date = datetime.now().strftime('%Y%m%d %H:%M:%S')
         try:
             historical_data_response = self.ib.reqHistoricalData(
                 contract, 
-                endDateTime='', 
-                durationStr='1 Y', 
+                endDateTime=current_date, 
+                durationStr=period,  
                 barSizeSetting='1 day', 
                 whatToShow='TRADES', 
                 useRTH=1
@@ -66,7 +79,7 @@ class TWS:
             logger.error(f"Error getting historical data: {str(e)}")
             raise Exception(f"Error getting historical data: {str(e)}")
 
-    def get_latest_price(self, contract: Contract):
+    def latest_price(self, contract: Contract):
         logger.info(f"Getting latest price")
         try:
             self.ib.reqMarketDataType(3)
@@ -84,12 +97,13 @@ class TWS:
                 
             latest_price = market_data_response.last
             logger.success(f"Successfully got latest price: {latest_price}")
-            return latest_price
+            return {'latest_price': latest_price}
         except Exception as e:
             logger.error(f"Error getting latest price: {str(e)}")
             raise Exception(f"Error getting latest price: {str(e)}")
-
-    def get_account_summary(self):
+    
+    # Account
+    def account_summary(self):
         logger.info("Getting account summary")
         try:
             account_summary_response = self.ib.accountSummary()
@@ -109,7 +123,7 @@ class TWS:
             logger.error(f"Error getting account summary: {str(e)}")
             raise Exception(f"Error getting account summary: {str(e)}")
 
-    def get_positions(self):
+    def positions(self):
         logger.info("Getting positions")
         try:
             positions = self.ib.positions()
@@ -130,7 +144,83 @@ class TWS:
             logger.error(f"Error getting positions: {str(e)}")
             raise Exception(f"Error getting positions: {str(e)}")
 
-    def get_completed_orders(self):
+    def portfolio(self):
+        logger.info("Getting portfolio")
+        try:
+            portfolio = self.ib.portfolio()
+            logger.success(f"Successfully got portfolio")
+            return portfolio
+        except Exception as e:
+            logger.error(f"Error getting portfolio: {str(e)}")
+            raise Exception(f"Error getting portfolio: {str(e)}")
+        
+    def pnl(self):
+        logger.info("Getting PNL")
+        try:
+            pnl = self.ib.pnl()
+            logger.success(f"Successfully got PNL")
+            return pnl
+        except Exception as e:
+            logger.error(f"Error getting PNL: {str(e)}")
+            raise Exception(f"Error getting PNL: {str(e)}")
+
+    def pnl_single(self, contract: Contract):
+        logger.info(f"Getting PNL for {contract}")
+        try:
+            pnl = self.ib.pnlSingle(contract)
+            logger.success(f"Successfully got PNL for {contract}")
+            return pnl
+        except Exception as e:  
+            logger.error(f"Error getting PNL for {contract}: {str(e)}")
+            raise Exception(f"Error getting PNL for {contract}: {str(e)}")
+
+    # Orders
+    def place_order(self, contract: Contract, order: Order):
+        logger.info(f"Placing order: {order}")
+        try:
+            self.ib.qualifyContracts(contract)
+            trade = self.ib.placeOrder(contract, order)
+            logger.success(f"Successfully placed order")
+            return {
+                'orderId': trade.order.orderId,
+                'status': trade.orderStatus.status,
+                'contract': trade.contract.dict()
+            }
+        except Exception as e:
+            logger.error(f"Error placing order: {str(e)}")
+            raise Exception(f"Error placing order: {str(e)}")
+    
+    def order_status(self, orderId: int):
+        logger.info(f"Getting order status: {orderId}")
+        try:
+            order = self.ib.orderStatus(orderId)
+            logger.success(f"Successfully got order status")
+            return order
+        except Exception as e:
+            logger.error(f"Error getting order status: {str(e)}")
+            raise Exception(f"Error getting order status: {str(e)}")
+
+    def cancel_order(self, orderId: int):
+        logger.info(f"Cancelling order: {orderId}")
+        try:
+            self.ib.cancelOrder(orderId)
+            logger.success(f"Successfully cancelled order")
+            return True
+        except Exception as e:  
+            logger.error(f"Error cancelling order: {str(e)}")
+            raise Exception(f"Error cancelling order: {str(e)}")
+    
+    def exec_details(self, orderId: int, contract: Contract):
+        logger.info(f"Getting exec details: {orderId}")
+        try:
+            exec_details = self.ib.execDetails(orderId, contract)
+            logger.success(f"Successfully got exec details")
+            return exec_details
+        except Exception as e:
+            logger.error(f"Error getting exec details: {str(e)}")
+            raise Exception(f"Error getting exec details: {str(e)}")
+
+    def completed_orders(self):
         logger.info("Getting completed orders")
         try:
             orders_response = self.ib.reqCompletedOrders(False)
@@ -151,7 +241,7 @@ class TWS:
             logger.error(f"Error getting completed orders: {str(e)}")
             raise Exception(f"Error getting completed orders: {str(e)}")
 
-    def get_open_orders(self):
+    def open_orders(self):
         logger.info("Getting open orders")
         try:
             orders_response = self.ib.openOrders()
@@ -167,21 +257,6 @@ class TWS:
             logger.error(f"Error getting open orders: {str(e)}")
             raise Exception(f"Error getting open orders: {str(e)}")
 
-    def place_order(self, contract: Contract, order: Order):
-        logger.info(f"Placing order: {order}")
-        try:
-            self.ib.qualifyContracts(contract)
-            trade = self.ib.placeOrder(contract, order)
-            logger.success(f"Successfully placed order")
-            return {
-                'orderId': trade.order.orderId,
-                'status': trade.orderStatus.status,
-                'contract': trade.contract.dict()
-            }
-        except Exception as e:
-            logger.error(f"Error placing order: {str(e)}")
-            raise Exception(f"Error placing order: {str(e)}")
-        
     def close_all_positions(self):
         logger.info("Closing all positions")
         try:
