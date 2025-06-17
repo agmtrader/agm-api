@@ -85,6 +85,8 @@ class Supabase:
             status = Column(Text, nullable=False)
             completed = Column(Boolean, nullable=False, default=False)
             contact_date = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            application_id = Column(UUID(as_uuid=True), nullable=True)
+            application_date = Column(Text, nullable=True)
 
         class FollowUp(self.Base):
             __tablename__ = 'follow_up'

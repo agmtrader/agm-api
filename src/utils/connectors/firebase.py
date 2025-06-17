@@ -77,7 +77,7 @@ class Firebase:
 
     self.db.collection(path).document(created_id).set(data)
     logger.success(f'Document added successfully.')
-    return {'id': created_id}
+    return created_id
 
   def read(self, path, query=None):
     logger.info(f'Querying documents in collection: {path} with query: {query}')
@@ -141,8 +141,9 @@ class Firebase:
       updated_count += 1
     
     batch.commit()
+    updated_id = ref.document().id
     logger.success(f'{updated_count} documents updated successfully.')
-    return {'count': updated_count}
+    return updated_id
 
   def delete(self, path, query=None):
     """
@@ -182,5 +183,6 @@ class Firebase:
         logger.info(f'Deleting {deleted_count} documents.')
     
     batch.commit()
+    deleted_id = ref.document().id
     logger.success(f'Deleted {deleted_count} documents.')
-    return {'count': deleted_count}
+    return deleted_id
