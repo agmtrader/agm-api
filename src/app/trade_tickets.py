@@ -1,5 +1,5 @@
 from flask import request, Blueprint
-from src.components.tools.trade_tickets import generate_trade_ticket, generate_client_confirmation_message, list_trade_tickets, fetch_trade_ticket
+from src.components.trade_tickets import generate_trade_ticket, generate_client_confirmation_message, list_trade_tickets, fetch_trade_ticket
 from src.utils.managers.scope_manager import verify_scope
 
 bp = Blueprint('trade_tickets', __name__)

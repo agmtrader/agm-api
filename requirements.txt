@@ -39,7 +39,7 @@ Jinja2==3.1.6
 nltk==3.9.1
 openpyxl==3.1.5
 premailer==3.10.0
-protobuf==5.28.2
+protobuf==5.29.5
 rich==13.9.3
 tenacity==9.0.0
 xlrd==2.0.1

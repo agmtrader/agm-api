@@ -4,7 +4,7 @@ from src.utils.connectors.supabase import db
 
 Drive = GoogleDrive()
 
-    
+
 class Bucket:
     """
     Represents a bucket in the Document Center
@@ -15,6 +15,25 @@ class Bucket:
         self.drive_id = drive_id
         self.database_table = database_table
         self.files = []
+        self.document_info_schema = {
+            'address': {
+                'type': 'address',
+                'issued_date': 'issued_date',
+                'account_id': 'account_id'
+            },
+            'identity': {
+                'type': 'identity',
+                'issued_date': 'issued_date',
+                'account_id': 'account_id',
+                'gender': 'gender',
+                'country_of_issue': 'country_of_issue',
+                'full_name': 'full_name',
+                'id_number': 'id_number',
+                'date_of_birth': 'date_of_birth',
+                'expiration_date': 'expiration_date',
+                'country_of_birth': 'country_of_birth'
+            }
+        }
         
     def to_dict(self):
         return {
@@ -25,7 +44,7 @@ class Bucket:
             'files': self.files
         }
     
-class DocumentCenter:
+class DocumentManager:
     _instances = {}
 
     def __new__(cls, type=None):
@@ -50,7 +69,7 @@ class DocumentCenter:
         
         bucket_key = str(buckets)
         if bucket_key not in cls._instances:
-            cls._instances[bucket_key] = super(DocumentCenter, cls).__new__(cls)
+            cls._instances[bucket_key] = super(DocumentManager, cls).__new__(cls)
             cls._instances[bucket_key]._initialized = False
             cls._instances[bucket_key].buckets = buckets
         return cls._instances[bucket_key]
@@ -150,27 +169,20 @@ class DocumentCenter:
         # Upload to database
         document_id = db.create(table='document', data=document)
 
-        if bucket.id == 'address':
-            unique_document = {
-                'type':document_info['type'],
-                'issued_date':document_info['issued_date'],
-                'document_id': document_id,
-                'account_id': document_info['account_id']
-            }
-        elif bucket.id == 'identity':
-            unique_document = {
-                'gender': document_info['gender'],
-                'country_of_issue': document_info['country_of_issue'],
-                'issued_date':document_info['issued_date'],
-                'type': document_info['type'],
-                'full_name': document_info['full_name'],
-                'id_number': document_info['id_number'],
-                'date_of_birth': document_info['date_of_birth'],
-                'expiration_date': document_info['expiration_date'],
-                'country_of_birth': document_info['country_of_birth'],
-                'document_id': document_id,
-                'account_id': document_info['account_id']
-            }
+        unique_document = {
+            'document_id': document_id,
+            **document_info
+        }
+
+        # Check if unique document keys are in schema
+        for key in unique_document:
+            if key not in bucket.document_info_schema[bucket.id]:
+                raise Exception(f"Key {key} is not in the schema for bucket {bucket.id}")
+
+        # Check if all schema keys are in data
+        for key in bucket.document_info_schema[bucket.id]:
+            if key not in unique_document:
+                raise Exception(f"Key {key} is not in the data for bucket {bucket.id}")
 
         created_document_id = db.create(table=bucket.database_table, data=unique_document)
         return created_document_id

@@ -134,21 +134,20 @@ def start_api():
     #app.register_blueprint(client_documents.bp, url_prefix='/documents/clients')
 
     # Tools
-    #from src.app.tools import reporting, tws
-    from src.app.tools import email, risk_profiles, trade_tickets
-    app.register_blueprint(email.bp, url_prefix='/email')
-    app.register_blueprint(risk_profiles.bp, url_prefix='/risk_profiles')
-    app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
-    #app.register_blueprint(reporting.bp, url_prefix='/reporting')
+    #from src.app.tools import email, tws
+    #app.register_blueprint(email.bp, url_prefix='/email')
     #app.register_blueprint(tws.bp, url_prefix='/tws')
 
     # CRUD
-    from src.app import accounts, advisors, applications, contacts, leads, users
+    from src.app import accounts, advisors, applications, contacts, leads, reporting, risk_profiles, trade_tickets, users
     app.register_blueprint(accounts.bp, url_prefix='/accounts')
     app.register_blueprint(advisors.bp, url_prefix='/advisors')
     app.register_blueprint(applications.bp, url_prefix='/applications')
     app.register_blueprint(contacts.bp, url_prefix='/contacts')
     app.register_blueprint(leads.bp, url_prefix='/leads')
+    app.register_blueprint(reporting.bp, url_prefix='/reporting')
+    app.register_blueprint(risk_profiles.bp, url_prefix='/risk_profiles')
+    app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
     app.register_blueprint(users.bp, url_prefix='/users')
 
     return app

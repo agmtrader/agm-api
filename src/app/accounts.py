@@ -1,6 +1,7 @@
 from flask import Blueprint, request
-from src.components.accounts import create_account, read_accounts, upload_account_poa, upload_account_poi, update_account_info, read_account_docs, read_account_contact, get_pending_tasks, get_registration_tasks, read_account_details, get_forms, update_account, create_sso_browser_session
-from src.utils.managers.scope_manager import verify_scope, enforce_user_filter
+from src.components.accounts import create_account, read_accounts, read_account_contact, update_account_info
+from src.components.accounts import list_accounts, get_pending_tasks, get_registration_tasks, read_account_details, get_forms, update_account, create_sso_browser_session
+from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
 
 bp = Blueprint('accounts', __name__)
@@ -21,7 +22,6 @@ def read_route():
     query_params = payload.get('query', None)
     return read_accounts(query=query_params)
 
-
 @bp.route('/read_contact', methods=['POST'])
 @verify_scope('accounts/read')
 @format_response
@@ -30,15 +30,6 @@ def read_contact_route():
     account_id = payload.get('account_id', None)
     query_params = payload.get('query', None)
     return read_account_contact(account_id=account_id, query=query_params)
-
-@bp.route('/read_documents', methods=['POST'])
-@verify_scope('accounts/read')
-@format_response
-def read_documents_route():
-    payload = request.get_json(force=True)
-    account_id = payload.get('account_id', None)
-    query_params = payload.get('query', None)
-    return read_account_docs(account_id=account_id, query=query_params)
 
 @bp.route('/update_info', methods=['POST'])
 @verify_scope('accounts/update')
@@ -50,30 +41,13 @@ def update_info_route():
     account_info_data = payload.get('account_info', None)
     return update_account_info(account_info=account_info_data, account_id=account_id, query=query_params)
 
-@bp.route('/upload_poa', methods=['POST'])
-@verify_scope('accounts/upload')
-@format_response
-def upload_poa_route():
-    payload = request.get_json(force=True)
-    f = payload.get('f', None)
-    document_info = payload.get('document_info', None)
-    user_id = payload.get('user_id', None)
-    account_id = payload.get('account_id', None)
-    return upload_account_poa(f=f, document_info=document_info, user_id=user_id, account_id=account_id)
-
-@bp.route('/upload_poi', methods=['POST'])
-@verify_scope('accounts/upload')
-@format_response
-def upload_poi_route():
-    payload = request.get_json(force=True)
-    f = payload.get('f', None)
-    document_info = payload.get('document_info', None)
-    user_id = payload.get('user_id', None)
-    account_id = payload.get('account_id', None)
-    account_info = payload.get('account_info', None)
-    return upload_account_poi(f=f, document_info=document_info, user_id=user_id, account_id=account_id, account_info=account_info)
-
 # Account Management
+@bp.route('/list', methods=['GET'])
+@verify_scope('accounts/read')
+@format_response
+def list_accounts_route():
+    return list_accounts()
+
 @bp.route('/details', methods=['POST'])
 @verify_scope('accounts/read')
 @format_response

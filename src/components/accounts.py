@@ -1,12 +1,9 @@
 from src.utils.exception import handle_exception    
 from src.utils.connectors.supabase import db
-from src.utils.managers.document_center import DocumentCenter
 from src.utils.logger import logger
-from src.components.documents.client_documents import upload_poa, upload_poi
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 
 logger.announcement('Initializing Accounts Service', type='info')
-documents = DocumentCenter('clients')
 ibkr_web_api = IBKRWebAPI()
 logger.announcement('Initialized Accounts Service', type='success')
 
@@ -57,24 +54,6 @@ def read_account_contact(account_id: str = None, query: dict = None) -> dict:
         raise Exception('Contact query returned multiple results for the same ID, check query parameters.')
 
 @handle_exception
-def read_account_docs(account_id: str = None, query: dict = None) -> list:
-    """
-    Reads the POA and POI documents for a given account, ensuring user has access.
-    """
-    if query is None:
-        query = {}
-
-    account_filter = {'id': account_id}
-    
-    verified_accounts = db.read(table='account', query=account_filter)
-    if not verified_accounts:
-        raise Exception(f"Account {account_id} not found or access denied.")
-    
-    doc_query = {'account_id': account_id, **query}
-    docs = documents.read(doc_query)
-    return docs
-
-@handle_exception
 def update_account_info(account_info: dict = None, account_id: str = None, query: dict = None) -> str:
     if query is None:
         query = {}
@@ -89,25 +68,11 @@ def update_account_info(account_info: dict = None, account_id: str = None, query
         raise Exception(f"Failed to update account info for account {account_id} with query {final_update_query}. Account not found or not modified.")
     return account_id
 
-@handle_exception
-def upload_account_poa(f: dict = None, document_info: dict = None, user_id_from_payload: str = None, account_id: str = None) -> str:
-    account_filter = {'id': account_id}
-    verified_accounts = db.read(table='account', query=account_filter)
-    if not verified_accounts:
-        raise Exception(f"Account {account_id} not found or access denied for user {user_id_from_payload} for POA upload.")
-
-    return upload_poa(f=f, document_info=document_info, user_id_for_document=user_id_from_payload, account_id=account_id)
-
-@handle_exception
-def upload_account_poi(f: dict = None, document_info: dict = None, user_id_from_payload: str = None, account_id: str = None, account_info: dict = None) -> str:
-    account_filter = {'id': account_id}
-    verified_accounts = db.read(table='account', query=account_filter)
-    if not verified_accounts:
-        raise Exception(f"Account {account_id} not found or access denied for user {user_id_from_payload} for POI upload.")
-
-    return upload_poi(f=f, document_info=document_info, user_id_for_document=user_id_from_payload, account_id=account_id, account_info=account_info)
-
 # Account Management
+@handle_exception
+def list_accounts() -> dict:
+    return ibkr_web_api.list_accounts()
+
 @handle_exception
 def read_account_details(account_id: str = None) -> dict:
     return ibkr_web_api.get_account_details(account_id=account_id)

@@ -63,10 +63,10 @@ class IBKRWebAPI:
         self.TOKEN_REFRESH_BUFFER = 300
 
     @handle_exception
-    def get_accounts(self):
+    def list_accounts(self):
         logger.info("Getting accounts")
         logger.info(f"Base URL: {self.BASE_URL}")
-        url = f"{self.BASE_URL}/gw/api/v1/accounts/status?startDate=2022-03-01&endDate=2024-10-31"
+        url = f"{self.BASE_URL}/gw/api/v1/accounts/status?startDate=2022-03-01&endDate=2025-06-19"
         token = self.get_bearer_token()
         if not token:
             raise Exception("No token found")
