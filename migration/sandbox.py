@@ -29,7 +29,7 @@ def access_api(endpoint, method='GET', data=None):
             return response.content
             
     except requests.exceptions.RequestException as e:
-        raise
+        raise e
 
 def parse_timestamp(timestamp_str):
     formats = [
@@ -92,7 +92,8 @@ def process_tickets():
             'email': row['Correo Electrónico / E-mail Address'],
             'first_name': row['Nombre (incluir segundos nombres) / Name (Include middle name)'],
             'last_name': row['Apellido / Last Name'],
-            'id': row['No. de Identificación (no utilizar caracters ni espacio) / ID Number (Please do not use special characters or leave blank spaces)'].replace('-', '').strip()
+            'id': row['No. de Identificación (no utilizar caracters ni espacio) / ID Number (Please do not use special characters or leave blank spaces)'].replace('-', '').strip(),
+            'phone': row['Número de Teléfono (Celular) / Phone (Mobile)']
         }
         tickets.append(ticket)
 
@@ -110,7 +111,7 @@ def process_tickets():
             'email': row['Correo Electrónico / E-mail Address'],
             'first_name': row['Nombre (incluir segundos nombres) / Name (Include middle name)'],
             'last_name': row['Apellido / Last Name'],
-            'id': row['No. de Identificación (no utilizar caracters ni espacio) / ID Number (Please do not use special characters or leave blank spaces)'].replace('-', '').strip()
+            'phone': row['Número de Teléfono (Celular) / Phone (Mobile)']
         }
         tickets.append(ticket)
 
@@ -127,176 +128,162 @@ def process_tickets():
             'email': ticket['ApplicationInfo']['email'],
             'first_name': ticket['ApplicationInfo'].get('first_name', ''),
             'last_name': ticket['ApplicationInfo'].get('last_name', ''),
-            'id': ticket['ApplicationInfo'].get('id_number', '')
+            'phone': ticket['ApplicationInfo'].get('phone', '')
         }
         tickets_df = pd.concat([tickets_df, pd.DataFrame([ticket])], ignore_index=True)
     
     tickets_df.to_csv('outputs/tickets.csv', index=False)
     return tickets_df
 
-tickets_df = process_tickets()
+def process_accounts():
+    """ Process accounts """
 
-""" Process accounts """
+    # Accounts from old system
+    accounts_df = pd.read_csv('sources/accounts.csv')
+    accounts_df = accounts_df.fillna('')
 
-# Accounts from old system
-accounts_df = pd.read_csv('sources/accounts.csv')
-accounts_df = accounts_df.fillna('')
+    # Created accounts
+    accounts_df2 = pd.read_csv('sources/accounts2.csv')
+    accounts_df2 = accounts_df2.fillna('')
 
-# Created accounts
-accounts_df2 = pd.read_csv('sources/new_accounts.csv')
-accounts_df2 = accounts_df2.fillna('')
+    # Live accounts from new system
+    live_accounts = access_api('/accounts/read', 'POST', {})
+    live_accounts_df = pd.DataFrame(live_accounts)
+    live_accounts_df = live_accounts_df.drop(columns=['id'])
 
-# Live accounts from new system
-live_accounts = access_api('/accounts/read', 'POST', {})
-live_accounts_df = pd.DataFrame(live_accounts)
-live_accounts_df = live_accounts_df.drop(columns=['id'])
+    # Merge all accounts
+    accounts_df = pd.concat([accounts_df, live_accounts_df, accounts_df2], ignore_index=True)
+    accounts_df['AccountID'] = accounts_df['AccountID'].astype(int)
+    accounts_df.to_csv('outputs/accounts.csv', index=False)
+    return accounts_df
 
-# Merge all accounts
-accounts_df = pd.concat([accounts_df, live_accounts_df, accounts_df2], ignore_index=True)
-accounts_df['AccountID'] = accounts_df['AccountID'].astype(int)
-
-""" Process clients """
-# Read clients from excel file
-clients_df = pd.DataFrame()
-excel_file = pd.ExcelFile('sources/clients.xls')
-for sheet_name in excel_file.sheet_names:
-    sheet_df = pd.read_excel(excel_file, sheet_name=sheet_name)
-    sheet_df['MasterAccount'] = sheet_name
-    clients_df = pd.concat([clients_df, sheet_df], ignore_index=True)
-clients_df = clients_df.fillna('')
-
-"""Create new accounts for all clients using IBKR Data as source"""
-new_accounts = []
-for index, row in clients_df.iterrows():
-    new_accounts.append({
-        'Title': row.get('Title', ''),
-        'EmailAddress': row.get('Email Address', ''),
-        'SLS': row.get('SLS Devices', ''),
-        'AccountID': '',
-        'AccountStatus': row.get('Status', ''),
-        'AccountNumber': row.get('Account ID', ''),
-        'Advisor': '',
-        'IBKRUsername': row.get('Username', ''),
-        'IBKRPassword': '',
-        'MasterAccount': row.get('MasterAccount', ''),
-        'TemporalEmail': '',
-        'TemporalPassword': '',
-        'TicketID': '',
-        'UserID': '',
-    })
-
-new_accounts_df = pd.DataFrame(new_accounts)
-
-"""Fill in existing accounts using IBKRUsername as key"""
-all_accounts = []
-for index, new_account in new_accounts_df.iterrows():
-    username = new_account['IBKRUsername']
-    if pd.notna(username) and username.strip():  # Check if username exists and is not empty
-        # Find matching account in existing accounts_df
-        matching_account = accounts_df[accounts_df['IBKRUsername'] == username]
+def match_emails_to_clients(emails_df, clients_df):
+    print("Matching emails to clients...")
+    
+    # Create lookup dictionaries for faster matching
+    clients_by_account_id = {}
+    clients_by_user_hierarchy = {}
+    
+    for idx, client in clients_df.iterrows():
+        account_id = client['Account Hierarchy - Account ID']
+        user_hierarchy = client['User Hierarchy - Account User']
         
-        if not matching_account.empty:
-            # Account found - merge information
-            account = {
-                'Status': 'Matched',
-                'Title': new_account['Title'],
-                'EmailAddress': new_account['EmailAddress'],
-                'SLS': new_account['SLS'],
-                'AccountID': int(matching_account.iloc[0].get('AccountID', '')),
-                'AccountNumber': new_account['AccountNumber'],
-                'Advisor': matching_account.iloc[0].get('Advisor', ''),
-                'AccountStatus': new_account['AccountStatus'],
-                'IBKRUsername': username,
-                'IBKRPassword': matching_account.iloc[0].get('IBKRPassword', ''),
-                'MasterAccount': new_account['MasterAccount'],
-                'TemporalEmail': matching_account.iloc[0].get('TemporalEmail', ''),
-                'TemporalPassword': matching_account.iloc[0].get('TemporalPassword', ''),
-                'Status': matching_account.iloc[0].get('Status', ''),
+        if account_id:
+            clients_by_account_id[account_id] = client
+        if user_hierarchy:
+            if user_hierarchy not in clients_by_user_hierarchy:
+                clients_by_user_hierarchy[user_hierarchy] = []
+            clients_by_user_hierarchy[user_hierarchy].append(client)
+    
+    matched_records = []
+    unmatched_emails = []
+    matched_client_indices = set()
+    
+    # Match emails to clients
+    for idx, email_record in emails_df.iterrows():
+        account_number = email_record['AccountNumber']
+        title = email_record['Title']
+        
+        matched_client = None
+        match_type = None
+        
+        # Try to match by AccountNumber first (more reliable)
+        if account_number and account_number in clients_by_account_id:
+            matched_client = clients_by_account_id[account_number]
+            match_type = 'AccountNumber'
+            
+        # If no match by AccountNumber, try by Title/User Hierarchy
+        elif title and title in clients_by_user_hierarchy:
+            potential_clients = clients_by_user_hierarchy[title]
+            if len(potential_clients) == 1:
+                matched_client = potential_clients[0]
+                match_type = 'Title_Unique'
+            else:
+                matched_client = potential_clients[0]
+                match_type = 'Title_Multiple'
+        
+        if matched_client is not None:
+            # Create matched record
+            matched_record = {
+                # Email fields
+                'Email_Title': title,
+                'Email_AccountNumber': account_number,
+                'Email_EmailAddress': email_record['EmailAddress'],
+                'Email_TemporalEmail': email_record['TemporalEmail'],
+                'Email_TicketEmail': email_record['Ticket_Email'],
+                
+                # Client fields
+                'Client_UserHierarchy_AccountUser': matched_client['User Hierarchy - Account User'],
+                'Client_AccountHierarchy_AccountID': matched_client['Account Hierarchy - Account ID'],
+                'Client_AccountTitle': matched_client['Account Title'],
+                'Client_EmailAddress': matched_client['Email Address'],
+                'Client_Status': matched_client['Status'],
+                'Client_AdvisorName': matched_client['Advisor Name'],
+                
+                # Match metadata
+                'Match_Type': match_type
             }
+            matched_records.append(matched_record)
+            
+            # Track that this client was matched
+            client_idx = clients_df[clients_df['Account Hierarchy - Account ID'] == matched_client['Account Hierarchy - Account ID']].index[0]
+            matched_client_indices.add(client_idx)
             
         else:
-            # Account not found - keep new account info with blank values for existing fields
-            account = {
-                'Status': 'New',
-                'Title': new_account['Title'],
-                'EmailAddress': new_account['EmailAddress'],
-                'SLS': new_account['SLS'],
-                'AccountID': '',
-                'AccountNumber': new_account['AccountNumber'],
-                'Advisor': '',
-                'AccountStatus': new_account['AccountStatus'],
-                'IBKRUsername': username,
-                'IBKRPassword': '',
-                'MasterAccount': new_account['MasterAccount'],
-                'TemporalEmail': '',
-                'TemporalPassword': '',
+            unmatched_email = {
+                'Email_Title': title,
+                'Email_AccountNumber': account_number,
+                'Email_EmailAddress': email_record['EmailAddress'],
+                'Reason': 'No matching client found'
             }
-        all_accounts.append(account)
+            unmatched_emails.append(unmatched_email)
+    
+    # Create DataFrames and save
+    matched_df = pd.DataFrame(matched_records)
+    unmatched_emails_df = pd.DataFrame(unmatched_emails)
+    
+    return matched_df, unmatched_emails_df
 
-# Create DataFrame with all accounts
-all_accounts_df = pd.DataFrame(all_accounts)
+tickets_df = process_tickets()
+accounts_df = process_accounts()
 
-"""Fill in Ticket_Email using AccountNumber as key"""
+""" Process clients """
+clients_df = pd.read_excel('sources/clients_web.xlsx')
+clients_df.to_csv('outputs/clients.csv', index=False)
 
-# Read already existing emails
+# Execute the matching
 emails_df = pd.read_csv('sources/emails.csv')
 emails_df = emails_df.fillna('')
 
-emails_2_df = pd.read_csv('sources/emails_2.csv')
-emails_2_df = emails_2_df.fillna('')
+matched_emails_df, unmatched_emails_df = match_emails_to_clients(emails_df, clients_df)
 
-# Fill in Ticket_Email from emails_df
-for index, row in all_accounts_df.iterrows():
-    matching_email = emails_df[emails_df['AccountNumber'] == row['AccountNumber']]
-    if not matching_email.empty:
-        all_accounts_df.at[index, 'Ticket_Email'] = matching_email.iloc[0]['Ticket_Email']
+# Merge with email data
+merged_df = pd.merge(
+    clients_df,
+    matched_emails_df,
+    left_on='Account Hierarchy - Account ID',
+    right_on='Email_AccountNumber',
+    how='left',
+    suffixes=('', '_email')
+)
 
-# Fill in Ticket_Email from emails_2_df
-for index, row in all_accounts_df.iterrows():
-    matching_email = emails_2_df[emails_2_df['AccountNumber'] == row['AccountNumber']]
-    if not matching_email.empty:
-        all_accounts_df.at[index, 'Ticket_Email'] = matching_email.iloc[0]['Ticket_Email']
+# TODO: Why does IBKR not give us emails for some clients?
+# TODO: Merge with accounts data for more temporal emails
+# TODO: Merge with tickets data for more ticket emails
 
-"""Fill in TicketID using Ticket_Email as key"""
-all_accounts_df['TicketID'] = ''
-for index, row in all_accounts_df.iterrows():
-    if pd.notna(row['Ticket_Email']) and row['Ticket_Email']:
-        matching_ticket = tickets_df[tickets_df['email'] == row['Ticket_Email']]
-        if not matching_ticket.empty:
-            all_accounts_df.at[index, 'TicketID'] = matching_ticket.iloc[0]['TicketID']
-
-"""Fill in Advisors using AccountNumber as key"""
-# Accounts from PowerBI app
-clients_powerbi_df = pd.read_excel('sources/clients_web.xlsx')
-clients_powerbi_df = clients_powerbi_df.fillna('')
-
-# Fill in advisor information from PowerBI app
-for index, row in all_accounts_df.iterrows():
-    matching_account = clients_powerbi_df[clients_powerbi_df['Account Hierarchy - Account ID'] == row['AccountNumber'].strip()]
-    if not matching_account.empty:
-        if matching_account.iloc[0]['Advisor Name'] != 'Unknown':
-            all_accounts_df.at[index, 'Advisor'] = matching_account.iloc[0]['Advisor Name']
-        else:
-            all_accounts_df.at[index, 'Advisor'] = matching_account.iloc[0]['Advisor G-Form']
-
-"""Add AdvisorEmail using Advisor as key"""
-advisors_df = pd.read_csv('sources/advisors.csv')
-advisors_df = advisors_df.fillna('')
-
-for index, row in all_accounts_df.iterrows():
-    matching_advisor = advisors_df[advisors_df['Advisor'] == row['Advisor']]
-    if not matching_advisor.empty:
-        all_accounts_df.at[index, 'AdvisorEmail'] = matching_advisor.iloc[0]['Email']
-
-"""Post process and Analysis"""
-all_accounts_df = all_accounts_df.fillna('')
-all_accounts_df[['Title', 'AccountNumber', 'AccountID','MasterAccount', 'EmailAddress', 'AccountStatus', 'IBKRUsername', 'Advisor', 'AdvisorEmail', 'SLS', 'TemporalEmail', 'Ticket_Email', 'TicketID']].to_csv('outputs/all_accounts.csv', index=False)
+# Save merged data
+merged_df = merged_df.fillna('')
+merged_df[['Account Hierarchy - Master Account', 'User Hierarchy - Account User', 'Account Hierarchy - Account ID', 'Account Title', 'Status', 'Date Opened', 'Phone Number', 'SLS Devices', 'Advisor Name', 'Email Address', 'Email_TemporalEmail', 'Email_TicketEmail']].to_csv('outputs/all.csv', index=False)
 
 print("Account Analysis:")
-print(f"Total accounts: {len(all_accounts_df)}")
-print(f"Accounts with no account id: {len(all_accounts_df[all_accounts_df['AccountID'] == ''])}")
-print(f"Accounts with no advisor: {len(all_accounts_df[all_accounts_df['Advisor'] == ''])}")
-print(f"Accounts with an Unknown advisor: {len(all_accounts_df[all_accounts_df['Advisor'] == 'Unknown'])}")
-
-new_excel = all_accounts_df[['AccountNumber','Advisor','TicketID']]
-new_excel.to_excel('outputs/new_accounts.xlsx', index=False)
+print(f"Total: {len(merged_df)}")
+print("\n")
+print(f"Clients with no advisor: {len(clients_df[clients_df['Advisor Name'] == ''])}")
+print(f"Clients with an Unknown advisor: {len(clients_df[clients_df['Advisor Name'] == 'Unknown'])}")
+print("\n")
+print(f"Clients with no email address: {len(merged_df[merged_df['Email Address'] == ''])}")
+print(f"Clients with no temporal email: {len(merged_df[merged_df['Email_TemporalEmail'] == ''])}")
+print(f"Clients with no ticket email: {len(merged_df[merged_df['Email_TicketEmail'] == ''])}")
+print("\n")
+print(f"Clients with no SLS Devices: {len(merged_df[merged_df['SLS Devices'] == ''])}")
+print(f"Clients with no phone number: {len(merged_df[merged_df['Phone Number'] == ''])}")

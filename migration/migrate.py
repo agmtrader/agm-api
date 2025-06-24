@@ -114,3 +114,15 @@ def migrate_leads():
             new_follow_ups.append(new_follow_up)
 
         lead_id = access_api('/leads/create', 'POST', data={'lead': new_lead, 'follow_ups': new_follow_ups})
+
+# Merge users
+
+# Migrate contacts
+
+# Merge advisors
+
+# Migrate leads
+
+# Migrate applications
+
+# Migrate accounts

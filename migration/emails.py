@@ -1,28 +1,8 @@
 import pandas as pd
-
-all_accounts_df = pd.read_csv('outputs/all_accounts.csv')
-all_accounts_df = all_accounts_df.fillna('')
-
-all_accounts_df = all_accounts_df[all_accounts_df['AccountStatus'] == 'Open']
-
-no_changed_email = all_accounts_df[all_accounts_df['TemporalEmail'] == all_accounts_df['EmailAddress']]
-
-no_ticket_email = no_changed_email[no_changed_email['Ticket_Email'] == '']
-no_changed_email_no_advisor = no_changed_email[all_accounts_df['Advisor'] == '']
-no_changed_email_unknown_advisor = no_changed_email[all_accounts_df['Advisor'] == 'Unknown']
-
-print(f"Accounts with no ticket email: {len(no_ticket_email)}")
-print(f"Accounts with no changed email and no advisor: {len(no_changed_email_no_advisor)}")
-print(f"Accounts with no changed email and unknown advisor: {len(no_changed_email_unknown_advisor)}")
-print(f"Accounts with no changed email: {len(no_changed_email)}")
-print(f"Accounts with no SLS Devices: {len(all_accounts_df[all_accounts_df['SLS'] == ''])}")
-no_changed_email[['Title', 'AccountNumber', 'EmailAddress', 'TemporalEmail', 'Ticket_Email', 'Advisor']].to_excel('outputs/no_changed_email.xlsx', index=False)
-
-no_changed_email_dict = no_changed_email.to_dict(orient='records')
-
 import requests
-url = 'http://127.0.0.1:5000'
+
 def access_api(endpoint, method='GET', data=None):
+    url = 'http://127.0.0.1:5000'
     try:
         auth = requests.post(
             url + '/token', 
@@ -44,14 +24,37 @@ def access_api(endpoint, method='GET', data=None):
     except requests.exceptions.RequestException as e:
         raise
 
-advisors = access_api('/advisors/read', 'POST', {'query': {}})
-contacts = access_api('/contacts/read', 'POST', {'query': {}})
+# Read clients from csv
+all_accounts_df = pd.read_csv('outputs/all.csv')
+all_accounts_df = all_accounts_df.fillna('')
 
-print(len(no_changed_email_dict))
+# Filter for open accounts
+all_accounts_df = all_accounts_df[all_accounts_df['Status'] == 'Open']
 
-emails_to_send = set()
-for user in no_changed_email_dict:
-    emails_to_send.add(user['Ticket_Email'])
+# Filter for accounts with no changed email
+no_changed_email = all_accounts_df[all_accounts_df['Email Address'] == all_accounts_df['Email_TemporalEmail']]
+
+# Clean phone numbers - convert from float format to clean integers
+no_changed_email['Phone Number'] = no_changed_email['Phone Number'].apply(lambda x: str(int(float(x))) if x != '' and pd.notna(x) else '')
+
+# Save accounts with no changed email
+no_changed_email[['Account Title', 'Phone Number', 'Email Address', 'Email_TemporalEmail']].to_csv('outputs/no_changed_email.csv', index=False)
+
+# Print results
+print(f"Accounts with no changed email: {len(no_changed_email)}")
+print(f"Accounts with no phone number: {len(no_changed_email[no_changed_email['Phone Number'] == ''])}")
+
+# Get set of emails to send
+#no_changed_email_dict = no_changed_email.to_dict(orient='records')
+
+# Get set of emails to send and send emails
+#emails_to_send = set()
+#for user in no_changed_email_dict:
+#    emails_to_send.add(user['Ticket_Email'])
+
+# Get advisors and contacts
+#advisors = access_api('/advisors/read', 'POST', {'query': {}})
+#contacts = access_api('/contacts/read', 'POST', {'query': {}})
     
 """
 print(len(emails_to_send))
