@@ -142,17 +142,13 @@ def process_accounts():
     accounts_df = pd.read_csv('sources/accounts.csv')
     accounts_df = accounts_df.fillna('')
 
-    # Created accounts
-    accounts_df2 = pd.read_csv('sources/accounts2.csv')
-    accounts_df2 = accounts_df2.fillna('')
-
     # Live accounts from new system
     live_accounts = access_api('/accounts/read', 'POST', {})
     live_accounts_df = pd.DataFrame(live_accounts)
     live_accounts_df = live_accounts_df.drop(columns=['id'])
 
     # Merge all accounts
-    accounts_df = pd.concat([accounts_df, live_accounts_df, accounts_df2], ignore_index=True)
+    accounts_df = pd.concat([accounts_df, live_accounts_df], ignore_index=True)
     accounts_df['AccountID'] = accounts_df['AccountID'].astype(int)
     accounts_df.to_csv('outputs/accounts.csv', index=False)
     return accounts_df
@@ -275,15 +271,19 @@ merged_df = pd.merge(
 merged_df = merged_df.fillna('')
 merged_df[['Account Hierarchy - Master Account', 'User Hierarchy - Account User', 'Account Hierarchy - Account ID', 'Account Title', 'Status', 'Date Opened', 'Phone Number', 'SLS Devices', 'Advisor Name', 'Email Address', 'Email_TemporalEmail', 'Email_TicketEmail']].to_csv('outputs/all.csv', index=False)
 
+print("\n")
 print("Account Analysis:")
 print(f"Total: {len(merged_df)}")
+print("\n")
+print(f"Clients with no phone number: {len(merged_df[merged_df['Phone Number'] == ''])}")
+print(f"Clients with no SLS Devices: {len(merged_df[merged_df['SLS Devices'] == ''])}")
+print(f"Clients with no email address: {len(merged_df[merged_df['Email Address'] == ''])}")
 print("\n")
 print(f"Clients with no advisor: {len(clients_df[clients_df['Advisor Name'] == ''])}")
 print(f"Clients with an Unknown advisor: {len(clients_df[clients_df['Advisor Name'] == 'Unknown'])}")
 print("\n")
-print(f"Clients with no email address: {len(merged_df[merged_df['Email Address'] == ''])}")
 print(f"Clients with no temporal email: {len(merged_df[merged_df['Email_TemporalEmail'] == ''])}")
 print(f"Clients with no ticket email: {len(merged_df[merged_df['Email_TicketEmail'] == ''])}")
 print("\n")
-print(f"Clients with no SLS Devices: {len(merged_df[merged_df['SLS Devices'] == ''])}")
-print(f"Clients with no phone number: {len(merged_df[merged_df['Phone Number'] == ''])}")
+
+# account_ids missing email change -> user_id -> contact_id -> send contact for the email change
