@@ -91,9 +91,3 @@ def update_route():
     payload = request.get_json(force=True)
     account_management_requests_data = payload.get('account_management_requests', None)
     return update_account(account_management_requests=account_management_requests_data)
-
-@bp.route('/create_sso_browser_session', methods=['GET'])
-@verify_scope('accounts/create_sso_browser_session')
-@format_response
-def create_sso_browser_session_route():
-    return create_sso_browser_session()
