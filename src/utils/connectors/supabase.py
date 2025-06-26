@@ -109,45 +109,7 @@ class Supabase:
             status = Column(Text, nullable=False)
             account_type = Column(Text, nullable=False)
             ibkr_account_number = Column(Text, nullable=True)
-
-        class Document(self.Base):
-            __tablename__ = 'document'
-            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
-            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            drive_id = Column(Text, nullable=False)
-            mime_type = Column(Text, nullable=False)
-            name = Column(Text, nullable=False)
-            parents = Column(ARRAY(Text), nullable=False)
-
-        class POADocument(self.Base):
-            __tablename__ = 'poa_document'
-            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            document_id = Column(UUID(as_uuid=True), ForeignKey('document.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
-            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
-            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            type = Column(Text, nullable=False)
-            issued_date = Column(Text, nullable=False)
-
-        class POIDocument(self.Base):
-            __tablename__ = 'poi_document'
-            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            document_id = Column(UUID(as_uuid=True), ForeignKey('document.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
-            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
-            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            gender = Column(Text, nullable=False)
-            country_of_issue = Column(Text, nullable=False)
-            type = Column(Text, nullable=False)
-            full_name = Column(Text, nullable=False)
-            id_number = Column(Text, nullable=False)
-            issued_date = Column(Text, nullable=False)
-            date_of_birth = Column(Text, nullable=False)
-            expiration_date = Column(Text, nullable=False)
-            country_of_birth = Column(Text, nullable=False)
-
+    
         class AccountRiskProfile(self.Base):
             __tablename__ = 'account_risk_profile'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -176,12 +138,7 @@ class Supabase:
 
         # Accounts
         self.Account = Account
-
-        # Documents
-        self.Document = Document
-        self.POADocument = POADocument
-        self.POIDocument = POIDocument
-
+        
         # Risk Profiles
         self.AccountRiskProfile = AccountRiskProfile
 

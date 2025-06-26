@@ -1,5 +1,5 @@
 from flask import Blueprint
-from src.components.reporting import extract, transform, get_clients_report, get_accrued_interest_report
+from src.components.tools.reporting import extract, transform, get_clients_report, get_accrued_interest_report
 from src.utils.managers.scope_manager import verify_scope
 
 bp = Blueprint('reporting', __name__)
