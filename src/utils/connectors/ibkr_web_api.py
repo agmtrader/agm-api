@@ -158,8 +158,6 @@ class IBKRWebAPI:
         logger.info("Sending application to Interactive Brokers")
         url = f"{self.BASE_URL}/gw/api/v1/accounts"
 
-        print(application)
-
         # Get OAuth2 token (refresh if needed)
         token = self.get_bearer_token()
         if not token:

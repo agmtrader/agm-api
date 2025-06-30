@@ -288,7 +288,6 @@ def process_report(config, resources_folder_id):
 
     # Download file and read into dataframe
     f = Drive.download_file(file_id=most_recent_file['id'], parse=True)
-    print(f)
     file_df = pd.DataFrame(f)
     file_df = file_df.fillna('')
 

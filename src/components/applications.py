@@ -10,7 +10,6 @@ logger.announcement('Initialized Applications Service', type='success')
 
 @handle_exception
 def create_application(application: dict = None) -> dict:
-    print(application)
     application_id = db.create(data=application, path='applications')
     return {'id': application_id}
 
