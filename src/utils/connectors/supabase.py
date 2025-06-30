@@ -42,6 +42,7 @@ class Supabase:
         class Contact(self.Base):
             __tablename__ = 'contact'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             country = Column(Text, nullable=True)
@@ -53,7 +54,6 @@ class Supabase:
         class User(self.Base):
             __tablename__ = 'user'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             email = Column(Text, nullable=False, unique=True)
@@ -109,7 +109,11 @@ class Supabase:
             status = Column(Text, nullable=False)
             account_type = Column(Text, nullable=False)
             ibkr_account_number = Column(Text, nullable=True)
-    
+            ibkr_username = Column(Text, nullable=True)
+            ibkr_password = Column(Text, nullable=True)
+            temporal_email = Column(Text, nullable=True)
+            temporal_password = Column(Text, nullable=True)
+
         class AccountRiskProfile(self.Base):
             __tablename__ = 'account_risk_profile'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

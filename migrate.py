@@ -1,5 +1,6 @@
 import requests
-from src.helpers.database import Firebase
+from src.utils.connectors.firebase import Firebase
+from src.utils.connectors.supabase import db
 
 firebase = Firebase()
 
@@ -27,43 +28,84 @@ def access_api(endpoint, method='GET', data=None):
     except requests.exceptions.RequestException as e:
         raise
 
+def migrate_users():
+    users = firebase.read('users')
+    unable_to_merge = []
+    for user in users:
+        new_user = {
+            'name': user['name'],
+            'email': user['email'],
+            'image': user['image'],
+            'scopes': user['scopes'],
+            'password': user['password']
+        }
+        response = access_api('/users/create', 'POST', data={'user': new_user})
+        print(response)
+
+def migrate_contacts():
+    contacts = firebase.read('db/clients/contacts')
+    for contact in contacts:
+        new_contact = {
+            'country': contact['ContactCountry'],
+            'name': contact['ContactName'],
+            'company_name': contact['CompanyName'],
+            'email': contact['ContactEmail'],
+            'phone': contact['ContactPhone'],
+        }
+        response = access_api('/contacts/create', 'POST', data={'contact': new_contact})
+        print(response)
+
+def link_users_to_contacts():
+    users = db.read('user', {})
+    contacts = db.read('contact', {})
+    for user in users:
+        for contact in contacts:
+            if user['email'] == contact['email']:
+                contact['user_id'] = user['id']
+                db.update('contact', {'id': contact['id']}, contact)
+                break
+            elif user['name'] == contact['name']:
+                contact['user_id'] = user['id']
+                db.update('contact', {'id': contact['id']}, contact)
+                break
+
 def migrate_advisors():
-    contacts = access_api('/contacts/read', 'POST', data={'query': {}})
+    contacts = db.read('contact', {})
     advisors = firebase.read('db/advisors/dictionary')
 
-    for advisor in advisors[52:]:
+    for advisor in advisors:
         print("Name to find: " + advisor['AdvisorName'] + "\n") 
         for contact in contacts:
             if contact['name'] == advisor['AdvisorName']:
-                advisor['ContactID'] = contact['id']
+                advisor['contact_id'] = contact['id']
                 break
             else:
-                advisor['ContactID'] = None
+                advisor['contact_id'] = None
 
-        if advisor['ContactID'] is None:
+        if advisor['contact_id'] is None:
             print('No contact found for advisor: ' + advisor['AdvisorName'] + '\n')
             new_contact = {
                 'name': advisor['AdvisorName'],
             }
-            contact_id = access_api('/contacts/create', 'POST', data={'contact': new_contact})
-            advisor['ContactID'] = contact_id['id']
+            advisor_id = db.create('contact', new_contact)
+            advisor['contact_id'] = advisor_id
 
         new_advisor = {
             'name': advisor['AdvisorName'],
-            'contact_id': advisor['ContactID'],
+            'contact_id': advisor['contact_id'],
             'code': advisor['AdvisorCode'],
             'agency': advisor['Agency'],
             'hierarchy1': advisor['HierarchyL1'],
             'hierarchy2': advisor['HierarchyL2'],
         }
         
-        advisor_id = access_api('/advisors/create', 'POST', data={'advisor': new_advisor})
-        print("Created advisor: " + advisor_id['id'])
+        advisor_id = db.create('advisor', new_advisor)
+        print("Created advisor: " + advisor_id)
 
 def migrate_leads():
     leads = firebase.read('db/clients/leads')
     old_contacts = firebase.read('db/clients/contacts')
-    contacts = access_api('/contacts/read', 'POST', data={'query': {}})
+    contacts = db.read('contact', {})
 
     for lead in leads:
 
@@ -115,14 +157,23 @@ def migrate_leads():
 
         lead_id = access_api('/leads/create', 'POST', data={'lead': new_lead, 'follow_ups': new_follow_ups})
 
-# Merge users
+# Migrate users
+#migrate_users()
 
 # Migrate contacts
+#migrate_contacts()
+
+# Update user contact ids
+link_users_to_contacts()
 
 # Merge advisors
+#migrate_advisors()
 
 # Migrate leads
+#migrate_leads()
 
 # Migrate applications
 
 # Migrate accounts
+
+# Migrate documents

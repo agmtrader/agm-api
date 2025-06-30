@@ -154,15 +154,13 @@ def process_accounts():
     return accounts_df
 
 def match_emails_to_clients(emails_df, clients_df):
-    print("Matching emails to clients...")
-    
     # Create lookup dictionaries for faster matching
     clients_by_account_id = {}
     clients_by_user_hierarchy = {}
     
     for idx, client in clients_df.iterrows():
-        account_id = client['Account Hierarchy - Account ID']
-        user_hierarchy = client['User Hierarchy - Account User']
+        account_id = client['Account ID']
+        user_hierarchy = client['Username']
         
         if account_id:
             clients_by_account_id[account_id] = client
@@ -209,12 +207,11 @@ def match_emails_to_clients(emails_df, clients_df):
                 'Email_TicketEmail': email_record['Ticket_Email'],
                 
                 # Client fields
-                'Client_UserHierarchy_AccountUser': matched_client['User Hierarchy - Account User'],
-                'Client_AccountHierarchy_AccountID': matched_client['Account Hierarchy - Account ID'],
-                'Client_AccountTitle': matched_client['Account Title'],
+                'Client_Username': matched_client['Username'],
+                'Client_AccountID': matched_client['Account ID'],
+                'Client_Title': matched_client['Title'],
                 'Client_EmailAddress': matched_client['Email Address'],
                 'Client_Status': matched_client['Status'],
-                'Client_AdvisorName': matched_client['Advisor Name'],
                 
                 # Match metadata
                 'Match_Type': match_type
@@ -222,7 +219,7 @@ def match_emails_to_clients(emails_df, clients_df):
             matched_records.append(matched_record)
             
             # Track that this client was matched
-            client_idx = clients_df[clients_df['Account Hierarchy - Account ID'] == matched_client['Account Hierarchy - Account ID']].index[0]
+            client_idx = clients_df[clients_df['Account ID'] == matched_client['Account ID']].index[0]
             matched_client_indices.add(client_idx)
             
         else:
@@ -244,7 +241,18 @@ tickets_df = process_tickets()
 accounts_df = process_accounts()
 
 """ Process clients """
-clients_df = pd.read_excel('sources/clients_web.xlsx')
+# Read all sheets from the Excel file and combine them
+excel_file = pd.ExcelFile('sources/clients.xls')
+all_sheets = []
+
+for sheet_name in excel_file.sheet_names:
+    print(f"Reading sheet: {sheet_name}")
+    sheet_df = pd.read_excel('sources/clients.xls', sheet_name=sheet_name)
+    sheet_df['Source_Sheet'] = sheet_name  # Add column to track which sheet data came from
+    all_sheets.append(sheet_df)
+
+# Combine all sheets into one DataFrame
+clients_df = pd.concat(all_sheets, ignore_index=True)
 clients_df.to_csv('outputs/clients.csv', index=False)
 
 # Execute the matching
@@ -257,33 +265,60 @@ matched_emails_df, unmatched_emails_df = match_emails_to_clients(emails_df, clie
 merged_df = pd.merge(
     clients_df,
     matched_emails_df,
-    left_on='Account Hierarchy - Account ID',
+    left_on='Account ID',
     right_on='Email_AccountNumber',
     how='left',
     suffixes=('', '_email')
 )
 
-# TODO: Why does IBKR not give us emails for some clients?
-# TODO: Merge with accounts data for more temporal emails
-# TODO: Merge with tickets data for more ticket emails
+# Merge with accounts data for more temporal emails
+# Rename the accounts TemporalEmail to avoid confusion and ensure proper consolidation
+accounts_merge_df = accounts_df[['IBKRUsername', 'TemporalEmail']].copy()
+accounts_merge_df = accounts_merge_df.rename(columns={'TemporalEmail': 'TemporalEmail_Accounts'})
+
+merged_df_with_accounts = pd.merge(
+    merged_df,
+    accounts_merge_df,
+    left_on='Username',
+    right_on='IBKRUsername',
+    how='left'
+)
+
+# Proper consolidation of temporal emails
+# Priority: Use TemporalEmail_Accounts if available, otherwise use Email_TemporalEmail
+def consolidate_temporal_email(row):
+    accounts_email = row.get('TemporalEmail_Accounts', '')
+    emails_email = row.get('Email_TemporalEmail', '')
+    
+    # If accounts has email, use it (it's more reliable)
+    if pd.notna(accounts_email) and accounts_email != '':
+        return accounts_email
+    # Otherwise, use email from emails data
+    elif pd.notna(emails_email) and emails_email != '':
+        return emails_email
+    # If neither, return empty string
+    else:
+        return ''
+
+merged_df_with_accounts['Email_TemporalEmail'] = merged_df_with_accounts.apply(consolidate_temporal_email, axis=1)
+
+# Drop the extra columns from the merge after consolidation
+merged_df_final = merged_df_with_accounts.drop(columns=['IBKRUsername', 'TemporalEmail_Accounts'], errors='ignore')
 
 # Save merged data
-merged_df = merged_df.fillna('')
-merged_df[['Account Hierarchy - Master Account', 'User Hierarchy - Account User', 'Account Hierarchy - Account ID', 'Account Title', 'Status', 'Date Opened', 'Phone Number', 'SLS Devices', 'Advisor Name', 'Email Address', 'Email_TemporalEmail', 'Email_TicketEmail']].to_csv('outputs/all.csv', index=False)
+merged_df_final = merged_df_final.fillna('')
+merged_df_final[['Username', 'Account ID', 'Title', 'Status', 'Date Opened', 'Phone Number', 'SLS Devices', 'Email Address', 'Email_TemporalEmail', 'Email_TicketEmail']].to_csv('outputs/all.csv', index=False)
 
 print("\n")
 print("Account Analysis:")
-print(f"Total: {len(merged_df)}")
+print(f"Total: {len(merged_df_final)}")
 print("\n")
-print(f"Clients with no phone number: {len(merged_df[merged_df['Phone Number'] == ''])}")
-print(f"Clients with no SLS Devices: {len(merged_df[merged_df['SLS Devices'] == ''])}")
-print(f"Clients with no email address: {len(merged_df[merged_df['Email Address'] == ''])}")
+print(f"Clients with no phone number: {len(merged_df_final[merged_df_final['Phone Number'] == ''])}")
+print(f"Clients with no SLS Devices: {len(merged_df_final[merged_df_final['SLS Devices'] == ''])}")
+print(f"Clients with no email address: {len(merged_df_final[merged_df_final['Email Address'] == ''])}")
 print("\n")
-print(f"Clients with no advisor: {len(clients_df[clients_df['Advisor Name'] == ''])}")
-print(f"Clients with an Unknown advisor: {len(clients_df[clients_df['Advisor Name'] == 'Unknown'])}")
-print("\n")
-print(f"Clients with no temporal email: {len(merged_df[merged_df['Email_TemporalEmail'] == ''])}")
-print(f"Clients with no ticket email: {len(merged_df[merged_df['Email_TicketEmail'] == ''])}")
+print(f"Clients with no temporal email: {len(merged_df_final[merged_df_final['Email_TemporalEmail'] == ''])}")
+print(f"Clients with no ticket email: {len(merged_df_final[merged_df_final['Email_TicketEmail'] == ''])}")
 print("\n")
 
 # account_ids missing email change -> user_id -> contact_id -> send contact for the email change

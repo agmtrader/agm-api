@@ -38,7 +38,7 @@ no_changed_email = all_accounts_df[all_accounts_df['Email Address'] == all_accou
 no_changed_email['Phone Number'] = no_changed_email['Phone Number'].apply(lambda x: str(int(float(x))) if x != '' and pd.notna(x) else '')
 
 # Save accounts with no changed email
-no_changed_email[['Account Title', 'Phone Number', 'Email Address', 'Email_TemporalEmail', 'Email_TicketEmail']].to_csv('outputs/no_changed_email.csv', index=False)
+no_changed_email[['Title', 'Phone Number', 'Email Address', 'Email_TemporalEmail', 'Email_TicketEmail']].to_csv('outputs/no_changed_email.csv', index=False)
 
 # Print results
 print(f"Accounts with no ticket email: {len(no_changed_email[no_changed_email['Email_TicketEmail'] == ''])}")

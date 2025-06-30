@@ -144,14 +144,15 @@ def start_api():
     #app.register_blueprint(tws.bp, url_prefix='/tws')
 
     # CRUD
-    from src.app import accounts, advisors, applications, contacts, leads, users
+    from src.app import accounts, advisors, applications, contacts, leads, users, rtd
     app.register_blueprint(accounts.bp, url_prefix='/accounts')
     app.register_blueprint(advisors.bp, url_prefix='/advisors')
     app.register_blueprint(applications.bp, url_prefix='/applications')
     app.register_blueprint(contacts.bp, url_prefix='/contacts')
     app.register_blueprint(leads.bp, url_prefix='/leads')
     app.register_blueprint(users.bp, url_prefix='/users')
-
+    app.register_blueprint(rtd.bp, url_prefix='/rtd')
+    
     return app
 
 app = start_api()
