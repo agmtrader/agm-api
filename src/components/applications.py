@@ -19,5 +19,9 @@ def read_applications(query=None) -> list:
     return applications
 
 @handle_exception
+def update_application(application: dict = None) -> dict:
+    return db.update(path='applications', data=application)
+
+@handle_exception
 def send_to_ibkr(application: dict = None) -> dict:
     return ibkr_web_api.send_to_ibkr(application=application)

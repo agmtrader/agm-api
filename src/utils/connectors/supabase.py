@@ -113,6 +113,9 @@ class Supabase:
             ibkr_password = Column(Text, nullable=True)
             temporal_email = Column(Text, nullable=True)
             temporal_password = Column(Text, nullable=True)
+            application_id = Column(UUID(as_uuid=True), nullable=True)
+            risk_profile_id = Column(UUID(as_uuid=True), ForeignKey('account_risk_profile.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            fee_template = Column(Text, nullable=True)
 
         class AccountRiskProfile(self.Base):
             __tablename__ = 'account_risk_profile'
