@@ -99,7 +99,7 @@ class Supabase:
         class Account(self.Base):
             __tablename__ = 'account'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             ibkr_account_number = Column(Text, nullable=False)

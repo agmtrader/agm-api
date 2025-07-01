@@ -139,8 +139,8 @@ def start_api():
     app.register_blueprint(risk_profiles.bp, url_prefix='/risk_profiles')
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
     
-    #from src.app.tools import email, tws
-    #app.register_blueprint(email.bp, url_prefix='/email')
+    from src.app.tools import email
+    app.register_blueprint(email.bp, url_prefix='/email')
     #app.register_blueprint(tws.bp, url_prefix='/tws')
 
     # CRUD
