@@ -141,9 +141,8 @@ class Firebase:
       updated_count += 1
     
     batch.commit()
-    updated_id = ref.document().id
     logger.success(f'{updated_count} documents updated successfully.')
-    return updated_id
+    return updated_count
 
   def delete(self, path, query=None):
     """

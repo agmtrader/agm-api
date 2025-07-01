@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, ForeignKey, Text, create_engine, Column, ARRAY, MetaData
+from sqlalchemy import Boolean, ForeignKey, Text, create_engine, Column, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.automap import automap_base
 
@@ -46,10 +46,10 @@ class Supabase:
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             country = Column(Text, nullable=True)
-            name = Column(Text, nullable=False)
+            name = Column(Text, nullable=False, unique=True)
             company_name = Column(Text, nullable=True)
-            email = Column(Text, nullable=True, unique=True)
-            phone = Column(Text, nullable=True, unique=True)
+            email = Column(Text, nullable=True, unique=False)
+            phone = Column(Text, nullable=True, unique=False)
 
         class User(self.Base):
             __tablename__ = 'user'
@@ -60,7 +60,7 @@ class Supabase:
             image = Column(Text, nullable=True)
             password = Column(Text, nullable=False)
             scopes = Column(Text, nullable=False)
-            name = Column(Text, nullable=False)
+            name = Column(Text, nullable=True)
 
         class Advisor(self.Base):
             __tablename__ = 'advisor'
@@ -68,7 +68,7 @@ class Supabase:
             contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            code = Column(Text, nullable=False)
+            code = Column(Integer, nullable=False)
             agency = Column(Text, nullable=False)
             hierarchy1 = Column(Text, nullable=False)
             hierarchy2 = Column(Text, nullable=False)
@@ -81,11 +81,10 @@ class Supabase:
             referrer_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            description = Column(Text, nullable=True)
+            description = Column(Text, nullable=False)
             status = Column(Text, nullable=False)
             completed = Column(Boolean, nullable=False, default=False)
             contact_date = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            application_id = Column(UUID(as_uuid=True), nullable=True)
 
         class FollowUp(self.Base):
             __tablename__ = 'follow_up'
@@ -93,36 +92,30 @@ class Supabase:
             lead_id = Column(UUID(as_uuid=True), ForeignKey('lead.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            description = Column(Text, nullable=True)
+            description = Column(Text, nullable=False)
             completed = Column(Boolean, nullable=False, default=False)
             date = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
 
         class Account(self.Base):
             __tablename__ = 'account'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            advisor_id = Column(UUID(as_uuid=True), ForeignKey('advisor.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
-            lead_id = Column(UUID(as_uuid=True), ForeignKey('lead.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
-            master_account_id = Column(Text, nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            status = Column(Text, nullable=False)
-            account_type = Column(Text, nullable=False)
-            ibkr_account_number = Column(Text, nullable=True)
+            ibkr_account_number = Column(Text, nullable=False)
             ibkr_username = Column(Text, nullable=True)
             ibkr_password = Column(Text, nullable=True)
             temporal_email = Column(Text, nullable=True)
             temporal_password = Column(Text, nullable=True)
-            application_id = Column(UUID(as_uuid=True), nullable=True)
-            risk_profile_id = Column(UUID(as_uuid=True), ForeignKey('account_risk_profile.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            application_id = Column(UUID(as_uuid=True), nullable=False)
             fee_template = Column(Text, nullable=True)
 
         class AccountRiskProfile(self.Base):
             __tablename__ = 'account_risk_profile'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            risk_profile_id = Column(Text, nullable=False)
+            risk_profile_id = Column(Integer, nullable=False)
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             score = Column(Text, nullable=False)
 

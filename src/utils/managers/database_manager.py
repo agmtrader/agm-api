@@ -45,22 +45,10 @@ class DatabaseManager:
         if extra_in_models:
             logger.error(f"Tables in models but missing in database: {extra_in_models}")
             raise Exception(f"Tables in models but missing in database: {extra_in_models}")
-        # Check column differences for each table
+        
+        # Check detailed column differences for each table
         for table_name in set(db_tables) & set(model_tables):
-            db_columns = {col['name']: col for col in inspector.get_columns(table_name)}
-            model_columns = {col.name: col for col in self.base.metadata.tables[table_name].columns}
-            
-            # Check for missing columns in models
-            missing_cols = set(db_columns.keys()) - set(model_columns.keys())
-            if missing_cols:
-                logger.error(f"Table '{table_name}' missing columns in model: {missing_cols}")
-                raise Exception(f"Table '{table_name}' missing columns in model: {missing_cols}")
-            
-            # Check for extra columns in models
-            extra_cols = set(model_columns.keys()) - set(db_columns.keys())
-            if extra_cols:
-                logger.error(f"Table '{table_name}' has extra columns in model: {extra_cols}")
-                raise Exception(f"Table '{table_name}' has extra columns in model: {extra_cols}")
+            self._validate_table_schema(inspector, table_name)
         
         try:
             self.base.metadata.create_all(self.engine)
@@ -71,6 +59,105 @@ class DatabaseManager:
         self.metadata = MetaData()
         self.metadata.reflect(bind=self.engine)
         logger.success(f'Database initialized')
+
+    def _validate_table_schema(self, inspector, table_name):
+        """Validate detailed schema differences for a specific table"""
+        db_columns = {col['name']: col for col in inspector.get_columns(table_name)}
+        model_columns = {col.name: col for col in self.base.metadata.tables[table_name].columns}
+        
+        # Check for missing columns in models
+        missing_cols = set(db_columns.keys()) - set(model_columns.keys())
+        if missing_cols:
+            logger.error(f"Table '{table_name}' missing columns in model: {missing_cols}")
+            raise Exception(f"Table '{table_name}' missing columns in model: {missing_cols}")
+        
+        # Check for extra columns in models
+        extra_cols = set(model_columns.keys()) - set(db_columns.keys())
+        if extra_cols:
+            logger.error(f"Table '{table_name}' has extra columns in model: {extra_cols}")
+            raise Exception(f"Table '{table_name}' has extra columns in model: {extra_cols}")
+        
+        # Get primary keys and foreign keys from database
+        db_pk_columns = set(inspector.get_pk_constraint(table_name)['constrained_columns'])
+        db_foreign_keys = {fk['constrained_columns'][0]: fk for fk in inspector.get_foreign_keys(table_name)}
+        db_unique_constraints = []
+        for constraint in inspector.get_unique_constraints(table_name):
+            db_unique_constraints.extend(constraint['column_names'])
+        
+        # Validate each column's detailed properties
+        for col_name in set(db_columns.keys()) & set(model_columns.keys()):
+            db_col = db_columns[col_name]
+            model_col = model_columns[col_name]
+            
+            # Check primary key consistency
+            is_db_pk = col_name in db_pk_columns
+            is_model_pk = model_col.primary_key
+            if is_db_pk != is_model_pk:
+                logger.error(f"Table '{table_name}', column '{col_name}': Primary key mismatch. DB: {is_db_pk}, Model: {is_model_pk}")
+                raise Exception(f"Table '{table_name}', column '{col_name}': Primary key mismatch")
+            
+            # Check nullable consistency
+            db_nullable = db_col.get('nullable', True)
+            model_nullable = model_col.nullable
+            if db_nullable != model_nullable:
+                logger.error(f"Table '{table_name}', column '{col_name}': Nullable mismatch. DB: {db_nullable}, Model: {model_nullable}")
+                raise Exception(f"Table '{table_name}', column '{col_name}': Nullable mismatch")
+            
+            # Check foreign key consistency
+            has_db_fk = col_name in db_foreign_keys
+            has_model_fk = len(model_col.foreign_keys) > 0
+            if has_db_fk != has_model_fk:
+                logger.error(f"Table '{table_name}', column '{col_name}': Foreign key mismatch. DB: {has_db_fk}, Model: {has_model_fk}")
+                raise Exception(f"Table '{table_name}', column '{col_name}': Foreign key mismatch")
+            
+            # If both have foreign keys, check if they reference the same table/column
+            if has_db_fk and has_model_fk:
+                db_fk = db_foreign_keys[col_name]
+                db_ref_table = db_fk['referred_table']
+                db_ref_column = db_fk['referred_columns'][0]
+                
+                model_fk = list(model_col.foreign_keys)[0]
+                model_ref_parts = str(model_fk.target_fullname).split('.')
+                model_ref_table = model_ref_parts[0]
+                model_ref_column = model_ref_parts[1] if len(model_ref_parts) > 1 else 'id'
+                
+                if db_ref_table != model_ref_table or db_ref_column != model_ref_column:
+                    logger.error(f"Table '{table_name}', column '{col_name}': Foreign key reference mismatch. DB: {db_ref_table}.{db_ref_column}, Model: {model_ref_table}.{model_ref_column}")
+                    raise Exception(f"Table '{table_name}', column '{col_name}': Foreign key reference mismatch")
+            
+            # Check unique constraint consistency
+            has_db_unique = col_name in db_unique_constraints
+            has_model_unique = model_col.unique or False
+            if has_db_unique != has_model_unique:
+                logger.error(f"Table '{table_name}', column '{col_name}': Unique constraint mismatch. DB: {has_db_unique}, Model: {has_model_unique}")
+                raise Exception(f"Table '{table_name}', column '{col_name}': Unique constraint mismatch")
+            
+            # Check data type consistency (basic check)
+            db_type_str = str(db_col['type']).upper()
+            model_type_str = str(model_col.type).upper()
+            
+            # Normalize common type differences
+            type_mappings = {
+                'VARCHAR': 'TEXT',
+                'CHARACTER VARYING': 'TEXT',
+                'BOOLEAN': 'BOOL',
+                'TIMESTAMP': 'DATETIME',
+                'TIMESTAMP WITHOUT TIME ZONE': 'DATETIME'
+            }
+            
+            for old_type, new_type in type_mappings.items():
+                db_type_str = db_type_str.replace(old_type, new_type)
+                model_type_str = model_type_str.replace(old_type, new_type)
+            
+            # Remove length specifications for comparison (e.g., VARCHAR(255) -> VARCHAR)
+            db_type_base = db_type_str.split('(')[0]
+            model_type_base = model_type_str.split('(')[0]
+            
+            if db_type_base != model_type_base:
+                logger.warning(f"Table '{table_name}', column '{col_name}': Data type difference. DB: {db_type_str}, Model: {model_type_str}")
+                # Don't raise exception for type differences, just warn as they might be compatible
+        
+        logger.info(f"Schema validation completed for table '{table_name}'")
 
     def with_session(self, func):
         @wraps(func)

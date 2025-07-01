@@ -27,7 +27,8 @@ def read_route():
 def update_route():
     payload = request.get_json(force=True)
     application = payload.get('application', None)
-    return update_application(application=application)
+    query = payload.get('query', None)
+    return update_application(application=application, query=query)
 
 @bp.route('/send_to_ibkr', methods=['POST'])
 @verify_scope('applications/send')
