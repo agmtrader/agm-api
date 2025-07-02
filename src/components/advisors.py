@@ -1,13 +1,16 @@
 from src.utils.exception import handle_exception
-
-from ..helpers.database import Firebase
+from src.utils.connectors.supabase import db
 from src.utils.logger import logger
 
 logger.announcement('Initializing Advisors Service', type='info')
 logger.announcement('Initialized Advisors Service', type='success')
 
-Database = Firebase()
+@handle_exception
+def create_advisor(advisor: dict = None):
+    advisor_id = db.create(table='advisor', data=advisor)
+    return {'id': advisor_id}
 
 @handle_exception
 def read_advisors(query=None):
-    return Database.read('db/advisors/dictionary', query)
+    advisors = db.read(table='advisor', query=query)
+    return advisors

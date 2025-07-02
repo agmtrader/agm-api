@@ -16,7 +16,7 @@ COPY requirements.txt .
 # Install the required packages
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Create directory for persistent database storage
+# Create directories for persistent storage
 RUN mkdir -p /app/src/db
 RUN mkdir -p /app/cache
 
@@ -29,17 +29,6 @@ COPY . .
 
 # Make run script executable
 RUN chmod +x run.sh
-
-# Define build arguments for all environment variables
-# JWT Authentication
-ARG JWT_SECRET_KEY
-ENV JWT_SECRET_KEY=${JWT_SECRET_KEY}
-
-# Development Mode
-ARG DEV_MODE
-ARG EXTRA_DEBUG
-ENV DEV_MODE=${DEV_MODE}
-ENV EXTRA_DEBUG=${EXTRA_DEBUG}
 
 # API
 ARG PORT
