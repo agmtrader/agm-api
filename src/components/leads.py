@@ -17,6 +17,12 @@ def create_lead(lead: dict = None, follow_ups: list = None):
     return {'id': lead_id}
 
 @handle_exception
+def create_follow_up(lead_id: str = None, follow_up: dict = None):
+    follow_up['lead_id'] = lead_id
+    follow_up_id = db.create(table='follow_up', data=follow_up)
+    return {'id': follow_up_id}
+
+@handle_exception
 def read_leads(query: dict = None):
     leads = db.read(table='lead', query=query)
     follow_ups = db.read(table='follow_up', query=query)
@@ -40,11 +46,16 @@ def update_lead(query: dict = None, lead: dict = None):
     return {'id': lead_id}
 
 @handle_exception
-def update_follow_up(lead_id: str = None, follow_up: dict = None):
-    follow_up_id = db.update(table='follow_up', query={'lead_id': lead_id}, data=follow_up)
+def update_follow_up(lead_id: str = None, follow_up_id: str = None, follow_up: dict = None):
+    follow_up_id = db.update(table='follow_up', query={'lead_id': lead_id, 'id': follow_up_id}, data=follow_up)
     return {'id': follow_up_id}
 
 @handle_exception
 def delete_lead(query: dict = None):
     lead_id = db.delete(table='lead', query=query)
     return {'id': lead_id}
+
+@handle_exception
+def delete_follow_up(lead_id: str = None, follow_up_id: str = None):
+    follow_up_id = db.delete(table='follow_up', query={'lead_id': lead_id, 'id': follow_up_id})
+    return {'id': follow_up_id}
