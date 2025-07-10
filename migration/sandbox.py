@@ -6,14 +6,14 @@ import string
 from datetime import datetime
 from difflib import SequenceMatcher
 
-url = f'http://127.0.0.1:{os.getenv("PORT")}'
+#url = f'http://127.0.0.1:{os.getenv("PORT")}'
 url = 'https://api.agmtechnology.com'
 
 def access_api(endpoint, method='GET', data=None):
     try:
         auth = requests.post(
             url + '/token', 
-            json={'token': 'vIkY4of6iVgXRwLTMpHM', 'scopes': 'all'},
+            json={'token': 'bdb68ccc-213e-4a44-b481-b11d9d45da02', 'scopes': 'all'},
         )
         
         response = requests.request(
@@ -143,13 +143,13 @@ def process_accounts():
     accounts_df = accounts_df.fillna('')
 
     # Live accounts from new system
-    live_accounts = access_api('/accounts/read', 'POST', {})
+    live_accounts = access_api('/accounts/read', 'POST', {'query': {}})
     live_accounts_df = pd.DataFrame(live_accounts)
     live_accounts_df = live_accounts_df.drop(columns=['id'])
 
     # Merge all accounts
     accounts_df = pd.concat([accounts_df, live_accounts_df], ignore_index=True)
-    accounts_df['AccountID'] = accounts_df['AccountID'].astype(int)
+    accounts_df['AccountID'] = accounts_df['AccountID']
     accounts_df.to_csv('outputs/accounts.csv', index=False)
     return accounts_df
 
@@ -237,7 +237,7 @@ def match_emails_to_clients(emails_df, clients_df):
     
     return matched_df, unmatched_emails_df
 
-tickets_df = process_tickets()
+#tickets_df = process_tickets()
 accounts_df = process_accounts()
 
 """ Process clients """

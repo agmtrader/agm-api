@@ -29,7 +29,6 @@ SQLAlchemy==2.0.35
 # Google Services
 google_api_python_client==2.136.0
 google_auth_oauthlib==1.2.1
-firebase_admin==6.5.0
 google-cloud-secret-manager==2.23.1
 google-generativeai==0.8.5
 
@@ -48,3 +47,6 @@ uuid==1.30
 # Financial Data
 ib_insync==0.9.86
 yfinance==0.2.37
+
+dnspython==2.7.0
+pymongo==4.13.2

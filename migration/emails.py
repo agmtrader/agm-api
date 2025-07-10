@@ -2,7 +2,7 @@ import pandas as pd
 import requests
 
 def access_api(endpoint, method='GET', data=None):
-    url = 'http://127.0.0.1:5000'
+    url = 'https://api.agmtechnology.com'
     try:
         auth = requests.post(
             url + '/token', 
@@ -49,20 +49,15 @@ print("\n")
 print(f"Accounts with no changed email: {len(no_changed_email)}")
 
 # Get set of emails to send
-#no_changed_email_dict = no_changed_email.to_dict(orient='records')
+no_changed_email_dict = no_changed_email.to_dict(orient='records')
 
 # Get set of emails to send and send emails
-#emails_to_send = set()
-#for user in no_changed_email_dict:
-#    emails_to_send.add(user['Ticket_Email'])
-
-# Get advisors and contacts
-#advisors = access_api('/advisors/read', 'POST', {'query': {}})
-#contacts = access_api('/contacts/read', 'POST', {'query': {}})
+emails_to_send = set()
+for user in no_changed_email_dict:
+    emails_to_send.add(user['Email_TicketEmail'])
     
-"""
 print(len(emails_to_send))
-for email in emails_to_send:
-    access_api('/email/send_email/email_change', 'POST', data={'client_email': email, 'advisor_email': ''})
-    print("Email sent to: " + email)
-"""
+
+#for email in emails_to_send:
+#    access_api('/email/send_email/email_change', 'POST', data={'client_email': email, 'advisor_email': ''})
+#    print("Email sent to: " + email)

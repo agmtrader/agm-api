@@ -62,6 +62,7 @@ class Logger:
         logging.getLogger('geventwebsocket').setLevel(logging.ERROR)
         logging.getLogger('pytz').setLevel(logging.ERROR)
         logging.getLogger('ib_insync').setLevel(logging.ERROR)
+        logging.getLogger('pymongo').setLevel(logging.ERROR)
 
     def info(self, message):
         if self.dev_mode:

@@ -1,11 +1,13 @@
 from flask import Blueprint, request
 from src.components.leads import read_leads, update_lead, create_lead, delete_lead, read_follow_ups, update_follow_up, delete_follow_up, create_follow_up
 from src.utils.managers.scope_manager import verify_scope
+from src.utils.response import format_response
 
 bp = Blueprint('leads', __name__)
 
 @bp.route('/create', methods=['POST'])
 @verify_scope('leads/create')
+@format_response
 def create_lead_route():
     payload = request.get_json(force=True)
     lead = payload.get('lead', None)
@@ -14,6 +16,7 @@ def create_lead_route():
 
 @bp.route('/create_follow_up', methods=['POST'])
 @verify_scope('leads/create_follow_up')
+@format_response
 def create_follow_up_route():
     payload = request.get_json(force=True)
     lead_id = payload.get('lead_id', None)
@@ -22,6 +25,7 @@ def create_follow_up_route():
 
 @bp.route('/read', methods=['POST'])
 @verify_scope('leads/read')
+@format_response
 def read_leads_route():
     payload = request.get_json(force=True)
     query = payload.get('query', None)
@@ -29,6 +33,7 @@ def read_leads_route():
 
 @bp.route('/read_follow_ups', methods=['POST'])
 @verify_scope('leads/read_follow_ups')
+@format_response
 def read_follow_ups_route():
     payload = request.get_json(force=True)
     query = payload.get('query', None)
@@ -36,6 +41,7 @@ def read_follow_ups_route():
 
 @bp.route('/update', methods=['POST'])
 @verify_scope('leads/update')
+@format_response
 def update_lead_route():
     payload = request.get_json(force=True)
     lead = payload.get('lead', None)
@@ -44,6 +50,7 @@ def update_lead_route():
 
 @bp.route('/update_follow_up', methods=['POST'])
 @verify_scope('leads/update_follow_up')
+@format_response
 def update_follow_up_route():
     payload = request.get_json(force=True)
     follow_up = payload.get('follow_up', None)
@@ -53,6 +60,7 @@ def update_follow_up_route():
 
 @bp.route('/delete', methods=['POST'])
 @verify_scope('leads/delete')
+@format_response
 def delete_lead_route():
     payload = request.get_json(force=True)
     query = payload.get('query', None)
@@ -60,6 +68,7 @@ def delete_lead_route():
 
 @bp.route('/delete_follow_up', methods=['POST'])
 @verify_scope('leads/delete_follow_up')
+@format_response
 def delete_follow_up_route():
     payload = request.get_json(force=True)
     lead_id = payload.get('lead_id', None)

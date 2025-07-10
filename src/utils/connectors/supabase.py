@@ -107,7 +107,7 @@ class Supabase:
             ibkr_password = Column(Text, nullable=True)
             temporal_email = Column(Text, nullable=True)
             temporal_password = Column(Text, nullable=True)
-            application_id = Column(UUID(as_uuid=True), nullable=False)
+            application_id = Column(Text, nullable=False)
             fee_template = Column(Text, nullable=True)
 
         class AccountRiskProfile(self.Base):

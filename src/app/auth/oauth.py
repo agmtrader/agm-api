@@ -1,10 +1,12 @@
 from flask import Blueprint, request
 from src.utils.logger import logger
 from src.components.users import read_user_by_credentials, create_user, read_users
+from src.utils.response import format_response
 
 bp = Blueprint('oauth', __name__)
 
 @bp.route('/login', methods=['POST'])
+@format_response
 def login():
     logger.announcement('OAuth2 login request.')
     payload = request.get_json(force=True)
@@ -14,6 +16,7 @@ def login():
     return read_user_by_credentials(email, password)
 
 @bp.route('/create', methods=['POST'])
+@format_response
 def create():
     logger.announcement('OAuth2 create request.')
     payload = request.get_json(force=True)
