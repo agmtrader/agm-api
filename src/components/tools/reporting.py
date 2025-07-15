@@ -6,11 +6,11 @@ from io import BytesIO
 import base64
 import yfinance as yf
 import time
-from src.utils.flex_query import fetchFlexQueries
 from src.components.accounts import read_accounts
 from src.utils.connectors.drive import GoogleDrive
 import pytz
 from datetime import datetime
+from src.components.tools.trade_tickets import fetchFlexQueries
 
 logger.announcement('Initializing Reporting Service', type='info')
 Drive = GoogleDrive()
@@ -18,75 +18,39 @@ cst = pytz.timezone('America/Costa_Rica')
 cst_time = datetime.now(cst)
 logger.announcement('Initialized Reporting Service', type='success')
 
+def get_cash_report():
+    """
+    Get the cash report.
+    
+    :return: Response object with cash report or error message
+    """
+    cash = Drive.download_file(file_id='1aHOXKbjIrgaqwBrnl22sFMip6M52xSOk', parse=True)
+    return cash
+
 def get_clients_report():
     """
     Get the clients report.
     
     :return: Response object with clients report or error message
     """
-    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
-    resources = Drive.get_files_in_folder(resources_folder_id)
+    accounts = read_accounts(query={})
+    clients = Drive.download_file(file_id='1-LhIuZB1mF-TSe9hlyvGyhGmGBIAogCU', parse=True)
+    return {'accounts': accounts, 'clients': clients}
 
-    # Filter by Clients file
-    clients_file_ids = [file['id'] for file in resources if 'ibkr_clients.csv' in file['name']]
-    if len(clients_file_ids) != 1:
-        raise Exception('Error with clients file')
-    clients_file_id = clients_file_ids[0]
-
-    # Download nav file
-    nav_file_ids = [file['id'] for file in resources if 'ibkr_nav_in_base.csv' in file['name']]
-    if len(nav_file_ids) != 1:
-        raise Exception('Error with nav file')
-    nav_file_id = nav_file_ids[0]
-
-    # Download clients file
-    clients_df = pd.DataFrame(Drive.download_file(file_id=clients_file_id, parse=True))
-
-    # Download nav file
-    nav_df = pd.DataFrame(Drive.download_file(file_id=nav_file_id, parse=True))
-
-    accounts = read_accounts()
-    accounts_df = pd.DataFrame(accounts)
-
-    # Add new columns to clients dataframe
-    clients_df['AccountHolder'] = clients_df['First Name'] + ' ' + clients_df['Last Name']
-    clients_df['NAV'] = clients_df['Account ID'].map(nav_df.set_index('ClientAccountID')['Total'])
-
-    clients_df = clients_df.fillna('')
-    nav_df = nav_df.fillna('')
-    accounts_df = accounts_df.fillna('')
-
-    return {'clients': clients_df.to_dict(orient='records'), 'accounts': accounts_df.to_dict(orient='records')}
-
-def get_accrued_interest_report():
-
-    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
-    resources = Drive.get_files_in_folder(resources_folder_id)
-
-    # Filter by Open Positions file
-    open_positions_ids = [file['id'] for file in resources if 'ibkr_open_positions_template.csv' in file['name']]
-    if len(open_positions_ids) != 1:
-        raise Exception('Error with open positions file')
-    open_positions_id = open_positions_ids[0]
-
-    # Download Open Positions file
-    open_positions = Drive.download_file(file_id=open_positions_id, parse=True)
-    open_positions_df = pd.DataFrame(open_positions)
-    open_positions_df = open_positions_df.fillna('')
-
-    return open_positions_df.to_dict(orient='records')
+def run():
+    """
+    Run the ETL pipeline.
+    
+    :return: Response object with success message or error message
+    """
+    try:
+        extract()
+        transform()
+    except Exception as e:
+        raise Exception(f'Error running ETL pipeline: {e}')
+    return {'status': 'success'}
 
 """
-Extracts reports from various sources and prepare them for processing.
-
-This function performs the following steps:
-1. Reset the batch folder
-2. Fetch Flex Queries
-3. Upload Flex Queries to the batch folder
-4. Rename files in the batch folder
-5. Sort files to respective backup folders
-6. Return the list of processed files in the batch folder
-
 TODO:
 - Fetch and upload the other four sources:
     - Clients List
@@ -95,7 +59,7 @@ TODO:
     - Tasks for Subaccounts
 
 """
-def extract():
+def extract() -> dict:
     logger.announcement('Generating Reports.', type='info')
     batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
     backups_folder_id = '1d9RShyGidP04XdnH87pUHsADghgOiWj3'
@@ -110,7 +74,7 @@ def extract():
     for key, value in flex_queries.items():
         Drive.upload_file(file_name=key, mime_type='text/csv', file_data=value, parent_folder_id=batch_folder_id)
     logger.announcement('Flex Queries uploaded to batch folder.', type='success')
-    time.sleep(2)
+    time.sleep(1)
 
     # Rename files in batch folder
     logger.announcement('Renaming files in batch folder.', type='info')
@@ -123,7 +87,30 @@ def extract():
     logger.announcement(f'{number_sorted} files sorted to backup folders.', type='success')
 
     logger.announcement('Reports successfully extracted.', type='success')
-    return {'status': 'success', 'number_renamed': number_renamed, 'number_sorted': number_sorted}
+    return {'status': 'success'}
+
+def transform() -> dict:
+    logger.announcement('Transforming reports.', type='info')
+    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+
+    # Clear resources folder
+    logger.announcement('Clearing resources folder.', type='info')
+    Drive.clear_folder(folder_id=resources_folder_id)
+    logger.announcement('Resources folder cleared.', type='success')
+
+    # Process files in each backup folder
+    logger.announcement('Processing files.', type='info')
+    for report_type, config in report_configs.items():
+        logger.announcement(f'Processing {report_type.capitalize()} file.', type='info')
+        process_report(config, resources_folder_id)
+    logger.announcement('Files processed.', type='success')
+
+    # Process finance data
+    logger.announcement('Fetching finance data.', type='info')
+    get_finance_data(resources_folder_id)
+
+    logger.announcement('Reports successfully transformed.', type='success')
+    return {'status': 'success'}
 
 """
 EXTRACT HELPERS
@@ -185,8 +172,7 @@ def sort_files_to_folders(batch_folder_id, backups_folder_id):
     for folder_name in folder_names:
         folder_info = Drive.get_folder_info(backups_folder_id, folder_name)
         folders_info[folder_name] = folder_info
-        
-
+    
     # Assign folder info to variables
     subaccounts_folder_info = folders_info['TasksForSubaccounts']
     contacts_folder_info = folders_info['ContactListSummary']
@@ -232,37 +218,6 @@ def sort_files_to_folders(batch_folder_id, backups_folder_id):
     return count
 
 """
-Transform the extracted reports for further processing.
-
-This function performs the following steps:
-1. Reset the resources folder
-2. Process each report according to its configuration (or default processing) and store in resources folder
-3. Return the list of processed files in the resources folder
-"""
-def transform():
-    logger.announcement('Transforming reports.', type='info')
-    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
-
-    # Clear resources folder
-    logger.announcement('Clearing resources folder.', type='info')
-    Drive.clear_folder(folder_id=resources_folder_id)
-    logger.announcement('Resources folder cleared.', type='success')
-
-    # Process files in each backup folder
-    logger.announcement('Processing files.', type='info')
-    for report_type, config in report_configs.items():
-        logger.announcement(f'Processing {report_type.capitalize()} file.', type='info')
-        process_report(config, resources_folder_id)
-    logger.announcement('Files processed.', type='success')
-
-    # Process finance data
-    logger.announcement('Fetching finance data.', type='info')
-    get_finance_data(resources_folder_id)
-
-    logger.announcement('Reports successfully transformed.', type='success')
-    return {'status': 'success'}
-
-"""
 TRANSFORM HELPERS
 """
 def process_report(config, resources_folder_id):
@@ -300,9 +255,6 @@ def process_report(config, resources_folder_id):
     Drive.upload_file(file_name=output_filename, mime_type='text/csv', file_data=file_dict, parent_folder_id=resources_folder_id)
     return
 
-"""
-REPORT PROCESSING FUNCTIONS
-"""
 def process_rtd_template(df):
     """
     Process the RTD file.
@@ -358,12 +310,8 @@ def process_clients_file(sheets_df):
     :param df: Input dataframe from Excel file
     :return: Processed dataframe
     """
-    concatenated_df = pd.DataFrame()
-    for sheet_name, sheet_data in sheets_df.items():
-        sheet_df = pd.DataFrame(sheet_data)
-        sheet_df['MasterAccount'] = sheet_name
-        concatenated_df = pd.concat([concatenated_df, sheet_df])
-    return concatenated_df
+    print(sheets_df)
+    return sheets_df
 
 # TODO TEMPLATE SAVE TWICE: (template up to AX)/(template up to CL)
 def process_open_positions_template(df):
@@ -542,14 +490,14 @@ report_configs = {
         'output_filename': 'ibkr_rtd_template.csv',
         'process_func': process_rtd_template,
     },
-    'client_fees': {
-        'folder_id': '1OnSEo8B2VUF5u-VkhtzZVIzx6ABe_YB7',
-        'output_filename': 'ibkr_client_fees.csv',
-    },
     'open_positions': {
         'folder_id': '1JL4__mr1XgOtnesYihHo-netWKMIGMet',
         'output_filename': 'ibkr_open_positions_template.csv',
         'process_func': process_open_positions_template,
+    },
+    'client_fees': {
+        'folder_id': '1OnSEo8B2VUF5u-VkhtzZVIzx6ABe_YB7',
+        'output_filename': 'ibkr_client_fees.csv',
     },
     'nav': {
         'folder_id': '1WgYA-Q9mnPYrbbLfYLuJZwUIWBYjiD4c',

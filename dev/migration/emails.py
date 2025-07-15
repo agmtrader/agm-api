@@ -56,8 +56,8 @@ emails_to_send = set()
 for user in no_changed_email_dict:
     emails_to_send.add(user['Email_TicketEmail'])
     
-print(len(emails_to_send))
+print('Emails to send: ' + str(len(emails_to_send)))
 
-#for email in emails_to_send:
-#    access_api('/email/send_email/email_change', 'POST', data={'client_email': email, 'advisor_email': ''})
-#    print("Email sent to: " + email)
+for email in emails_to_send:
+    access_api('/email/send_email/email_change', 'POST', data={'client_email': email, 'advisor_email': ''})
+    print("Email sent to: " + email)

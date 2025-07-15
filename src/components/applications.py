@@ -30,4 +30,6 @@ def send_to_ibkr(application: dict = None) -> dict:
     logger.info(f"{application['customer']}")
     logger.info(f"{application['accounts']}")
     logger.info(f"{application['users']}")
+    for document in application['documents']:
+        logger.info(f"{document['attachedFile']['fileName']}")
     return ibkr_web_api.send_to_ibkr(application={'application':application})

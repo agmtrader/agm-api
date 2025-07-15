@@ -140,10 +140,9 @@ class GoogleDrive:
   @handle_exception
   def clear_folder(self, folder_id):
       try:
-        response = self.get_files_in_folder(folder_id)
-        files = json.loads(response.data.decode('utf-8'))
+        files = self.get_files_in_folder(folder_id)
       except Exception as e:
-        raise Exception(f'Error fetching files in folder.')
+        raise Exception(f'Error fetching files in folder: {folder_id}')
 
       if len(files) > 0:
           for f in files:
@@ -322,8 +321,7 @@ class GoogleDrive:
     try:
         request = self.service.files().get_media(fileId=file_id)
 
-        file_info_response = self.get_file_info_by_id(file_id)
-        file_info = json.loads(file_info_response.data.decode('utf-8'))
+        file_info = self.get_file_info_by_id(file_id)
         
         mime_type = file_info['mimeType']
 

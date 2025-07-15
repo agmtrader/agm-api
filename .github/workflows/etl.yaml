@@ -1,0 +1,15 @@
+name: Daily ETL Pipeline
+
+on:
+  schedule:
+    - cron: '0 7 * * *'  # Every day at 7:00 AM UTC
+  workflow_dispatch:       # Allows manual trigger
+
+jobs:
+  etl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run ETL Pipeline
+        run: |
+          curl -H "Authorization: Bearer ${{ secrets.AUTHENTICATION_TOKENS }}" \
+               -X GET https://api.agmtechnology.com/reporting/run || exit 1
