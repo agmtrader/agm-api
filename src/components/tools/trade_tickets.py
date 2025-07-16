@@ -208,7 +208,7 @@ def fetchFlexQueries(queryIds):
             flex_queries[queryId] = flex_query_dict
         except Exception as e:
             logger.error(f'Flex Query Empty for queryId {queryId}: {str(e)}')
-            raise Exception(f'Flex Query Empty for queryId {queryId}: {str(e)}')
+            continue
         
     return flex_queries
 
@@ -227,16 +227,27 @@ def getFlexQuery(token, queryId):
         logger.info('Requesting Flex Query Template...')
         generatedTemplateURL = "".join([url, token, '&q=' + queryId, version])
         generatedTemplateResponse = rq.get(url=generatedTemplateURL)
-        while generatedTemplateResponse.status_code != 200 and retry_count < max_retries:
+
+        # Retry while the response contains an ErrorCode (IBKR returns 200 even on errors)
+        while ('ErrorCode' in generatedTemplateResponse.text) and retry_count < max_retries:
             logger.warning(f'Flex Query Template Generation Failed. Preview: {generatedTemplateResponse.text[0:100]}')
             logger.info(f'Retrying... Attempt {retry_count} of {max_retries}')
             time.sleep(retry_delay)
             generatedTemplateResponse = rq.get(url=generatedTemplateURL)
             retry_count += 1
 
-        if generatedTemplateResponse.status_code != 200:
-            logger.error(f'Failed to get Flex Query Template after {max_retries} attempts. Status: {generatedTemplateResponse.status_code}')
-            raise Exception(f'Failed to get Flex Query Template after {max_retries} attempts. Status: {generatedTemplateResponse.status_code}')
+        # After retries, check again for ErrorCode and fail gracefully
+        if 'ErrorCode' in generatedTemplateResponse.text:
+            try:
+                error_tree = ET.ElementTree(ET.fromstring(generatedTemplateResponse.text))
+                error_root = error_tree.getroot()
+                error_code = error_root.findtext('ErrorCode')
+                error_message = error_root.findtext('ErrorMessage')
+                logger.error(f'Flex Query Template Generation Failed. Error Code: {error_code}, Message: {error_message}')
+                raise Exception(f'Flex Query Template Generation Failed. Error Code: {error_code}, Message: {error_message}')
+            except Exception:
+                logger.error(f'Flex Query Template Generation Failed. Error: {generatedTemplateResponse.text[0:200]}')
+                raise Exception(f'Flex Query Template Generation Failed. Error: {generatedTemplateResponse.text[0:200]}')
 
     except Exception as e:
         logger.error(f'Error requesting Flex Query Template: {str(e)}')

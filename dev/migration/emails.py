@@ -25,7 +25,8 @@ def access_api(endpoint, method='GET', data=None):
         raise
 
 # Read clients from csv
-all_accounts_df = pd.read_csv('outputs/all.csv')
+accounts = access_api('/accounts/read', 'POST', {'query': {}})
+all_accounts_df = pd.DataFrame(accounts)
 all_accounts_df = all_accounts_df.fillna('')
 
 # Filter for open accounts

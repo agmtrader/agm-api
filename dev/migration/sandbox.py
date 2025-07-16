@@ -138,20 +138,12 @@ def process_tickets():
 def process_accounts():
     """ Process accounts """
 
-    # Accounts from old system
-    accounts_df = pd.read_csv('sources/accounts.csv')
-    accounts_df = accounts_df.fillna('')
-
     # Live accounts from new system
     live_accounts = access_api('/accounts/read', 'POST', {'query': {}})
     live_accounts_df = pd.DataFrame(live_accounts)
     live_accounts_df = live_accounts_df.drop(columns=['id'])
-
-    # Merge all accounts
-    accounts_df = pd.concat([accounts_df, live_accounts_df], ignore_index=True)
-    accounts_df['AccountID'] = accounts_df['AccountID']
-    accounts_df.to_csv('outputs/accounts.csv', index=False)
-    return accounts_df
+    live_accounts_df.to_csv('outputs/accounts.csv', index=False)
+    return live_accounts_df
 
 def match_emails_to_clients(emails_df, clients_df):
     # Create lookup dictionaries for faster matching
