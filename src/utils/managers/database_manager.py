@@ -47,8 +47,8 @@ class DatabaseManager:
             raise Exception(f"Tables in models but missing in database: {extra_in_models}")
         
         # Check detailed column differences for each table
-        #for table_name in set(db_tables) & set(model_tables):
-            #self._validate_table_schema(inspector, table_name)
+        for table_name in set(db_tables) & set(model_tables):
+            self._validate_table_schema(inspector, table_name)
         
         try:
             self.base.metadata.create_all(self.engine)

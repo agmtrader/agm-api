@@ -1,6 +1,7 @@
 from src.utils.exception import handle_exception
 from src.utils.connectors.supabase import db
 from src.utils.logger import logger
+from src.components.contacts import create_contact
 
 logger.announcement('Initializing Users Service', type='info')
 logger.announcement('Initialized Users Service', type='success')
@@ -8,6 +9,15 @@ logger.announcement('Initialized Users Service', type='success')
 @handle_exception
 def create_user(user: dict = None):
     user_id = db.create(table='user', data=user)
+    # Create contact for the user
+    contact_data = {
+        'name': user.get('name', ''),
+        'email': user.get('email', ''),
+        'user_id': user_id
+    }
+    contact_result = create_contact(contact=contact_data)
+    contact_id = contact_result.get('id')
+    db.update(table='user', data={'contact_id': contact_id}, query={'id': user_id})
     return user_id
 
 @handle_exception

@@ -59,7 +59,7 @@ class Gmail:
     )
     logger.announcement(f'Successfully sent {email_template} email to: {client_email}', type='success')
     return sent_message['id']
-
+  
   def create_html_email(self, content, subject, client_email, email_template, bcc, cc):
     """
     Create an HTML email that can handle both plain text and dictionary content.
@@ -129,3 +129,31 @@ class Gmail:
     logger.success(f'Successfully created {email_template} email with subject: {subject}')
     raw_message = base64.urlsafe_b64encode(final_message.as_bytes()).decode()
     return {'raw': raw_message}
+
+  @handle_exception
+  def send_account_access_email(self, content, client_email):
+    subject = 'Accesos a su nueva cuenta AGM'
+    email_template = 'account_access'
+    return self.send_email(content, client_email, subject, email_template)
+
+  @handle_exception
+  def send_trade_ticket_email(self, content, client_email):
+    subject = 'Confirmación de Transacción'
+    email_template = 'trade_ticket'
+    return self.send_email(content, client_email, subject, email_template)
+
+  @handle_exception
+  def send_email_change_email(self, client_email, advisor_email):
+    subject = 'Urgente: Actualización de Correo Electrónico'
+    email_template = 'email_change'
+    bcc = ""
+    cc = f"jc@agmtechnology.com,hc@agmtechnology.com,{advisor_email}"
+    return self.send_email("", client_email, subject, email_template, bcc=bcc, cc=cc)
+
+  @handle_exception
+  def send_two_factor_reminder_email(self, content, client_email):
+    subject = 'Urgente: Activación de Autenticación de Dos Factores'
+    email_template = 'two_factor_reminder'
+    bcc = "cr@agmtechnology.com,aa@agmtechnology.com,rc@agmtechnology.com"
+    cc = "jc@agmtechnology.com,hc@agmtechnology.com"
+    return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)

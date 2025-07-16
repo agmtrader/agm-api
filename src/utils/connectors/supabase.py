@@ -68,7 +68,7 @@ class Supabase:
             contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            code = Column(Integer, nullable=False)
+            code = Column(Integer, nullable=False, unique=True)
             agency = Column(Text, nullable=False)
             hierarchy1 = Column(Text, nullable=False)
             hierarchy2 = Column(Text, nullable=False)
@@ -102,13 +102,14 @@ class Supabase:
             user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            ibkr_account_number = Column(Text, nullable=False)
+            ibkr_account_number = Column(Text, nullable=False, unique=True)
             ibkr_username = Column(Text, nullable=True)
             ibkr_password = Column(Text, nullable=True)
             temporal_email = Column(Text, nullable=True)
             temporal_password = Column(Text, nullable=True)
-            application_id = Column(Text, nullable=False)
+            application_id = Column(Text, nullable=True)
             fee_template = Column(Text, nullable=True)
+            advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
 
         class AccountRiskProfile(self.Base):
             __tablename__ = 'account_risk_profile'

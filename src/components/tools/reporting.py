@@ -9,8 +9,60 @@ import time
 from src.components.accounts import read_accounts
 from src.utils.connectors.drive import GoogleDrive
 import pytz
-from datetime import datetime
 from src.components.tools.trade_tickets import fetchFlexQueries
+import pandas as pd
+import os
+import sys
+
+ratings = {
+    # S&P Ratings
+    "AAA": {"Short-term": "A-1+", "NAIC": 1, "Class1": "Prime", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 1, "S&P Equivalent": "AAA", "Source": "S&P"},
+    "AA+": {"Short-term": "A-1+", "NAIC": 1, "Class1": "High grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 2, "S&P Equivalent": "AA+", "Source": "S&P"},
+    "AA": {"Short-term": "A-1+", "NAIC": 1, "Class1": "High grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 3, "S&P Equivalent": "AA", "Source": "S&P"},
+    "AA-": {"Short-term": "A-1+", "NAIC": 1, "Class1": "High grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 4, "S&P Equivalent": "AA-", "Source": "S&P"},
+    "A+": {"Short-term": "A-1", "NAIC": 1, "Class1": "Upper medium grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 5, "S&P Equivalent": "A+", "Source": "S&P"},
+    "A": {"Short-term": "A-1", "NAIC": 1, "Class1": "Upper medium grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 6, "S&P Equivalent": "A", "Source": "S&P"},
+    "A-": {"Short-term": "A-2", "NAIC": 1, "Class1": "Upper medium grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 7, "S&P Equivalent": "A-", "Source": "S&P"},
+    "BBB+": {"Short-term": "A-2", "NAIC": 2, "Class1": "Lower medium grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 8, "S&P Equivalent": "BBB+", "Source": "S&P"},
+    "BBB": {"Short-term": "A-3", "NAIC": 2, "Class1": "Lower medium grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 9, "S&P Equivalent": "BBB", "Source": "S&P"},
+    "BBB-": {"Short-term": "B", "NAIC": 3, "Class1": "Lower medium grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 10, "S&P Equivalent": "BBB-", "Source": "S&P"},
+    "BB+": {"Short-term": "B", "NAIC": 3, "Class1": "Non-investment grade", "Class2": "Non-investment grade", "Class3": "Non-investment grade", "Level": 11, "S&P Equivalent": "BB+", "Source": "S&P"},
+    "BB": {"Short-term": "B", "NAIC": 3, "Class1": "Speculative", "Class2": "AKA high-yield bonds", "Class3": "Non-investment grade", "Level": 12, "S&P Equivalent": "BB", "Source": "S&P"},
+    "BB-": {"Short-term": "B", "NAIC": 3, "Class1": "Speculative", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 13, "S&P Equivalent": "BB-", "Source": "S&P"},
+    "B+": {"Short-term": "B", "NAIC": 4, "Class1": "Highly speculative", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 14, "S&P Equivalent": "B+", "Source": "S&P"},
+    "B": {"Short-term": "B", "NAIC": 4, "Class1": "Highly speculative", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 15, "S&P Equivalent": "B", "Source": "S&P"},
+    "B-": {"Short-term": "B", "NAIC": 4, "Class1": "Highly speculative", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 16, "S&P Equivalent": "B-", "Source": "S&P"},
+    "CCC+": {"Short-term": "C", "NAIC": 5, "Class1": "Substantial risks", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 17, "S&P Equivalent": "CCC+", "Source": "S&P"},
+    "CCC": {"Short-term": "C", "NAIC": 5, "Class1": "Extremely speculative", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 18, "S&P Equivalent": "CCC", "Source": "S&P"},
+    "CCC-": {"Short-term": "C", "NAIC": 5, "Class1": "Default imminent with little prospect for recovery", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 19, "S&P Equivalent": "CCC-", "Source": "S&P"},
+    "CC": {"Short-term": "C", "NAIC": 6, "Class1": "Default imminent with little prospect for recovery", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 20, "S&P Equivalent": "CC", "Source": "S&P"},
+    "C": {"Short-term": "C", "NAIC": 6, "Class1": "In default", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 21, "S&P Equivalent": "C", "Source": "S&P"},
+    "D": {"Short-term": "/", "NAIC": 6, "Class1": "In default", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 22, "S&P Equivalent": "D", "Source": "S&P"},
+
+    # Moody's Ratings
+    "Aaa": {"Short-term": "P-1", "NAIC": 1, "Class1": "Prime", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 1, "S&P Equivalent": "AAA", "Source": "Moody's"},
+    "Aa1": {"Short-term": "P-1", "NAIC": 1, "Class1": "High grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 2, "S&P Equivalent": "AA+", "Source": "Moody's"},
+    "Aa2": {"Short-term": "P-1", "NAIC": 1, "Class1": "High grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 3, "S&P Equivalent": "AA", "Source": "Moody's"},
+    "Aa3": {"Short-term": "P-1", "NAIC": 1, "Class1": "High grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 4, "S&P Equivalent": "AA-", "Source": "Moody's"},
+    "A1": {"Short-term": "P-1", "NAIC": 1, "Class1": "Upper medium grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 5, "S&P Equivalent": "A+", "Source": "Moody's"},
+    "A2": {"Short-term": "P-1", "NAIC": 1, "Class1": "Upper medium grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 6, "S&P Equivalent": "A", "Source": "Moody's"},
+    "A3": {"Short-term": "P-2", "NAIC": 1, "Class1": "Upper medium grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 7, "S&P Equivalent": "A-", "Source": "Moody's"},
+    "Baa1": {"Short-term": "P-2", "NAIC": 2, "Class1": "Lower medium grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 8, "S&P Equivalent": "BBB+", "Source": "Moody's"},
+    "Baa2": {"Short-term": "P-3", "NAIC": 2, "Class1": "Lower medium grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 9, "S&P Equivalent": "BBB", "Source": "Moody's"},
+    "Baa3": {"Short-term": "P-3", "NAIC": 3, "Class1": "Lower medium grade", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 10, "S&P Equivalent": "BBB-", "Source": "Moody's"},
+    "Ba1": {"Short-term": "Not prime", "NAIC": 3, "Class1": "Non-investment grade", "Class2": "Non-investment grade", "Class3": "Non-investment grade", "Level": 11, "S&P Equivalent": "BB+", "Source": "Moody's"},
+    "Ba2": {"Short-term": "Not prime", "NAIC": 3, "Class1": "Speculative", "Class2": "AKA high-yield bonds", "Class3": "Non-investment grade", "Level": 12, "S&P Equivalent": "BB", "Source": "Moody's"},
+    "Ba3": {"Short-term": "Not prime", "NAIC": 4, "Class1": "Speculative", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 13, "S&P Equivalent": "BB-", "Source": "Moody's"},
+    "B1": {"Short-term": "Not prime", "NAIC": 4, "Class1": "Highly speculative", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 14, "S&P Equivalent": "B+", "Source": "Moody's"},
+    "B2": {"Short-term": "Not prime", "NAIC": 4, "Class1": "Highly speculative", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 15, "S&P Equivalent": "B", "Source": "Moody's"},
+    "B3": {"Short-term": "Not prime", "NAIC": 4, "Class1": "Highly speculative", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 16, "S&P Equivalent": "B-", "Source": "Moody's"},
+    "Caa1": {"Short-term": "Not prime", "NAIC": 5, "Class1": "Substantial risks", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 17, "S&P Equivalent": "CCC+", "Source": "Moody's"},
+    "Caa2": {"Short-term": "Not prime", "NAIC": 5, "Class1": "Extremely speculative", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 18, "S&P Equivalent": "CCC", "Source": "Moody's"},
+    "Caa3": {"Short-term": "Not prime", "NAIC": 5, "Class1": "Default imminent with little prospect for recovery", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 19, "S&P Equivalent": "CCC-", "Source": "Moody's"},
+    "Ca": {"Short-term": "Not prime", "NAIC": 6, "Class1": "Default imminent with little prospect for recovery", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 20, "S&P Equivalent": "CC", "Source": "Moody's"},
+    "C": {"Short-term": "Not prime", "NAIC": 6, "Class1": "In default", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 21, "S&P Equivalent": "C", "Source": "Moody's"},
+    "D": {"Short-term": "Not prime", "NAIC": 6, "Class1": "In default", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 22, "S&P Equivalent": "D", "Source": "Moody's"},
+}
 
 logger.announcement('Initializing Reporting Service', type='info')
 Drive = GoogleDrive()
@@ -34,8 +86,13 @@ def get_clients_report():
     :return: Response object with clients report or error message
     """
     accounts = read_accounts(query={})
-    clients = Drive.download_file(file_id='1-LhIuZB1mF-TSe9hlyvGyhGmGBIAogCU', parse=True)
-    return {'accounts': accounts, 'clients': clients}
+    clients = Drive.download_file(file_id='1jTxLni5rgheKlXYyBqw1xZsJYBv52r9O', parse=True)
+    accounts_df = pd.DataFrame(accounts)
+    clients_df = pd.DataFrame(clients)
+
+    consolidated_df = pd.merge(clients_df, accounts_df, left_on='Account ID', right_on='ibkr_account_number', how='left')
+    consolidated_df = consolidated_df.fillna('')
+    return {'consolidated': consolidated_df.to_dict(orient='records')}
 
 def run():
     """
@@ -51,6 +108,11 @@ def run():
     return {'status': 'success'}
 
 """
+IBKR Clients -> Advisor with Account ID
+Alias Name -> format for alias
+NAV -> format for nav
+Clients -> Advisor with Account ID
+
 TODO:
 - Fetch and upload the other four sources:
     - Clients List
@@ -66,7 +128,12 @@ def extract() -> dict:
 
     # Fetch Flex Queries
     logger.announcement('Fetching Flex Queries.', type='info')
-    flex_queries = fetchFlexQueries(['732383', '734782', '742588'])
+    try:
+        flex_queries = fetchFlexQueries(['732383', '734782', '742588'])
+    except Exception as e:
+        logger.error(f'Error fetching Flex Queries: {e}')
+        raise Exception(f'Error fetching Flex Queries: {e}')
+
     logger.announcement('Flex Queries fetched.', type='success')
 
     # Upload Flex Queries to batch folder
@@ -262,45 +329,134 @@ def process_rtd_template(df):
     :param df: Input dataframe
     :return: Processed dataframe
     """
-    # Upload the full file
-    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
-    full_dict = df.to_dict(orient='records')
-    Drive.upload_file(file_name='ibkr_rtd.csv', mime_type='text/csv', file_data=full_dict, parent_folder_id=resources_folder_id)
     
-    # Sort the dataframe in the same order as the excel template
-    template_columns = [
-        'Symbol',
-        'Company Name',
-        'Financial Instrument',
-        'Position',
-        'Avg Price',
-        'Bid Size',
-        'Bid',
-        'Daily P&L',
-        'Ask',
-        'Ask Size',
-        'Ask Yield',
-        'Duration %  ',
-        'Sector',
-        'Industry',
-        'Maturity',
-        'Next Option Date',
-        'Coupon',
-        'Change',
-        'Change %',
-        'Last',
-        'Ticker Action',
-        'Bid Yield',
-        'Ratings',
-        'Payment Frequency',
-        'Issuer Country '
-    ]
-    logger.info(f'{df}')
+    df = df[['Symbol',
+            'Financial Instrument',
+            'Company Name',
+            'Bid Size',
+            'Bid',
+            'Bid Yield',
+            'Ask Size',
+            'Ask',
+            'Ask Yield',
+            'Industry',
+            'Sector',
+            #'Duration %  ',
+            'Current Yield',
+            'Maturity',
+            'Next Option Date',
+            'Coupon',
+            'Last',
+            'Ratings',
+            'Payment Frequency',
+            'Trading Currency',
+            'Issue Date',
+            'Last Trading Date',
+            #'Face Value',
+            #"Moody's",
+            #'S&P',
+            #'Bond Features',
+            #'Time-To-Maturity (TTM)'
+            ]]
+    
+    numeric_columns = ['Bid',
+            'Ask',
+            'Bid Yield',
+            'Ask Yield',
+            'Bid Size',
+            'Ask Size',
+            'Current Yield',
+            #'Duration %  ',
+            'Coupon',
+            'Last',
+            #'Face Value',
+            #'Time-To-Maturity (TTM)'
+            ]
 
-    df_rtd_template = df[template_columns].copy()
-    df_rtd_template['Symbol'] = df_rtd_template['Symbol'].astype(str)
-    df_rtd_template = df_rtd_template[df_rtd_template['Symbol'].str.contains('IBCID')]
-    return df_rtd_template
+    for column in numeric_columns:
+        df[column] = pd.to_numeric(df[column], errors='coerce')
+
+    date_columns = [
+        'Next Option Date',
+        'Last Trading Date',
+        'Maturity',
+        'Issue Date'
+        ]
+    
+    for column in date_columns:
+        try:
+            df[column] = pd.to_datetime(df[column], errors='coerce')
+        except:
+            df[column] = df[column]
+
+    df['CY'] = df.apply(lambda row: get_current_yield(row['Coupon'], row['Last'], row['Ask'], row['Bid']), axis=1)
+    df['Price'] = df.apply(lambda row: get_first_valid_price(row['Ask'], row['Bid'], row['Last']), axis=1)
+    df['Frequency'] = df['Payment Frequency'].apply(get_payment_frequency_from_text)
+    df['Price Cluster'] = df['Price'].apply(get_bond_price_cluster)
+    df['Size Preasure'] = df.apply(lambda row: get_size_preasure(row['Ask Size'], row['Bid Size']), axis=1)
+    df['Duration'] = df.apply(lambda row: get_bond_duration(row['Maturity'], 
+        row['Coupon']/100, # Convert coupon percentage to decimal
+        row['Price'],
+        row['Frequency']), 
+        axis=1)
+    
+    # Create new columns for Moody's and S&P ratings
+    df['Moodys'], df['SP'] = zip(*df['Ratings'].apply(extract_rating_from_text))
+    df['Moodys'] = df['Moodys'].apply(clean_rating_text)
+    df['SP'] = df['SP'].apply(clean_rating_text)
+
+    # Extract first chars before space from Financial Instrument column
+    df['Issuer'] = df['Financial Instrument'].str.split().str[0]
+
+    #Calculate years to maturity
+    today = pd.Timestamp.today()
+    df['Years to Maturity'] = df.apply(lambda row: get_years_to_date(today, row['Maturity']), axis=1)
+    df['YTM'] = df.apply(lambda row: get_bond_ytm(row['Price'], row['Coupon'], row['Years to Maturity']), axis=1)
+
+    def get_rating_level(rating):
+        """
+        Get the level for a single rating from the ratings dictionary.
+        Returns None if rating is not found.
+        """
+        if pd.isna(rating) or rating not in ratings:
+            return None
+        return ratings[rating]["Level"]
+
+    # Get levels for both SP and Moodys ratings
+    df['SP_Level'] = df['SP'].apply(get_rating_level)
+    df['Moodys_Level'] = df['Moodys'].apply(get_rating_level)
+
+    # Get the lowest (highest number) level between SP and Moodys
+    df['Rating Level'] = df[['SP_Level', 'Moodys_Level']].max(axis=1)
+
+    # Drop the temporary columns
+    df = df.drop(['SP_Level', 'Moodys_Level'], axis=1)
+
+
+    # Create a new dictionary with only S&P ratings
+    sp_dict = {rating: info for rating, info in ratings.items() if info["Source"] == "S&P"}
+
+    # Create S&P Equivalent column by mapping Rating Level to S&P rating
+    def get_sp_equivalent(level):
+        """
+        Get the S&P equivalent rating for a given level from the ratings dictionary.
+        Returns None if level is not found.
+        """
+        if pd.isna(level):
+            return None
+        
+        # Find the first rating entry that matches the level
+        for rating, info in ratings.items():
+            if info["Level"] == level:# and info["Source"] == "S&P":
+                return rating
+        return None
+
+    df['S&P Equivalent'] = df['Rating Level'].apply(get_sp_equivalent)
+
+    # Filter df to only include rows where Symbol contains 'IBCID'
+    df_ibcid = df[df['Symbol'].str.contains('IBCID', na=False)]
+
+    return df_ibcid
 
 # TODO IBKR CLIENTS -> Filename column
 def process_clients_file(sheets_df):
@@ -508,6 +664,609 @@ report_configs = {
 """
 HELPER FUNCTIONS
 """
+
+def cluster_bonds_by_price(DataFrame, PriceColumn):
+    """
+    Adds a cluster column to a bond DataFrame based on price ranges.
+    
+    Args:
+        df (pd.DataFrame): DataFrame containing bond data with 'Price' column
+        
+    Returns:
+        pd.DataFrame: DataFrame with added 'Cluster' column
+    """
+    # Define price bins and labels
+    bins = [0, 80, 95, 105, 120, float('inf')]
+    labels = ['Deep Discount', 'Discount', 'Par', 'Premium', 'High Premium']
+    
+    # Add cluster column based on price ranges
+    DataFrame['Price Cluster'] = pd.cut(DataFrame[PriceColumn], bins=bins, labels=labels, include_lowest=True)
+    
+    return DataFrame
+
+def get_bond_price_cluster(price):
+    """
+    Returns the price cluster label for a given bond price.
+    
+    Args:
+        price (float): Bond price
+        
+    Returns:
+        str: Price cluster label ('Deep Discount', 'Discount', 'Par', 'Premium', or 'High Premium')
+    """
+    # Define same bins and labels as cluster_bonds_by_price
+    bins = [0, 70, 95, 105, 120, float('inf')]
+    labels = ['Deep Discount', 'Discount', 'Par', 'Premium', 'High Premium']
+    
+    # Find which bin the price falls into
+    for i in range(len(bins)-1):
+        if bins[i] <= price < bins[i+1]:
+            return labels[i]
+            
+    return None  # Return None if price doesn't fall in any bin
+
+def get_first_valid_price(ask, bid, last):
+    """
+    Returns the first valid price from bid, ask, or last price in that order.
+    Returns None if no valid price is found.
+    """
+    
+    if pd.notnull(ask) and ask != 0:
+        return ask
+    elif pd.notnull(bid) and bid != 0:
+        return bid
+    elif pd.notnull(last) and last != 0:
+        return last
+    else:
+        return None
+
+def get_size_preasure(BID_size, ASK_size):
+
+    try:
+        size_preasure = BID_size - ASK_size
+        return size_preasure
+    except Exception as e:
+        print(f"Error calculating size preasure: {e}")
+        return None
+
+def get_current_yield(coupon, last, ask, bid):
+    """
+    Calculate current yield using first available price (Last, Ask, or Bid)
+    
+    Args:
+        coupon (float): Bond coupon rate
+        last (float): Last traded price
+        ask (float): Ask price
+        bid (float): Bid price
+        
+    Returns:
+        float: Current yield or None if no valid price available
+    """
+
+    if coupon is None or coupon == 0 or not isinstance(coupon, (int, float)):
+        return None
+    else:
+        if pd.notnull(last) and last != 0:
+            return coupon / last
+        elif pd.notnull(ask) and ask != 0:
+            return coupon / ask
+        elif pd.notnull(bid) and bid != 0:
+            return coupon / bid
+        else:
+            return None
+
+def get_bond_duration(maturity_date, coupon_rate, price, frequency):
+    
+    """
+    Calculate the Macaulay Duration for a bond
+    
+    Args:
+        maturity_date: The maturity date of the bond (datetime.date)
+        coupon_rate: Annual coupon rate as decimal (e.g. 0.05 for 5%)
+        price: Clean price of the bond as percentage of par (e.g. 100 for par)
+        frequency: Number of coupon payments per year (default=2 for semi-annual)
+        
+    Returns:
+        duration: Macaulay Duration in years
+    """
+
+    # Default to semi-annual frequency if not provided because it's the most common frequency
+    if frequency is None:
+        frequency = 2
+
+
+    try:
+        # Convert maturity_date to datetime.date if it's datetime
+        if isinstance(maturity_date, datetime.datetime):
+            maturity_date = maturity_date.date()
+
+        today = datetime.date.today()
+        
+        # Time to maturity in years
+        t = (maturity_date - today).days / 360.0
+
+        if t <= 0:
+            return 0
+
+        # Convert annual rates to per-period rates
+        period_coupon = coupon_rate / frequency
+
+        periods = max(1, int(t * frequency))  # Ensure at least 1 period
+        r = ( ( coupon_rate * 100 ) / price) / frequency
+
+        # Calculate present value of each cash flow
+        pv_factors = [(1 + r) ** (-i) for i in range(1, periods + 1)]
+        cash_flows = [period_coupon * 100] * periods
+        cash_flows[-1] += 100  # Add principal repayment at maturity
+        
+        # Calculate weighted present values
+        weighted_pvs = [cf * pvf * (i/frequency) for i, (cf, pvf) in enumerate(zip(cash_flows, pv_factors), 1)]
+        
+        # Macaulay Duration formula
+        duration = sum(weighted_pvs) / price
+
+    except Exception as e:
+        #print(f"Error calculating duration: {e}")
+        return 0
+
+    return duration
+
+def get_payment_frequency_from_text(frequency_text):
+    """
+    Convert payment frequency text to number of payments per year.
+    
+    Args:
+        frequency_text (str): Payment frequency text (e.g., 'Semi-Annual', 'Quarterly', 'Annual')
+        
+    Returns:
+        int: Number of payments per year (e.g., 2 for Semi-Annual, 4 for Quarterly, 1 for Annual)
+    """
+    if pd.isna(frequency_text):
+        return None
+        
+    frequency_text = str(frequency_text).lower().strip()
+    
+    # Common frequency mappings
+    frequency_map = {
+        'annual': 1,
+        'semi-annual': 2,
+        'semi annual': 2,
+        'quarterly': 4,
+        'monthly': 12,
+        'zero': 0,
+        'zero coupon': 0
+    }
+    
+    # Try exact match first
+    if frequency_text in frequency_map:
+        return frequency_map[frequency_text]
+        
+    # Try partial matches
+    for key, value in frequency_map.items():
+        if key in frequency_text:
+            return value
+            
+    # Default to semi-annual if no match found (most common for bonds)
+    return 2
+
+# Calculate YTM using formula: (Coupon + ((100-Price)/Years_to_Maturity)) / ((100+Price)/2)
+def get_bond_ytm(price, coupon, years_to_maturity):
+    try:
+        # Use the first available price (Last, Ask, or Bid)
+        price = price if pd.notnull(price) else None
+                
+        if price is None or years_to_maturity == 0:
+            return None
+            
+        numerator = coupon + ((100 - price) / years_to_maturity)
+        denominator = (100 + price) / 2
+        
+        return numerator / denominator
+    except:
+        return None
+
+def get_years_to_date(start_date, end_date):
+    """
+    Calculate years to maturity from today to a given maturity date.
+    
+    Args:
+        maturity_date (datetime): The maturity date of the bond
+        
+    Returns:
+        float: Number of years to maturity, or None if invalid input
+    """
+    try:
+        if pd.isna(end_date):
+            return None
+            
+        years = (end_date - start_date).total_seconds() / (365.25 * 24 * 60 * 60)
+        return years if years > 0 else None
+        
+    except:
+        return None
+
+def get_fraction_as_float(fraction_text):
+    try:
+        # Check if there's a space indicating a whole number and a fraction
+        if ' ' in fraction_text:
+            whole_number, fraction = fraction_text.split(' ')
+            # Split the fraction into numerator and denominator
+            numerator, denominator = fraction.split('/')
+            # Convert to float: whole number + fraction part
+            return float(whole_number) + float(numerator) / float(denominator)
+        else:
+            # If no fraction, convert the text directly to float
+            return float(fraction_text)
+    except Exception as e:
+        print(f"Error converting {fraction_text}: {e}")
+        return None  # Return None or some default value in case of conversion error
+
+def get_coupon_from_ibkr_description(text):
+
+    text = text.replace("  ", " ").strip()
+    text = text.split(' ')
+    
+    elements = len(text)
+
+    if elements == 3:
+        coupon = text[1]
+
+    elif elements == 4:
+        coupon = f'{text[1]} {text[2]}'
+
+    else:
+        None
+
+    coupon = get_fraction_as_float(coupon)
+    return coupon
+
+def get_maturity_from_ibkr_description(text):
+
+    text = text.replace("  ", " ").strip()
+    text = text.split(' ')
+    
+    elements = len(text)
+
+    if elements == 3:
+        maturity = text[2]
+
+    elif elements == 4:
+        maturity = text[3]
+
+    else:
+        None
+
+    # Convert maturity string (MM/DD/YY) to datetime
+    try:
+        if maturity and '/' in maturity:
+            month, day, year = maturity.split('/')
+            # Add '20' prefix to year if it's 2 digits
+            if len(year) == 2:
+                year = '20' + year
+            maturity = datetime.datetime.strptime(f'{year}-{month}-{day}', '%Y-%m-%d').date()
+    except Exception as e:
+        print(f"Error converting maturity date {maturity}: {e}")
+        maturity = None
+    return maturity
+
+def extract_rating_from_text(rating_text):
+    """
+    Extract rating information from text in formats like:
+    - 'CAA3/CCC+ (MOODY/SP)' for dual ratings
+    - 'CAA3 (MOODY)' for single rating
+    Returns a tuple of (moody_rating, sp_rating)
+    """
+    rating_text = str(rating_text)
+    
+    # Find position of '('
+    open_paren_pos = rating_text.find('(')
+    if open_paren_pos == -1:
+        return None, None
+        
+    # Get the rating and agency parts
+    rating_part = rating_text[:open_paren_pos].strip()
+    agency_part = rating_text[open_paren_pos+1:-1].strip()
+    
+    # Initialize ratings
+    moody_rating = None
+    sp_rating = None
+    
+    # Check if it's a dual rating format
+    if '/' in rating_part and '/' in agency_part:
+        ratings = rating_part.split('/')
+        agencies = agency_part.split('/')
+        
+        if len(ratings) == 2 and len(agencies) == 2:
+            for rating, agency in zip(ratings, agencies):
+                if 'MOODY' in agency.upper():
+                    moody_rating = rating.strip()
+                elif 'SP' in agency.upper():
+                    sp_rating = rating.strip()
+    else:
+        # Single rating format
+        if 'MOODY' in agency_part.upper():
+            moody_rating = rating_part.strip()
+        elif 'SP' in agency_part.upper():
+            sp_rating = rating_part.strip()
+            
+    return moody_rating, sp_rating
+
+def clean_rating_text(text):
+    # Handle None or non-string inputs
+    if text is None or not isinstance(text, str):
+        return None
+        
+    # Create new text keeping only characters from chars list
+    chars = ['A','a','B','b','C','1','2','3','/','-','+']
+
+    new_text = ''.join(c for c in text if c in chars)
+    new_text = new_text.strip()
+    return new_text
+
+def list_files_recursively(root_folder):
+    """
+    Creates a list of full paths for all files in a folder and its subfolders.
+    
+    Args:
+        root_folder (str): Path to the root folder to search
+        
+    Returns:
+        list: List of full file paths found recursively
+    """
+    file_paths = []
+    
+    # Walk through directory tree
+    for dirpath, dirnames, filenames in os.walk(root_folder):
+        for filename in filenames:
+            # Create full file path by joining directory path and filename
+            full_path = os.path.join(dirpath, filename)
+            file_paths.append(full_path)
+            
+
+    # Print total number of files found
+    print(f"\nTotal files found: {len(file_paths)}")
+    return file_paths
+
+def get_file_created_date(file_path):
+    """Gets the creation date of a file.
+    
+    Args:
+        file_path: Path to the file
+        
+    Returns:
+        Datetime object of when file was created
+    """
+    try:
+        # Get file creation timestamp
+        # On macOS, st_birthtime gives actual creation time
+        if sys.platform == 'darwin':
+            creation_time = os.stat(file_path).st_birthtime
+        else:
+            # On other platforms, use earliest of ctime/mtime 
+            stats = os.stat(file_path)
+            creation_time = min(stats.st_ctime, stats.st_mtime)
+        
+        # Convert timestamp to datetime object
+        creation_datetime = datetime.datetime.fromtimestamp(creation_time)
+        
+        print(f"\nFile creation date: {creation_datetime}")
+        return creation_datetime
+        
+    except FileNotFoundError:
+        print(f"Error: File '{file_path}' not found")
+    except Exception as e:
+        print(f"Error: {str(e)}")
+
+def get_latest_ibkr_query(folder_path: str, query_number: str, daily: bool):
+
+    # PARAMS
+
+    if daily == True: date_length = 8
+    if query_number == 'RTD': date_length = 12
+    else: date_length = 17
+
+    if query_number == 'RTD': delimiter = ' '
+    else: delimiter = '_'
+
+    query_length = len(query_number) + 1 + date_length + 4
+
+
+    # FUNCTION
+
+    all_paths = list_files_recursively(folder_path)
+
+    selected_files = []
+    for file in all_paths:
+        
+        filename = os.path.basename(file)
+
+        if filename.startswith(f'{query_number}{delimiter}') and filename.endswith('.csv') and len(filename) == query_length:
+            selected_files.append(filename)
+        else:
+            filename = None
+    
+    selected_files = sorted(selected_files, reverse=True) # Sort files in descending order
+            
+    latest_filename = selected_files[0] # Get the latest uploaded file
+
+    print(f'\nLatest backup found:')
+    print(f'file: {latest_filename}')
+    # Find the full path of latest uploaded file
+    latest_filepath = None
+    for path in all_paths:
+        if os.path.basename(path) == latest_filename:
+            latest_filepath = path
+            break
+
+    print(f'folder: {os.path.dirname(latest_filepath)}')
+
+    return latest_filepath
+
+def rename_files_for_daily_reports(folder_path):
+
+
+    def rename_file_with_date(file_path):
+        """Renames a file by adding date in YYYYMMDD format and 'agmtech212'.
+        
+        Args:
+            file_path: Path to the file to rename
+            
+        Returns:
+            Path to the renamed file
+        """
+        try:
+            # Get directory and filename
+            directory = os.path.dirname(file_path)
+            filename = os.path.basename(file_path)
+            
+            # Get file extension
+            name, ext = os.path.splitext(filename)
+            
+            # Get file creation date
+            creation_date = get_file_created_date(file_path)
+
+            # Convert creation date to YYYYMMDD format
+            creation_date_str = creation_date.strftime('%Y%m%d%H%M')
+
+            # Create new filename
+            if filename == 'RTD.csv':
+                new_filename = f"{name} {creation_date_str}{ext}"
+            else:
+                new_filename = f"{name} {creation_date_str} agmtech212{ext}"
+            
+            new_filepath = os.path.join(directory, new_filename)
+            
+            # Rename the file
+            os.rename(file_path, new_filepath)
+            
+            print(f"\nFile renamed from: {filename}")
+            print(f"To: {new_filename}")
+            return new_filepath
+            
+        except FileNotFoundError:
+            print(f"Error: File '{file_path}' not found")
+        except Exception as e:
+            print(f"Error: {str(e)}")
+
+
+    FilesToRename = ['clients.xls',
+                    'tasks_for_subaccounts.csv',
+                    'ContactListSummary.csv',
+                    'RTD.csv']
+
+
+    def list_files_in_folder(folder_path):
+        """Lists all files in the specified folder.
+        
+        Args:
+            folder_path: Path to the folder to list files from
+            
+        Returns:
+            List of filenames in the folder, or empty list if error
+        """
+        try:
+            # Get list of files in the folder
+            files = os.listdir(folder_path)
+            
+            print(f"\nFiles in {folder_path}:")
+            print("=" * (len(folder_path) + 8))
+            
+            # Print each file
+            for file in files:
+                print(file)
+                
+            return files
+            
+        except FileNotFoundError:
+            print(f"Error: Folder '{folder_path}' not found")
+            return []
+        except Exception as e:
+            print(f"Error listing files: {str(e)}")
+            return []
+
+
+    folder_path = '/Users/agm_crf/Downloads'
+    list_files_in_folder(folder_path)
+
+    ListOfFiles = list_files_in_folder(folder_path)
+
+    print("\nChecking for required files...\n")
+
+
+    for file in FilesToRename:
+        if file in ListOfFiles:
+            print(f"\n✓ Found: {file}")
+            rename_file_with_date(f'{folder_path}/{file}')
+        else:
+            print(f"\n✗ Missing: {file}")
+
+def rename_ibkr_batch_files(folder_path):
+
+    all_files = os.listdir(folder_path)
+
+    queries = ['732383', '732385', '734782', '742588']
+
+    for file in all_files:
+        # Skip files that don't match our criteria
+        if not (file.endswith('.csv') and ('_' in file or any(query in file for query in queries))):
+            continue
+            
+        #print(f"Processing file: {file}")
+        
+        # Only try to split if there are underscores
+        if '_' in file:
+            filename = file.split('_')
+            
+            # Make sure filename has enough parts before accessing index 5
+            if len(filename) > 5 and any(query in filename[5] for query in queries) and filename[0] == 'I6413690' and filename[1] == 'all' and filename[4] == 'AF':
+                
+
+                date = []
+                if filename[2] == filename[3]:
+                    date = filename[2]
+                else:
+                    date = f'{filename[2]}_{filename[3]}'
+                
+                #print(f'Filename: {filename}')
+                #print(f'Date: {date}')
+
+                file_path = os.path.join(folder_path, file)
+                print(f'File: {file_path}')
+                new_filename = f'{filename[5]}_{date}.csv'
+                #print(f'New filename: {new_filename}')
+                new_filepath = os.path.join(folder_path, new_filename)
+                print(f'New filepath: {new_filepath}')
+                os.rename(file_path, new_filepath)
+
+    return
+
+def get_filename_from_path(path): # Returns the filename from a given path
+
+    return os.path.basename(path)
+
+def melt_nav(file_path): # Melt the NAV file for getting a long format
+
+    df = pd.read_csv(file_path)
+
+    filename = os.path.basename(file_path)
+
+    #print(filename)
+
+    df['Filename'] = filename
+
+    #print(df.head(10))
+
+    df_melted = pd.melt(df, id_vars=['ReportDate', 'Filename', 'ClientAccountID'])
+
+    #print("\nMelted dataframe:")
+    #print(df_melted.head(10))
+
+    #df_melted.to_excel('/Users/agm_crf/Downloads/nav_melted.xlsx', index=False)
+
+    #subprocess.run(['open', '/Users/agm_crf/Downloads/nav_melted.xlsx'])
+
+    return df_melted
+
 def get_most_recent_file(files):
     """
     Get the most recent file from a list of files based on creation time.
