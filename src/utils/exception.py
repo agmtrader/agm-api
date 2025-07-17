@@ -11,6 +11,6 @@ def handle_exception(func):
             return data
         except Exception as e:
             logger.error(f"Error in {func.__name__}: {e}")
-            json_data = json.dumps({'error': str(e)})
+            json_data = json.dumps({'error': "An internal server error occurred. Please try again later."})
             return Response(json_data, status=500, mimetype='application/json')
     return wrapper

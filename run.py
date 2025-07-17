@@ -18,7 +18,7 @@ def jwt_required_except_login():
         try:
             verify_jwt_in_request()
         except exceptions.JWTExtendedException as e:
-            return jsonify({"msg": str(e)}), 401
+            return jsonify({"msg": "Unauthorized"}), 401
  
 def start_api():
 
