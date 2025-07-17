@@ -156,7 +156,7 @@ class IBKRWebAPI:
         return response.json()
 
     @handle_exception
-    def process_documents(self, documents: List[str] | List[int] | None = None) -> dict:
+    def process_documents(self, documents: list = None) -> dict:
         """Auto-sign and upload IBKR forms given their form numbers.
 
         The caller should supply a plain list/array of form numbers, e.g. `["2001", "8001"]`.

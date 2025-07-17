@@ -99,5 +99,5 @@ def create_sso_browser_session() -> str:
     return ibkr_web_api.create_sso_browser_session()
 
 @handle_exception
-def process_documents(documents: List[str] | List[int] | None = None) -> dict:
+def process_documents(documents: list = None) -> dict:
     return ibkr_web_api.process_documents(documents=documents)
