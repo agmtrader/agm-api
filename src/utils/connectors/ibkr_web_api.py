@@ -211,9 +211,11 @@ class IBKRWebAPI:
             raise Exception("Failed to build any document payloads – all form fetches failed.")
 
         submission_request = {
-            "documents": built_documents,
-            "inputLanguage": "en",
-            "translation": False,
+            "processDocuments": {
+                "documents": built_documents,
+                "inputLanguage": "en",
+                "translation": False,
+            }
         }
 
         logger.info("Uploading documents via /accounts/documents endpoint")
@@ -231,6 +233,8 @@ class IBKRWebAPI:
         }
 
         response = requests.post(url, headers=headers, data=signed_jwt)
+        logger.info(f"Response: {response.text}")
+        
         if response.status_code != 200:
             raise Exception(f"Error {response.status_code}: {response.text}")
 
