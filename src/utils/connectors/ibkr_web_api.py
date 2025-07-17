@@ -4,6 +4,8 @@ import requests
 from src.utils.managers.secret_manager import get_secret
 from src.utils.exception import handle_exception
 from src.utils.logger import logger
+from datetime import datetime
+from typing import List
 
 logger.announcement('Initializing Interactive Brokers Web API Service', type='info')
 logger.announcement('Initialized Interactive Brokers Web API Service', type='success')
@@ -151,6 +153,88 @@ class IBKRWebAPI:
         if response.status_code != 200:
             raise Exception(f"Error {response.status_code}: {response.text}")
         logger.success(f"Account updated successfully")
+        return response.json()
+
+    @handle_exception
+    def process_documents(self, documents: List[str] | List[int] | None = None) -> dict:
+        """Auto-sign and upload IBKR forms given their form numbers.
+
+        The caller should supply a plain list/array of form numbers, e.g. `["2001", "8001"]`.
+        This method will:
+            1. Fetch each form via ``get_forms``.
+            2. Build the required *documents* payload (metadata + PDF bytes).
+            3. Sign the resulting *DocumentSubmissionRequest* as a JWT and POST it to
+               ``/gw/api/v1/accounts/documents``.
+        """
+
+        if documents is None or not isinstance(documents, list):
+            raise Exception("process_documents expects a list of form numbers (strings or ints).")
+
+        form_numbers = [str(f) for f in documents]
+
+        logger.info(f"Building DocumentSubmissionRequest for forms: {form_numbers}")
+
+        timestamp = int(datetime.utcnow().strftime("%Y%m%d%H%M%S"))
+
+        built_documents = []
+        for form_no in form_numbers:
+            try:
+                form_result = self.get_forms(forms=[form_no])
+                form_details = form_result.get("formDetails", [])
+                if not form_details:
+                    logger.warning(f"No formDetails returned for form {form_no}")
+                    continue
+
+                form = form_details[0]
+                file_data = form_result.get("fileData", {})
+
+                built_documents.append({
+                    "signedBy": ["Account Holder"],
+                    "attachedFile": {
+                        "fileName": form.get("fileName"),
+                        "fileLength": form.get("fileLength"),
+                        "sha1Checksum": form.get("sha1Checksum"),
+                    },
+                    "formNumber": int(form.get("formNumber")),
+                    "validAddress": False,
+                    "execLoginTimestamp": timestamp,
+                    "execTimestamp": timestamp,
+                    "payload": {
+                        "mimeType": "application/pdf",
+                        "data": file_data.get("data"),
+                    },
+                })
+            except Exception as e:
+                logger.warning(f"Failed to build document for form {form_no}: {e}")
+
+        if not built_documents:
+            raise Exception("Failed to build any document payloads – all form fetches failed.")
+
+        submission_request = {
+            "documents": built_documents,
+            "inputLanguage": "en",
+            "translation": False,
+        }
+
+        logger.info("Uploading documents via /accounts/documents endpoint")
+        url = f"{self.BASE_URL}/gw/api/v1/accounts/documents"
+
+        token = self.get_bearer_token()
+        if not token:
+            raise Exception("No token found")
+
+        signed_jwt = self.sign_request(submission_request)
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/jwt"
+        }
+
+        response = requests.post(url, headers=headers, data=signed_jwt)
+        if response.status_code != 200:
+            raise Exception(f"Error {response.status_code}: {response.text}")
+
+        logger.success("Documents uploaded successfully")
         return response.json()
 
     @handle_exception

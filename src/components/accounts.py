@@ -2,6 +2,7 @@ from src.utils.exception import handle_exception
 from src.utils.connectors.supabase import db
 from src.utils.logger import logger
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
+from typing import List
 
 logger.announcement('Initializing Accounts Service', type='info')
 ibkr_web_api = IBKRWebAPI()
@@ -96,3 +97,7 @@ def get_forms(forms: list = None) -> dict:
 @handle_exception
 def create_sso_browser_session() -> str:
     return ibkr_web_api.create_sso_browser_session()
+
+@handle_exception
+def process_documents(documents: List[str] | List[int] | None = None) -> dict:
+    return ibkr_web_api.process_documents(documents=documents)

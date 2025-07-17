@@ -43,6 +43,7 @@ rich==13.9.3
 tenacity==9.0.0
 xlrd==2.0.1
 uuid==1.30
+cryptography==45.0.5
 
 # Financial Data
 ib_insync==0.9.86

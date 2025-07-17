@@ -1,6 +1,6 @@
 from flask import Blueprint, request
 from src.components.accounts import create_account, read_accounts, read_account_contact, update_account_info
-from src.components.accounts import list_accounts, get_pending_tasks, get_registration_tasks, read_account_details, get_forms, update_account, create_sso_browser_session
+from src.components.accounts import list_accounts, get_pending_tasks, get_registration_tasks, read_account_details, get_forms, update_account, create_sso_browser_session, process_documents
 from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
 
@@ -91,3 +91,10 @@ def update_route():
     payload = request.get_json(force=True)
     account_management_requests_data = payload.get('account_management_requests', None)
     return update_account(account_management_requests=account_management_requests_data)
+
+@bp.route('/documents', methods=['POST'])
+@verify_scope('accounts/documents')
+@format_response
+def process_documents_route():
+    documents = []
+    return process_documents(documents=documents)
