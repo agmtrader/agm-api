@@ -115,6 +115,19 @@ def get_clients_report():
     clients = Drive.download_file(file_id=clients_file[0]['id'], parse=True)
     return clients
 
+def get_client_fees():
+    """
+    Get the client fees.
+    
+    :return: Response object with client fees or error message
+    """
+    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
+    client_fees_file = [client_fees for client_fees in files_in_resources_folder if 'ibkr_client_fees' in client_fees['name']]
+    if len(client_fees_file) != 1:
+        raise Exception('Client fees file not found or multiple files found')
+    client_fees = Drive.download_file(file_id=client_fees_file[0]['id'], parse=True)
+    return client_fees
+
 def get_nav_report():
     """
     Get the NAV report.

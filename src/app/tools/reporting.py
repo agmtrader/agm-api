@@ -1,5 +1,5 @@
 from flask import Blueprint
-from src.components.tools.reporting import get_clients_report, get_nav_report, run, get_dimensional_table, get_rtd_report, get_open_positions_report, get_securities_bond_dictionary
+from src.components.tools.reporting import get_clients_report, get_nav_report, run, get_dimensional_table, get_rtd_report, get_open_positions_report, get_securities_bond_dictionary, get_client_fees
 from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
 
@@ -22,6 +22,12 @@ def get_dimensional_table_route():
 @format_response
 def get_clients_report_route():
     return get_clients_report()
+
+@bp.route('/client_fees', methods=['GET'])
+@verify_scope('reporting/client_fees')
+@format_response
+def get_client_fees_report_route():
+    return get_client_fees()
 
 @bp.route('/nav', methods=['GET'])
 @verify_scope('reporting/nav')
