@@ -229,7 +229,7 @@ def transform() -> dict:
 
     # Process finance data
     logger.announcement('Fetching finance data.', type='info')
-    get_finance_data(resources_folder_id)
+    #get_finance_data(resources_folder_id)
 
     logger.announcement('Reports successfully transformed.', type='success')
     return {'status': 'success'}
@@ -672,8 +672,11 @@ def get_finance_data(resources_folder_id):
     ticker_list = data['Ticker'].tolist()
 
     df = yf.download(tickers=ticker_list, period= 'max', interval= '1d')
+    logger.info(f'Downloaded data from Yahoo Finance')
     df = df.sort_index(ascending=False)
+    logger.info(f'Sorted data from Yahoo Finance')
     df2 = df.iloc[[0,251,503,755,1007,1259]]
+    logger.info(f'Filtered data from Yahoo Finance')
 
     # EXPORT DATASET
     filename =  'dataset_PX_5Y.csv'
@@ -682,7 +685,7 @@ def get_finance_data(resources_folder_id):
     csv_buffer = BytesIO()
     df2.to_csv(csv_buffer, index=True)
     csv_buffer.seek(0)
-
+    logger.info(f'Exported data to memory')
     base64_data = base64.b64encode(csv_buffer.getvalue()).decode('utf-8')
 
     # Upload the CSV data from memory

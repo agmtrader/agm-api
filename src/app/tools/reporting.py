@@ -1,5 +1,5 @@
 from flask import Blueprint
-from src.components.tools.reporting import extract, transform, get_clients_report, get_nav_report, run, get_dimensional_table, get_rtd_report, get_open_positions_report, get_securities_bond_dictionary
+from src.components.tools.reporting import get_clients_report, get_nav_report, run, get_dimensional_table, get_rtd_report, get_open_positions_report, get_securities_bond_dictionary
 from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
 
@@ -11,17 +11,11 @@ bp = Blueprint('reporting', __name__)
 def run_route():
     return run()
 
-@bp.route('/extract', methods=['GET'])
-@verify_scope('reporting/extract')
+@bp.route('/dimensional_table', methods=['GET'])
+@verify_scope('reporting/dimensional_table')
 @format_response
-def extract_route():
-    return extract()
-
-@bp.route('/transform', methods=['GET'])
-@verify_scope('reporting/transform')
-@format_response
-def transform_route():
-    return transform()
+def get_dimensional_table_route():
+    return get_dimensional_table()
 
 @bp.route('/clients', methods=['GET'])
 @verify_scope('reporting/clients')
@@ -52,9 +46,3 @@ def get_open_positions_report_route():
 @format_response
 def get_securities_bond_dictionary_route():
     return get_securities_bond_dictionary()
-
-@bp.route('/dimensional_table', methods=['GET'])
-@verify_scope('reporting/dimensional_table')
-@format_response
-def get_dimensional_table_route():
-    return get_dimensional_table()
