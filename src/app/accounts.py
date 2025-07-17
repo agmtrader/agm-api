@@ -97,5 +97,4 @@ def update_route():
 @format_response
 def process_documents_route():
     documents = ['3230', '3024', '4070', '3044', '3089', '4304', '4404', '5013', '5001', '4024', '9130', '3074', '3203', '3070', '3094', '3071', '4587', '2192', '2191', '3077', '4399', '4684', '2109', '4016', '4289']
-
     return process_documents(documents=documents)
