@@ -584,6 +584,14 @@
     <h1>Reporting API</h1>
     <div class="endpoint">
         <span class="method get">GET</span>
+        <span class="route">/reporting/run</span>
+        <p>Run the reporting ETL pipeline.</p>
+        <h4>Required Scope:</h4>
+        <code>reporting/run</code>
+    </div>
+
+    <div class="endpoint">
+        <span class="method get">GET</span>
         <span class="route">/reporting/extract</span>
         <p>Extract reporting data.</p>
         <h4>Required Scope:</h4>
@@ -600,10 +608,50 @@
 
     <div class="endpoint">
         <span class="method get">GET</span>
-        <span class="route">/reporting/get_clients_report</span>
+        <span class="route">/reporting/clients</span>
         <p>Get clients report.</p>
         <h4>Required Scope:</h4>
-        <code>reporting/get_clients_report</code>
+        <code>reporting/clients</code>
+    </div>
+
+    <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="route">/reporting/nav</span>
+        <p>Get NAV report.</p>
+        <h4>Required Scope:</h4>
+        <code>reporting/nav</code>
+    </div>
+
+    <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="route">/reporting/rtd</span>
+        <p>Get RTD report.</p>
+        <h4>Required Scope:</h4>
+        <code>reporting/rtd</code>
+    </div>
+
+    <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="route">/reporting/open_positions</span>
+        <p>Get open positions report.</p>
+        <h4>Required Scope:</h4>
+        <code>reporting/open_positions</code>
+    </div>
+
+    <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="route">/reporting/securities_bond</span>
+        <p>Get securities bond dictionary.</p>
+        <h4>Required Scope:</h4>
+        <code>reporting/securities_bond</code>
+    </div>
+
+    <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="route">/reporting/dimensional_table</span>
+        <p>Get consolidated dimensional table.</p>
+        <h4>Required Scope:</h4>
+        <code>reporting/dimensional_table</code>
     </div>
 
     <div class="endpoint">

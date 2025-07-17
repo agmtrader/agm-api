@@ -343,11 +343,19 @@ class GoogleDrive:
     if not parse:
       return downloaded_file.getvalue()
     else:
-      logger.warning("Exporting parsed file. This may take a while.")
+      logger.warning("Downloading parsed file. This may take a while.")
       if mime_type == 'text/csv':
         list_data = pd.read_csv(StringIO(downloaded_file.getvalue().decode('latin1'))).fillna('').to_dict(orient='records')
-      elif mime_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mime_type == 'application/vnd.ms-excel':
-        list_data = pd.read_excel(BytesIO(downloaded_file.getvalue())).fillna('').to_dict(orient='records')
+      elif mime_type in ('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'):
+        # Read all sheets and consolidate them into a single list of records, annotating each row with its sheet name
+        sheets_dict = pd.read_excel(BytesIO(downloaded_file.getvalue()), sheet_name=None)
+        consolidated_records = []
+        for _sheet_name, _df in sheets_dict.items():
+          print(_sheet_name)
+          _df = _df.fillna('')
+          _df['sheet_name'] = _sheet_name  # Track originating sheet
+          consolidated_records.extend(_df.to_dict(orient='records'))
+        list_data = consolidated_records
       else:
         raise Exception("Unsupported MIME type for parsing.")
       
@@ -385,9 +393,14 @@ class GoogleDrive:
         list_data = pd.read_csv(StringIO(exported_file.getvalue().decode('latin1'))).fillna('').to_dict(orient='records')
         logger.success("Successfully exported parsed file.")
         return list_data
-      elif mime_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
-        list_data = pd.read_excel(BytesIO(exported_file.getvalue())).fillna('').to_dict(orient='records')
+      elif mime_type in ('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'):
+        sheets_dict = pd.read_excel(BytesIO(exported_file.getvalue()), sheet_name=None)
+        consolidated_records = []
+        for _sheet_name, _df in sheets_dict.items():
+          _df = _df.fillna('')
+          _df['sheet_name'] = _sheet_name
+          consolidated_records.extend(_df.to_dict(orient='records'))
         logger.success("Successfully exported parsed file.")
-        return list_data
+        return consolidated_records
       else:
         raise Exception("Unsupported MIME type for parsing.")

@@ -70,42 +70,7 @@ cst = pytz.timezone('America/Costa_Rica')
 cst_time = datetime.now(cst)
 logger.announcement('Initialized Reporting Service', type='success')
 
-def get_cash_report():
-    """
-    Get the cash report.
-    
-    :return: Response object with cash report or error message
-    """
-    cash = Drive.download_file(file_id='1aHOXKbjIrgaqwBrnl22sFMip6M52xSOk', parse=True)
-    return cash
-
-def get_clients_report():
-    """
-    Get the clients report.
-    
-    :return: Response object with clients report or error message
-    """
-    accounts = read_accounts(query={})
-    clients = Drive.download_file(file_id='1jTxLni5rgheKlXYyBqw1xZsJYBv52r9O', parse=True)
-    accounts_df = pd.DataFrame(accounts)
-    clients_df = pd.DataFrame(clients)
-
-    consolidated_df = pd.merge(clients_df, accounts_df, left_on='Account ID', right_on='ibkr_account_number', how='left')
-    consolidated_df = consolidated_df.fillna('')
-    return {'consolidated': consolidated_df.to_dict(orient='records')}
-
-def run():
-    """
-    Run the ETL pipeline.
-    
-    :return: Response object with success message or error message
-    """
-    try:
-        extract()
-        transform()
-    except Exception as e:
-        raise Exception(f'Error running ETL pipeline: {e}')
-    return {'status': 'success'}
+resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
 
 """
 IBKR Clients -> Advisor with Account ID
@@ -121,6 +86,100 @@ TODO:
     - Tasks for Subaccounts
 
 """
+
+def get_dimensional_table():
+    """
+    Get the clients report.
+    
+    :return: Response object with clients report or error message
+    """
+    accounts = read_accounts(query={})
+    clients = get_clients_report()
+    accounts_df = pd.DataFrame(accounts)
+    clients_df = pd.DataFrame(clients)
+
+    consolidated_df = pd.merge(clients_df, accounts_df, left_on='Account ID', right_on='ibkr_account_number', how='left')
+    consolidated_df = consolidated_df.fillna('')
+    return {'consolidated': consolidated_df.to_dict(orient='records')}
+
+def get_clients_report():
+    """
+    Get the clients list.
+    
+    :return: Response object with clients list or error message
+    """
+    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
+    clients_file = [client for client in files_in_resources_folder if 'ibkr_clients' in client['name']]
+    if len(clients_file) != 1:
+        raise Exception('Clients file not found or multiple files found')
+    clients = Drive.download_file(file_id=clients_file[0]['id'], parse=True)
+    return clients
+
+def get_nav_report():
+    """
+    Get the NAV report.
+    
+    :return: Response object with NAV report or error message
+    """
+    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
+    nav_file = [nav for nav in files_in_resources_folder if 'ibkr_nav' in nav['name']]
+    if len(nav_file) != 1:
+        raise Exception('Nav file not found or multiple files found')
+    nav = Drive.download_file(file_id=nav_file[0]['id'], parse=True)
+    return nav
+
+def get_rtd_report():
+    """
+    Get the RTD report.
+    
+    :return: Response object with RTD report or error message
+    """
+    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
+    rtd_file = [rtd for rtd in files_in_resources_folder if 'ibkr_rtd' in rtd['name']]
+    if len(rtd_file) != 1:
+        raise Exception('RTD file not found or multiple files found')
+    rtd = Drive.download_file(file_id=rtd_file[0]['id'], parse=True)
+    return rtd  
+
+def get_open_positions_report():
+    """
+    Get the open positions report.
+    
+    :return: Response object with open positions report or error message
+    """
+    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
+    open_positions_file = [open_positions for open_positions in files_in_resources_folder if 'ibkr_open_positions_all' in open_positions['name']]
+    if len(open_positions_file) != 1:
+        raise Exception('Open positions file not found or multiple files found')
+    open_positions = Drive.download_file(file_id=open_positions_file[0]['id'], parse=True)
+    return open_positions
+
+def get_securities_bond_dictionary():
+    """
+    Get the securities bond dictionary.
+    
+    :return: Response object with securities bond dictionary or error message
+    """
+    securities_bond_dictionary = Drive.download_file(file_id='1hNhc35aug_smWefPkT8mDLil97_i8_E9', parse=True)
+    return securities_bond_dictionary
+
+"""
+ETL PIPELINE
+"""
+
+def run():
+    """
+    Run the ETL pipeline.
+    
+    :return: Response object with success message or error message
+    """
+    try:
+        extract()
+        transform()
+    except Exception as e:
+        raise Exception(f'Error running ETL pipeline: {e}')
+    return {'status': 'success'}
+
 def extract() -> dict:
     logger.announcement('Generating Reports.', type='info')
     batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
@@ -128,18 +187,14 @@ def extract() -> dict:
 
     # Fetch Flex Queries
     logger.announcement('Fetching Flex Queries.', type='info')
-    try:
-        flex_queries = fetchFlexQueries(['732383', '734782', '742588'])
-    except Exception as e:
-        logger.error(f'Error fetching Flex Queries: {e}')
-        raise Exception(f'Error fetching Flex Queries: {e}')
-
+    flex_queries = fetchFlexQueries(['732383', '734782', '742588'])
     logger.announcement('Flex Queries fetched.', type='success')
 
     # Upload Flex Queries to batch folder
     logger.announcement('Uploading Flex Queries to batch folder.', type='info')
-    for key, value in flex_queries.items():
-        Drive.upload_file(file_name=key, mime_type='text/csv', file_data=value, parent_folder_id=batch_folder_id)
+    if flex_queries and isinstance(flex_queries, dict):
+        for key, value in flex_queries.items():
+            Drive.upload_file(file_name=key, mime_type='text/csv', file_data=value, parent_folder_id=batch_folder_id)
     logger.announcement('Flex Queries uploaded to batch folder.', type='success')
     time.sleep(1)
 
@@ -322,7 +377,7 @@ def process_report(config, resources_folder_id):
     Drive.upload_file(file_name=output_filename, mime_type='text/csv', file_data=file_dict, parent_folder_id=resources_folder_id)
     return
 
-def process_rtd_template(df):
+def process_rtd(df):
     """
     Process the RTD file.
     
@@ -466,7 +521,6 @@ def process_clients_file(sheets_df):
     :param df: Input dataframe from Excel file
     :return: Processed dataframe
     """
-    print(sheets_df)
     return sheets_df
 
 # TODO TEMPLATE SAVE TWICE: (template up to AX)/(template up to CL)
@@ -643,8 +697,8 @@ report_configs = {
     },
     'rtd': {
         'folder_id': '12L3NKflYtMiisnZOpU9aa1syx2ZJA6JC',
-        'output_filename': 'ibkr_rtd_template.csv',
-        'process_func': process_rtd_template,
+        'output_filename': 'ibkr_rtd.csv',
+        'process_func': process_rtd,
     },
     'open_positions': {
         'folder_id': '1JL4__mr1XgOtnesYihHo-netWKMIGMet',

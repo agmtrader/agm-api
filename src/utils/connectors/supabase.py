@@ -111,8 +111,8 @@ class Supabase:
             fee_template = Column(Text, nullable=True)
             advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
 
-        class AccountRiskProfile(self.Base):
-            __tablename__ = 'account_risk_profile'
+        class RiskProfile(self.Base):
+            __tablename__ = 'risk_profile'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
@@ -141,7 +141,7 @@ class Supabase:
         self.Account = Account
         
         # Risk Profiles
-        self.AccountRiskProfile = AccountRiskProfile
+        self.RiskProfile = RiskProfile    
 
         # Trade Tickets
         self.TradeTicket = TradeTicket
