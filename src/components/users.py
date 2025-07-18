@@ -15,9 +15,7 @@ def create_user(user: dict = None):
         'email': user.get('email', ''),
         'user_id': user_id
     }
-    contact_result = create_contact(contact=contact_data)
-    contact_id = contact_result.get('id')
-    db.update(table='user', data={'contact_id': contact_id}, query={'id': user_id})
+    create_contact(contact=contact_data)
     return user_id
 
 @handle_exception

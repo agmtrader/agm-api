@@ -102,10 +102,10 @@ def list_risk_profiles():
 
 @handle_exception
 def create_risk_profile(data: dict):
-    risk_profile_id = db.create(table='account_risk_profile', data=data)
+    risk_profile_id = db.create(table='risk_profile', data=data)
     return {'id': risk_profile_id}
 
 @handle_exception
 def read_risk_profiles(query: dict = None):
-    risk_profiles = db.read(table='account_risk_profile', query=query)
+    risk_profiles = db.read(table='risk_profile', query=query)
     return risk_profiles
