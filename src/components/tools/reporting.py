@@ -123,6 +123,7 @@ def get_client_fees():
     """
     files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
     client_fees_file = [client_fees for client_fees in files_in_resources_folder if 'ibkr_client_fees' in client_fees['name']]
+    logger.info(f'Client fees file: {client_fees_file}')
     if len(client_fees_file) != 1:
         raise Exception('Client fees file not found or multiple files found')
     client_fees = Drive.download_file(file_id=client_fees_file[0]['id'], parse=True)
@@ -205,9 +206,12 @@ def extract() -> dict:
 
     # Upload Flex Queries to batch folder
     logger.announcement('Uploading Flex Queries to batch folder.', type='info')
-    if flex_queries and isinstance(flex_queries, dict):
-        for key, value in flex_queries.items():
-            Drive.upload_file(file_name=key, mime_type='text/csv', file_data=value, parent_folder_id=batch_folder_id)
+    if flex_queries:
+        try:
+            for key, value in flex_queries.items():
+                Drive.upload_file(file_name=key, mime_type='text/csv', file_data=value, parent_folder_id=batch_folder_id)
+        except Exception as e:
+            logger.warning(f'Error uploading Flex Query: {e}')
     logger.announcement('Flex Queries uploaded to batch folder.', type='success')
     time.sleep(1)
 

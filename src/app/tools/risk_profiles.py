@@ -1,6 +1,6 @@
 
 from flask import Blueprint, request
-from src.components.tools.risk_profiles import create_risk_profile, read_risk_profiles
+from src.components.tools.risk_profiles import create_risk_profile, read_risk_profiles, list_risk_profiles
 from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
 
@@ -21,3 +21,9 @@ def read():
     payload = request.get_json(force=True)
     query = payload.get('query', None)
     return read_risk_profiles(query=query)
+
+@bp.route('/list', methods=['GET'])
+@verify_scope('risk_profiles/list')
+@format_response
+def list():
+    return list_risk_profiles()
