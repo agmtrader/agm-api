@@ -1,0 +1,28 @@
+# cloudbuild.yaml
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      [
+        'build',
+        '--no-cache',
+        '-t',
+        'us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-hub',
+        '.'
+      ]
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-hub']
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      [
+        'run',
+        'services',
+        'update',
+        'agm-hub',
+        '--platform=managed',
+        '--region=us-central1',
+        '--image=us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-hub',
+        '--quiet'
+      ]
