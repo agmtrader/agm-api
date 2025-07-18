@@ -73,9 +73,12 @@ class Gmail:
     logger.info(f'Creating {email_template} email with subject: {subject}')
 
     # Get the template html file
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    env = Environment(loader=FileSystemLoader(os.path.join(current_dir, '../../lib/email_templates')))
-    template = env.get_template(f'{email_template}.html')
+    try:
+      current_dir = os.path.dirname(os.path.abspath(__file__))
+      env = Environment(loader=FileSystemLoader(os.path.join(current_dir, '../../lib/email_templates')))
+      template = env.get_template(f'{email_template}.html')
+    except Exception as e:
+      raise Exception(f'Template {email_template}.html not found')
 
     # Prepare the content based on its type
     template_data = {
@@ -154,6 +157,14 @@ class Gmail:
   def send_two_factor_reminder_email(self, content, client_email):
     subject = 'Urgente: Activación de Autenticación de Dos Factores'
     email_template = 'two_factor_reminder'
-    bcc = "cr@agmtechnology.com,aa@agmtechnology.com,rc@agmtechnology.com"
+    bcc = ""
+    cc = "jc@agmtechnology.com,hc@agmtechnology.com"
+    return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)
+  
+  @handle_exception
+  def send_application_link_email(self, content, client_email, lang='es'):
+    subject = 'Link de formulario para apertura de cuenta'
+    email_template = f'application_link_{lang}'
+    bcc = ""
     cc = "jc@agmtechnology.com,hc@agmtechnology.com"
     return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)

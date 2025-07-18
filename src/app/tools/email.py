@@ -36,3 +36,10 @@ def send_email_change_route():
 def send_email_two_factor_reminder_route():
   payload = request.get_json(force=True)
   return Email.send_two_factor_reminder_email(payload['content'], payload['client_email'])
+
+@bp.route('/send_email/application_link', methods=['POST'])
+@verify_scope('email/send_email')
+@format_response
+def send_email_application_link_route():
+  payload = request.get_json(force=True)
+  return Email.send_application_link_email(payload['content'], payload['client_email'], payload['lang'])

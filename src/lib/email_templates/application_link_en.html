@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ subject }}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.8;
+            color: #2D3748;
+            margin: 0;
+            padding: 0;
+            background-color: #F7FAFC;
+        }
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 40px;
+            background-color: #FFFFFF;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+        .logo {
+            text-align: center;
+            margin: 0 auto 40px;
+            max-width: 240px;
+        }
+        .logo img {
+            max-width: 100%;
+            height: auto;
+        }
+        .content {
+            padding: 0 20px;
+        }
+        h1 {
+            color: #1A365D;
+            font-size: 24px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        .button {
+            display: inline-block;
+            background-color: #F26C0D;
+            color: #FFFFFF;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            margin: 16px 0;
+            font-weight: 600;
+        }
+        .link {
+            color: #F26C0D;
+            text-decoration: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="logo">
+            <img src="cid:logo" alt="AGM Logo">
+        </div>
+        <div class="content">
+            <h1>Welcome to AGM Trader Broker/Advisor!</h1>
+
+            <div class="section">
+                <p>Dear {{ content.name }},</p>
+                <p>It is our pleasure to have you as a new client. At AGM, we are committed to providing you with access to more than 150 international markets with a focus on transparency, efficiency, and personalized attention.</p>
+            </div>
+
+            <div class="section">
+                <p>To begin the process of opening your account, please click the following link:</p>
+                <a href="{{ content.application_link }}" class="button" target="_blank">Open my account</a>
+            </div>
+
+            <div class="section">
+                <p>If you need assistance during the process, please do not hesitate to reply to this email or contact your assigned advisor directly. We are here to support you every step of the way.</p>
+            </div>
+
+            <div class="section">
+                <p>Thank you for choosing AGM. We are excited to be part of your journey toward new financial opportunities.</p>
+                <p>Sincerely,</p>
+                <p class="signature">The AGM Team</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
