@@ -23,6 +23,6 @@ jobs:
 
       - name: Invoke Cloud Build Trigger
         run: |
-          gcloud builds triggers run TRIGGER_ID \
+          gcloud builds triggers run rmgpgab-agm-api-us-central1-agmtrader-agm-api--makbz \
             --branch=main \
             --project=agm-datalake
