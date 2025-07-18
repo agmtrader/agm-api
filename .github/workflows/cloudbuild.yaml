@@ -21,6 +21,8 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v1
 
-      - name: Submit Cloud Build
+      - name: Invoke Cloud Build Trigger
         run: |
-          gcloud builds submit --config=cloudbuild.yaml --project=agm-datalake
+          gcloud builds triggers run TRIGGER_ID \
+            --branch=main \
+            --project=agm-datalake
