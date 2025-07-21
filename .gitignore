@@ -9,6 +9,7 @@ cache/*
 src/db/*
 logs/*
 keys/
+dev/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

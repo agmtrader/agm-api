@@ -9,7 +9,7 @@ import time
 from src.components.accounts import read_accounts
 from src.utils.connectors.drive import GoogleDrive
 import pytz
-from src.components.tools.trade_tickets import fetchFlexQueries
+from src.utils.connectors.flex_query_api import getFlexQuery
 import pandas as pd
 import os
 import sys
@@ -70,6 +70,8 @@ cst = pytz.timezone('America/Costa_Rica')
 cst_time = datetime.now(cst)
 logger.announcement('Initialized Reporting Service', type='success')
 
+batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
+backups_folder_id = '1d9RShyGidP04XdnH87pUHsADghgOiWj3'
 resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
 
 """
@@ -196,33 +198,38 @@ def run():
 
 def extract() -> dict:
     logger.announcement('Generating Reports.', type='info')
-    batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
-    backups_folder_id = '1d9RShyGidP04XdnH87pUHsADghgOiWj3'
 
     # Fetch Flex Queries
     logger.announcement('Fetching Flex Queries.', type='info')
-    flex_queries = fetchFlexQueries(['732383', '734782', '742588'])
+    flex_query_ids = ['732383', '734782', '742588']
+    flex_queries = {}
+    for query_id in flex_query_ids:
+        try:
+            flex_queries[query_id] = getFlexQuery(query_id)
+        except Exception as e:
+            logger.warning(f'Error fetching Flex Query: {e}')
+            continue
     logger.announcement('Flex Queries fetched.', type='success')
 
     # Upload Flex Queries to batch folder
     logger.announcement('Uploading Flex Queries to batch folder.', type='info')
-    if flex_queries:
+    for key, value in flex_queries.items():
         try:
-            for key, value in flex_queries.items():
-                Drive.upload_file(file_name=key, mime_type='text/csv', file_data=value, parent_folder_id=batch_folder_id)
+            Drive.upload_file(file_name=key, mime_type='text/csv', file_data=value, parent_folder_id=batch_folder_id)
         except Exception as e:
             logger.warning(f'Error uploading Flex Query: {e}')
+            continue
     logger.announcement('Flex Queries uploaded to batch folder.', type='success')
-    time.sleep(1)
+    time.sleep(2)
 
     # Rename files in batch folder
     logger.announcement('Renaming files in batch folder.', type='info')
-    number_renamed = rename_files_in_batch(batch_folder_id)
+    number_renamed = rename_files_in_batch()
     logger.announcement(f'{number_renamed} files renamed successfully.', type='success')
     
     # Sort files to respective backup folders
     logger.announcement('Sorting files to backup folders.', type='info')
-    number_sorted = sort_files_to_folders(batch_folder_id, backups_folder_id)
+    number_sorted = sort_batch_files_to_backup_folders()
     logger.announcement(f'{number_sorted} files sorted to backup folders.', type='success')
 
     logger.announcement('Reports successfully extracted.', type='success')
@@ -230,7 +237,6 @@ def extract() -> dict:
 
 def transform() -> dict:
     logger.announcement('Transforming reports.', type='info')
-    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
 
     # Clear resources folder
     logger.announcement('Clearing resources folder.', type='info')
@@ -241,12 +247,12 @@ def transform() -> dict:
     logger.announcement('Processing files.', type='info')
     for report_type, config in report_configs.items():
         logger.announcement(f'Processing {report_type.capitalize()} file.', type='info')
-        process_report(config, resources_folder_id)
+        process_report(config)
     logger.announcement('Files processed.', type='success')
 
     # Process finance data
     logger.announcement('Fetching finance data.', type='info')
-    #get_finance_data(resources_folder_id)
+    #get_finance_data()
 
     logger.announcement('Reports successfully transformed.', type='success')
     return {'status': 'success'}
@@ -254,11 +260,9 @@ def transform() -> dict:
 """
 EXTRACT HELPERS
 """
-def rename_files_in_batch(batch_folder_id):
+def rename_files_in_batch():
     """
     Rename files in the batch folder based on specific naming conventions.
-    
-    :param batch_folder_id: ID of the batch folder
     :return: Response object with updated batch files or error message
     """
     # Get the current time in CST
@@ -285,6 +289,8 @@ def rename_files_in_batch(batch_folder_id):
             new_name = ('tasks_for_subaccounts ' + today_date + ' agmtech212' + '.csv')
         elif ('ContactListSummary' in f['name']):
             new_name = ('ContactListSummary ' + today_date + ' agmtech212' + '.csv')
+        elif ('RTD' in f['name']):
+            new_name = ('RTD ' + today_date + '.csv')
         else:
             new_name = f['name']
 
@@ -297,7 +303,7 @@ def rename_files_in_batch(batch_folder_id):
     logger.announcement(f'{count} files renamed.', type='success')
     return count
 
-def sort_files_to_folders(batch_folder_id, backups_folder_id):
+def sort_batch_files_to_backup_folders():
     """
     Sort files from the batch folder into their respective backup folders.
     
@@ -359,12 +365,11 @@ def sort_files_to_folders(batch_folder_id, backups_folder_id):
 """
 TRANSFORM HELPERS
 """
-def process_report(config, resources_folder_id):
+def process_report(config):
     """
     Process a single report according to its configuration.
     
     :param config: Dictionary containing report configuration
-    :param resources_folder_id: ID of the resources folder
     :return: Response object with success message or error
     """
     folder_id = config['folder_id']
@@ -530,7 +535,6 @@ def process_rtd(df):
 
     return df_ibcid
 
-# TODO IBKR CLIENTS -> Filename column
 def process_clients_file(sheets_df):
     """
     Process the clients file by concatenating all sheets into a single dataframe.
@@ -540,7 +544,6 @@ def process_clients_file(sheets_df):
     """
     return sheets_df
 
-# TODO TEMPLATE SAVE TWICE: (template up to AX)/(template up to CL)
 def process_open_positions_template(df):
     """
     Process the open positions template file.
@@ -554,7 +557,6 @@ def process_open_positions_template(df):
     :return: Processed dataframe
     """
     # Upload the full file
-    resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
     full_dict = df.to_dict(orient='records')
     Drive.upload_file(file_name='ibkr_open_positions_all.csv', mime_type='text/csv', file_data=full_dict, parent_folder_id=resources_folder_id)
     
@@ -667,8 +669,7 @@ def process_open_positions_template(df):
 
     return concatenated_df
 
-# TODO Filter columns
-def get_finance_data(resources_folder_id):
+def get_finance_data():
     """
     Get finance data from the finance folder.
     

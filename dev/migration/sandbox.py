@@ -137,13 +137,10 @@ def process_tickets():
 
 def process_accounts():
     """ Process accounts """
-
-    # Live accounts from new system
-    live_accounts = access_api('/accounts/read', 'POST', {'query': {}})
-    live_accounts_df = pd.DataFrame(live_accounts)
-    live_accounts_df = live_accounts_df.drop(columns=['id'])
-    live_accounts_df.to_csv('outputs/accounts.csv', index=False)
-    return live_accounts_df
+    accounts = access_api('/accounts/read', 'POST', {'query': {}})
+    accounts_df = pd.DataFrame(accounts)
+    accounts_df.to_csv('outputs/accounts.csv', index=False)
+    return accounts_df
 
 def match_emails_to_clients(emails_df, clients_df):
     # Create lookup dictionaries for faster matching
@@ -265,14 +262,14 @@ merged_df = pd.merge(
 
 # Merge with accounts data for more temporal emails
 # Rename the accounts TemporalEmail to avoid confusion and ensure proper consolidation
-accounts_merge_df = accounts_df[['IBKRUsername', 'TemporalEmail']].copy()
-accounts_merge_df = accounts_merge_df.rename(columns={'TemporalEmail': 'TemporalEmail_Accounts'})
+accounts_merge_df = accounts_df[['ibkr_username', 'temporal_email']].copy()
+accounts_merge_df = accounts_merge_df.rename(columns={'temporal_email': 'TemporalEmail_Accounts'})
 
 merged_df_with_accounts = pd.merge(
     merged_df,
     accounts_merge_df,
     left_on='Username',
-    right_on='IBKRUsername',
+    right_on='ibkr_username',
     how='left'
 )
 
