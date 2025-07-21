@@ -119,6 +119,7 @@ class Supabase:
             risk_profile_id = Column(Integer, nullable=False)
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             score = Column(Text, nullable=False)
+            name = Column(Text, nullable=False)
 
         class TradeTicket(self.Base):
             __tablename__ = 'trade_ticket'
