@@ -3,6 +3,7 @@ name: Daily Cloud Run Refresh
 on:
   schedule:
     - cron: '0 7 * * *'  # Runs daily at 7 AM UTC
+  workflow_dispatch:        # Manual trigger
 
 jobs:
   redeploy:
