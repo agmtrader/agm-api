@@ -1,0 +1,31 @@
+name: Daily Cloud Run Refresh
+
+on:
+  schedule:
+    - cron: '0 7 * * *'  # Runs daily at 7 AM UTC
+
+jobs:
+  redeploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code (if needed)
+        uses: actions/checkout@v4
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: agm-datalake
+          service_account_key: ${{ secrets.GCLOUD_SERVICE_KEY }}
+          export_default_credentials: true
+
+      - name: Force redeploy existing image
+        run: |
+          gcloud run deploy agm-api \
+            --image $(gcloud run services describe agm-api \
+              --platform managed \
+              --region us-central1 \
+              --format 'value(spec.template.spec.containers[0].image)') \
+            --region us-central1 \
+            --platform managed \
+            --quiet
