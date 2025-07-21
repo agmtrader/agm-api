@@ -39,18 +39,6 @@ class Supabase:
 
     def _setup_models(self):
 
-        class Contact(self.Base):
-            __tablename__ = 'contact'
-            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
-            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            country = Column(Text, nullable=True)
-            name = Column(Text, nullable=False, unique=True)
-            company_name = Column(Text, nullable=True)
-            email = Column(Text, nullable=True, unique=False)
-            phone = Column(Text, nullable=True, unique=False)
-
         class User(self.Base):
             __tablename__ = 'user'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -60,12 +48,15 @@ class Supabase:
             image = Column(Text, nullable=True)
             password = Column(Text, nullable=False)
             scopes = Column(Text, nullable=False)
-            name = Column(Text, nullable=True)
+            name = Column(Text, nullable=False)
+            country = Column(Text, nullable=True)
+            company_name = Column(Text, nullable=True)
+            phone = Column(Text, nullable=True)
 
         class Advisor(self.Base):
             __tablename__ = 'advisor'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             code = Column(Integer, nullable=False, unique=True)
@@ -77,8 +68,8 @@ class Supabase:
         class Lead(self.Base):
             __tablename__ = 'lead'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
-            referrer_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            referrer_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             description = Column(Text, nullable=False)
@@ -99,7 +90,6 @@ class Supabase:
         class Account(self.Base):
             __tablename__ = 'account'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             ibkr_account_number = Column(Text, nullable=False, unique=True)
@@ -130,7 +120,6 @@ class Supabase:
             name = Column(Text, nullable=False)
 
         # Contacts
-        self.Contact = Contact
         self.User = User
         self.Advisor = Advisor
 
