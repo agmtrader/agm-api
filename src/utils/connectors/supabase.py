@@ -44,19 +44,20 @@ class Supabase:
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            email = Column(Text, nullable=False, unique=True)
+            email = Column(Text, nullable=True, unique=True)
             image = Column(Text, nullable=True)
             password = Column(Text, nullable=False)
-            scopes = Column(Text, nullable=False)
+            scopes = Column(Text, nullable=True)
             name = Column(Text, nullable=False)
             country = Column(Text, nullable=True)
             company_name = Column(Text, nullable=True)
             phone = Column(Text, nullable=True)
+            last_login = Column(Text, nullable=True)
 
         class Advisor(self.Base):
             __tablename__ = 'advisor'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            contact_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             code = Column(Integer, nullable=False, unique=True)
@@ -73,9 +74,9 @@ class Supabase:
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             description = Column(Text, nullable=False)
-            status = Column(Text, nullable=False)
-            completed = Column(Boolean, nullable=False, default=False)
             contact_date = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            closed = Column(Text, nullable=True, default=None)
+            sent = Column(Text, nullable=True, default=None)
 
         class FollowUp(self.Base):
             __tablename__ = 'follow_up'

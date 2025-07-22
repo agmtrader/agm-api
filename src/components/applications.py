@@ -22,7 +22,7 @@ def read_applications(query=None) -> list:
 
 @handle_exception
 def update_application(application: dict = None, query: dict = None) -> dict:
-    return db.update(collection_name='application', data=application, query=query)
+    return db.update(collection_name='application', update_data=application, query=query)
 
 @handle_exception
 def send_to_ibkr(application: dict = None) -> dict:

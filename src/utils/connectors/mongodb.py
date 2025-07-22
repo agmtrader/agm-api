@@ -3,6 +3,7 @@ from bson.objectid import ObjectId
 import uuid
 from src.utils.logger import logger
 from src.utils.managers.secret_manager import get_secret
+from datetime import datetime
 
 class MongoDB:
     _instance = None
@@ -34,6 +35,10 @@ class MongoDB:
 
     def create(self, data, collection_name):
         logger.info(f'Adding document to collection: {collection_name}')
+        created = datetime.now().strftime('%Y%m%d%H%M%S')
+        updated = created
+        data['created'] = created
+        data['updated'] = updated
         if not collection_name:
             raise ValueError("Collection name cannot be empty")
         if not isinstance(data, dict):
