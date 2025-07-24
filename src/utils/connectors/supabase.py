@@ -1,11 +1,8 @@
 from sqlalchemy import Boolean, ForeignKey, Text, create_engine, Column, Integer
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.ext.automap import automap_base
-
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 import uuid
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
-
 from src.utils.managers.database_manager import DatabaseManager
 from src.utils.logger import logger
 from src.utils.managers.secret_manager import get_secret
@@ -88,20 +85,32 @@ class Supabase:
             completed = Column(Boolean, nullable=False, default=False)
             date = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
 
+        class Application(self.Base):
+            __tablename__ = 'application'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            lead_id = Column(UUID(as_uuid=True), ForeignKey('lead.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            master_account_id = Column(Text, nullable=True)
+            date_sent_to_ibkr = Column(Text, nullable=True)
+            application = Column(JSONB, nullable=True)
+        
         class Account(self.Base):
             __tablename__ = 'account'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            application_id = Column(UUID(as_uuid=True), ForeignKey('application.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             ibkr_account_number = Column(Text, nullable=False, unique=True)
             ibkr_username = Column(Text, nullable=True)
             ibkr_password = Column(Text, nullable=True)
             temporal_email = Column(Text, nullable=True)
             temporal_password = Column(Text, nullable=True)
-            application_id = Column(Text, nullable=True)
             fee_template = Column(Text, nullable=True)
-            advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
-            user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
 
         class RiskProfile(self.Base):
             __tablename__ = 'risk_profile'
@@ -123,6 +132,7 @@ class Supabase:
 
         # Contacts
         self.User = User
+        self.Application = Application
         self.Advisor = Advisor
 
         # Leads
