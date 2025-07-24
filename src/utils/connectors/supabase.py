@@ -101,6 +101,7 @@ class Supabase:
             application_id = Column(Text, nullable=True)
             fee_template = Column(Text, nullable=True)
             advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
 
         class RiskProfile(self.Base):
             __tablename__ = 'risk_profile'
