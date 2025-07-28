@@ -2,7 +2,7 @@ name: Upload Agreements and Disclosures
 
 on:
   schedule:
-    - cron: '0 14 * * *'   # Every day at 2 PM UTC
+    - cron: '0 13 * * *'   # Every day at 1 PM UTC (7:00 AM CST)
   workflow_dispatch:        # Manual trigger
 
 jobs:

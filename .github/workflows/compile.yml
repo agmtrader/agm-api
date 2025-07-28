@@ -1,0 +1,56 @@
+name: Compile Check
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: [3.11]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Create virtual environment
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
+          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Python compilation check
+        run: |
+          source venv/bin/activate
+          python -m py_compile run.py
+          python -c "import run; print('Python compilation successful')"
+
+      - name: Test basic imports
+        run: |
+          source venv/bin/activate
+          python -c "
+          try:
+              from run import start_api
+              print('✅ Main application imports successful')
+          except Exception as e:
+              print(f'❌ Import failed: {e}')
+              exit(1)
+          "

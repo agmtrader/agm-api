@@ -2,7 +2,7 @@ name: Daily ETL Pipeline
 
 on:
   schedule:
-    - cron: '30 13 * * *'   # Every day at 1:30 PM UTC
+    - cron: '30 13 * * *'   # Every day at 1 PM UTC (7:00 AM CST)
   workflow_dispatch:        # Manual trigger
 
 jobs:

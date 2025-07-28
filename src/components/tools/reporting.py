@@ -1325,16 +1325,9 @@ def melt_nav(file_path): # Melt the NAV file for getting a long format
 
     filename = os.path.basename(file_path)
 
-    #print(filename)
-
     df['Filename'] = filename
 
-    #print(df.head(10))
-
     df_melted = pd.melt(df, id_vars=['ReportDate', 'Filename', 'ClientAccountID'])
-
-    #print("\nMelted dataframe:")
-    #print(df_melted.head(10))
 
     #df_melted.to_excel('/Users/agm_crf/Downloads/nav_melted.xlsx', index=False)
 

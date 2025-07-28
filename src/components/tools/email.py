@@ -110,8 +110,6 @@ class Gmail:
     message.attach(text_part)
     message.attach(html_part)
 
-    print(bcc, cc)
-
     # Create the final multipart message
     final_message = MIMEMultipart('related')
     final_message['Subject'] = subject

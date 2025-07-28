@@ -351,7 +351,6 @@ class GoogleDrive:
         sheets_dict = pd.read_excel(BytesIO(downloaded_file.getvalue()), sheet_name=None)
         consolidated_records = []
         for _sheet_name, _df in sheets_dict.items():
-          print(_sheet_name)
           _df = _df.fillna('')
           _df['sheet_name'] = _sheet_name  # Track originating sheet
           consolidated_records.extend(_df.to_dict(orient='records'))

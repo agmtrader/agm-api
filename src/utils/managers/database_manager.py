@@ -252,7 +252,6 @@ class DatabaseManager:
                     if hasattr(tbl.c, key):
                         sql_query = sql_query.filter(getattr(tbl.c, key) == value)
                 
-            # Print the generated SQL query
             compiled_query = sql_query.statement.compile(
                 compile_kwargs={"literal_binds": True},
                 dialect=self.engine.dialect
