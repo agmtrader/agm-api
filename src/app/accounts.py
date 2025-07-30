@@ -1,6 +1,6 @@
 from flask import Blueprint, request
-from src.components.accounts import create_account, read_accounts, read_account_contact, update_account_info
-from src.components.accounts import list_accounts, get_pending_tasks, get_registration_tasks, read_account_details, get_forms, update_account, create_sso_browser_session, process_documents
+from src.components.accounts import create_account, read_accounts, upload_document
+from src.components.accounts import list_accounts, get_pending_tasks, get_registration_tasks, read_account_details, get_forms, update_account, process_documents
 from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
 
@@ -22,24 +22,14 @@ def read_route():
     query_params = payload.get('query', None)
     return read_accounts(query=query_params)
 
-@bp.route('/read_contact', methods=['POST'])
-@verify_scope('accounts/read')
+@bp.route('/upload_document', methods=['POST'])
+@verify_scope('accounts/upload_document')
 @format_response
-def read_contact_route():
+def upload_document_route():
     payload = request.get_json(force=True)
     account_id = payload.get('account_id', None)
-    query_params = payload.get('query', None)
-    return read_account_contact(account_id=account_id, query=query_params)
-
-@bp.route('/update_info', methods=['POST'])
-@verify_scope('accounts/update')
-@format_response
-def update_info_route():
-    payload = request.get_json(force=True)
-    account_id = payload.get('account_id', None)
-    query_params = payload.get('query', None)
-    account_info_data = payload.get('account_info', None)
-    return update_account_info(account_info=account_info_data, account_id=account_id, query=query_params)
+    document_data = payload.get('document_data', None)
+    return upload_document(account_id=account_id, document_data=document_data)
 
 # Account Management
 @bp.route('/list', methods=['GET'])

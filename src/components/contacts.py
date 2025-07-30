@@ -19,8 +19,3 @@ def read_contacts(query: dict = None):
 def update_contact(query: dict = None, contact: dict = None):
     contact_id = db.update(table='contact', query=query, data=contact)
     return {'id': contact_id}
-
-@handle_exception
-def delete_contact(query: dict = None):
-    contact_id = db.delete(table='contact', query=query)
-    return {'id': contact_id}

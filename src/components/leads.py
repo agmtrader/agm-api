@@ -51,11 +51,6 @@ def update_follow_up(lead_id: str = None, follow_up_id: str = None, follow_up: d
     return {'id': follow_up_id}
 
 @handle_exception
-def delete_lead(query: dict = None):
-    lead_id = db.delete(table='lead', query=query)
-    return {'id': lead_id}
-
-@handle_exception
 def delete_follow_up(lead_id: str = None, follow_up_id: str = None):
     follow_up_id = db.delete(table='follow_up', query={'lead_id': lead_id, 'id': follow_up_id})
     return {'id': follow_up_id}

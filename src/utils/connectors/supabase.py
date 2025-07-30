@@ -1,5 +1,5 @@
 from sqlalchemy import Boolean, ForeignKey, Text, create_engine, Column, Integer
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 import uuid
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
@@ -112,6 +112,25 @@ class Supabase:
             temporal_password = Column(Text, nullable=True)
             fee_template = Column(Text, nullable=True)
 
+        class AccountDocument(self.Base):
+            __tablename__ = 'account_document'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=True)
+            document_id = Column(UUID(as_uuid=True), ForeignKey('document.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=True)
+
+        class Document(self.Base):
+            __tablename__ = 'document'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            file_name = Column(Text, nullable=False)
+            file_length = Column(Integer, nullable=False)
+            sha1_checksum = Column(Text, nullable=False)
+            mime_type = Column(Text, nullable=False)
+            data = Column(Text, nullable=False)
+
         class RiskProfile(self.Base):
             __tablename__ = 'risk_profile'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -141,6 +160,8 @@ class Supabase:
 
         # Accounts
         self.Account = Account
+        self.AccountDocument = AccountDocument
+        self.Document = Document
         
         # Risk Profiles
         self.RiskProfile = RiskProfile    

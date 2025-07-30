@@ -2,10 +2,11 @@ from src.utils.exception import handle_exception
 from src.utils.connectors.supabase import db
 from src.utils.logger import logger
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
-from typing import List
+from src.utils.managers.document_manager import DocumentManager
 
 logger.announcement('Initializing Accounts Service', type='info')
 ibkr_web_api = IBKRWebAPI()
+document_manager = DocumentManager()
 logger.announcement('Initialized Accounts Service', type='success')
 
 @handle_exception
@@ -22,52 +23,8 @@ def read_accounts(query: dict = None) -> list:
     return accounts
 
 @handle_exception
-def read_account_contact(account_id: str = None, query: dict = None) -> dict:
-    account_filter = {'id': account_id}
-    
-    accounts_list = db.read(table='account', query=account_filter)
-    if not accounts_list:
-        raise Exception('Account not found or access denied.')
-    if len(accounts_list) > 1:
-        raise Exception('Multiple accounts found, data integrity issue.')
-    
-    account_data = accounts_list[0]
-    user_id_linked_to_account = account_data.get('user_id')
-    if not user_id_linked_to_account:
-        raise Exception(f"Account {account_id} does not have a user_id linked.")
-
-    user_list = db.read(table='user', query={'id': user_id_linked_to_account})
-    if not user_list:
-        raise Exception(f"User record not found for user_id: {user_id_linked_to_account}.")
-    contact_id = user_list[0].get('contact_id')
-    if not contact_id:
-        raise Exception(f"User {user_id_linked_to_account} does not have a contact_id.")
-
-    final_contact_query = {'id': contact_id, **query}
-    logger.info(f"Reading contact with final query: {final_contact_query}")
-    contacts = db.read(table='contact', query=final_contact_query)
-    
-    if len(contacts) == 1:
-        return contacts[0]
-    elif not contacts:
-        raise Exception(f"Contact not found for contact_id: {contact_id} with applied query.")
-    else:
-        raise Exception('Contact query returned multiple results for the same ID, check query parameters.')
-
-@handle_exception
-def update_account_info(account_info: dict = None, account_id: str = None, query: dict = None) -> str:
-    if query is None:
-        query = {}
-    
-    # Base query for update targets the specific account_id.
-    update_target_query = {'id': account_id}
-
-    final_update_query = {**update_target_query, **query}
-    
-    updated_id = db.update(table='account', data=account_info, query=final_update_query)
-    if not updated_id:
-        raise Exception(f"Failed to update account info for account {account_id} with query {final_update_query}. Account not found or not modified.")
-    return account_id
+def upload_document(account_id: str = None, file_name: str = None, file_length: int = None, sha1_checksum: str = None, mime_type: str = None, data: str = None) -> dict:
+    return document_manager.upload_document(account_id=account_id, file_name=file_name, file_length=file_length, sha1_checksum=sha1_checksum, mime_type=mime_type, data=data)
 
 # Account Management
 @handle_exception
