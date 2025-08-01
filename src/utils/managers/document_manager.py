@@ -4,10 +4,9 @@ from src.utils.connectors.supabase import db
 
 Drive = GoogleDrive()
 
-
 class DocumentManager:
     @handle_exception
-    def upload_document(account_id, file_name, file_length, sha1_checksum, mime_type, data):
+    def upload_document(self, account_id, file_name, file_length, sha1_checksum, mime_type, data):
         """
         Uploads a document to Google Drive and saves metadata/content in the database.
         Args:
@@ -19,12 +18,14 @@ class DocumentManager:
         """
 
         # Upload to Google Drive
+        """
         Drive.upload_file(
             file_name=file_name,
             mime_type=mime_type,
             file_data=data,
-            parent_folder_id='1111'
+            parent_folder_id='1jjqJKQ6orXb69I2nRfbqzMW8L_P8njkg'
         )
+        """
 
         # Save to document table
         document_id = db.create(

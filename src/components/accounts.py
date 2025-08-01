@@ -24,7 +24,18 @@ def read_accounts(query: dict = None) -> list:
 
 @handle_exception
 def upload_document(account_id: str = None, file_name: str = None, file_length: int = None, sha1_checksum: str = None, mime_type: str = None, data: str = None) -> dict:
+    print(f"Uploading document: {file_name} to account: {account_id}, file_length: {file_length}, sha1_checksum: {sha1_checksum}, mime_type: {mime_type}, data: {data}")
     return document_manager.upload_document(account_id=account_id, file_name=file_name, file_length=file_length, sha1_checksum=sha1_checksum, mime_type=mime_type, data=data)
+
+@handle_exception
+def read_documents_by_account_id(account_id: str = None) -> list:
+    account_documents = db.read(table='account_document', query={'account_id': account_id})
+    documents = []
+    for account_document in account_documents:
+        document = db.read(table='document', query={'id': account_document['document_id']})
+        for d in document:
+            documents.append(d)
+    return documents
 
 # Account Management
 @handle_exception
