@@ -426,7 +426,18 @@ class GoogleDrive:
   @retry_on_connection_error()
   @handle_exception
   def download_file(self, file_id, parse=False):
+    """
+    Downloads a file from Google Drive.
 
+    Returns:
+      - If parse is False:
+        - Returns the file data as a bytes object
+      - If parse is True:
+        - Returns a list of dictionaries, where each dictionary represents a row in the file
+        - The dictionaries contain the data from the file, with the keys being the column names
+        - The dictionaries also contain a 'sheet_name' key, which is the name of the sheet the row belongs to
+        - If the file is a CSV, the dictionaries are returned as a list of dictionaries
+    """
     logger.info(f"Downloading file with ID: {file_id}")
 
     try:
