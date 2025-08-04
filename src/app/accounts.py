@@ -69,14 +69,6 @@ def registration_tasks_route():
         return {"error": "Missing account_id"}, 400
     return get_registration_tasks(account_id=account_id)
 
-@bp.route('/forms', methods=['POST'])
-@verify_scope('accounts/forms')
-@format_response
-def get_forms_route():
-    payload = request.get_json(force=True)
-    forms_data = payload.get('forms', None)
-    return get_forms(forms=forms_data)
-
 @bp.route('/pending_tasks', methods=['POST'])
 @verify_scope('accounts/read')
 @format_response
@@ -86,6 +78,14 @@ def pending_tasks_route():
     if not account_id:
         return {"error": "Missing account_id"}, 400
     return get_pending_tasks(account_id=account_id)
+
+@bp.route('/forms', methods=['POST'])
+@verify_scope('accounts/forms')
+@format_response
+def get_forms_route():
+    payload = request.get_json(force=True)
+    forms_data = payload.get('forms', None)
+    return get_forms(forms=forms_data)
 
 @bp.route('/update', methods=['POST'])
 @verify_scope('accounts/update')

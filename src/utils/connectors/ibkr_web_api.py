@@ -272,7 +272,7 @@ class IBKRWebAPI:
         logger.info("Getting forms")
         url = f"{self.BASE_URL}/gw/api/v1/forms?fromDate=2016-10-20&toDate=&getDocs=T"
         if forms:
-            forms = ",".join(forms)
+            forms = ",".join(str(f) for f in forms)
             url += f"&formNo={forms}"
         
         token = self.get_bearer_token()
@@ -290,6 +290,8 @@ class IBKRWebAPI:
             raise Exception(f"Error {response.status_code}: {response.text}")
         logger.success(f"Form fetched successfully")
         result = response.json()
+
+        print(result)
 
         # Filter formDetails to only English forms
         form_details = result.get('formDetails')

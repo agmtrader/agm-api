@@ -47,10 +47,6 @@ def read_account_details(account_id: str = None) -> dict:
     return ibkr_web_api.get_account_details(account_id=account_id)
 
 @handle_exception
-def update_account(account_management_requests: dict = None) -> dict:
-    return ibkr_web_api.update_account(account_management_requests=account_management_requests)
-
-@handle_exception
 def get_pending_tasks(account_id: str = None) -> list:
     return ibkr_web_api.get_pending_tasks(account_id=account_id)
 
@@ -59,12 +55,12 @@ def get_registration_tasks(account_id: str = None) -> list:
     return ibkr_web_api.get_registration_tasks(account_id=account_id)
 
 @handle_exception
-def get_forms(forms: list = None) -> dict:
-    return ibkr_web_api.get_forms(forms=forms)
+def update_account(account_management_requests: dict = None) -> dict:
+    return ibkr_web_api.update_account(account_management_requests=account_management_requests)
 
 @handle_exception
-def create_sso_browser_session() -> str:
-    return ibkr_web_api.create_sso_browser_session()
+def get_forms(forms: list = None) -> dict:
+    return ibkr_web_api.get_forms(forms=forms)
 
 @handle_exception
 def process_documents(documents: list = None) -> dict:
