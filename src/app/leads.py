@@ -5,6 +5,7 @@ from src.utils.response import format_response
 
 bp = Blueprint('leads', __name__)
 
+# Leads
 @bp.route('/create', methods=['POST'])
 @verify_scope('leads/create')
 @format_response
@@ -14,30 +15,18 @@ def create_lead_route():
     follow_ups = payload.get('follow_ups', None)
     return create_lead(lead=lead, follow_ups=follow_ups)
 
-@bp.route('/create_follow_up', methods=['POST'])
-@verify_scope('leads/create_follow_up')
-@format_response
-def create_follow_up_route():
-    payload = request.get_json(force=True)
-    lead_id = payload.get('lead_id', None)
-    follow_up = payload.get('follow_up', None)
-    return create_follow_up(lead_id=lead_id, follow_up=follow_up)
-
-@bp.route('/read', methods=['POST'])
+@bp.route('/read', methods=['GET'])
 @verify_scope('leads/read')
 @format_response
-def read_leads_route():
-    payload = request.get_json(force=True)
-    query = payload.get('query', None)
+def read_leads_route(): 
+    query = {}
+    id = request.args.get('id', None)
+    lead_id = request.args.get('lead_id', None)
+    if id:
+        query['id'] = id
+    if lead_id:
+        query['lead_id'] = lead_id
     return read_leads(query=query)
-
-@bp.route('/read_follow_ups', methods=['POST'])
-@verify_scope('leads/read_follow_ups')
-@format_response
-def read_follow_ups_route():
-    payload = request.get_json(force=True)
-    query = payload.get('query', None)
-    return read_follow_ups(query=query)
 
 @bp.route('/update', methods=['POST'])
 @verify_scope('leads/update')
@@ -48,8 +37,25 @@ def update_lead_route():
     query = payload.get('query', None)
     return update_lead(query=query, lead=lead)
 
-@bp.route('/update_follow_up', methods=['POST'])
-@verify_scope('leads/update_follow_up')
+# Follow Ups
+@bp.route('/follow_up/create', methods=['POST'])
+@verify_scope('leads/create')
+@format_response
+def create_follow_up_route():
+    payload = request.get_json(force=True)
+    lead_id = payload.get('lead_id', None)
+    follow_up = payload.get('follow_up', None)
+    return create_follow_up(lead_id=lead_id, follow_up=follow_up)
+
+@bp.route('/follow_up/read', methods=['GET'])
+@verify_scope('leads/read')
+@format_response
+def read_follow_ups_route():
+    query = request.args.get('query', {})
+    return read_follow_ups(query=query)
+
+@bp.route('/follow_up/update', methods=['POST'])
+@verify_scope('leads/update')
 @format_response
 def update_follow_up_route():
     payload = request.get_json(force=True)
@@ -58,8 +64,8 @@ def update_follow_up_route():
     follow_up_id = payload.get('follow_up_id', None)
     return update_follow_up(lead_id=lead_id, follow_up_id=follow_up_id, follow_up=follow_up)
 
-@bp.route('/delete_follow_up', methods=['POST'])
-@verify_scope('leads/delete_follow_up')
+@bp.route('/follow_up/delete', methods=['POST'])
+@verify_scope('leads/delete')
 @format_response
 def delete_follow_up_route():
     payload = request.get_json(force=True)

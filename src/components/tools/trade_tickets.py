@@ -12,21 +12,18 @@ agmToken = "t=419584539155539272816800"
 logger.announcement('Initialized Trade Tickets Service', type='success')
 
 @handle_exception
-def list_trade_tickets(query = None):
-    logger.info(f"Getting trade tickets for {query}")
-
-    # Get all trade tickets
+def list_trade_tickets():
+    logger.info(f"Listing trade tickets")
     trade_tickets = db.read('trade_ticket', query={})
-
     return trade_tickets
 
 @handle_exception
-def fetch_trade_ticket(query_id):
+def read(query_id):
     trades = getFlexQuery(query_id)
     return trades
 
 @handle_exception
-def generate_trade_ticket(flex_query_dict, indices):
+def generate_trade_confirmation_message(flex_query_dict, indices):
 
     logger.info('Generating trade ticket. Processing data...')
 
@@ -88,11 +85,7 @@ def generate_trade_ticket(flex_query_dict, indices):
     df_consolidated = df_consolidated.fillna('')
     consolidated_dict = df_consolidated.to_dict(orient='records')[0]
     consolidated_dict['type'] = 'single' if len(df_indexed) == 1 else 'consolidated'
-    return consolidated_dict
-
-@handle_exception
-def generate_client_confirmation_message(consolidated_dict):
-
+    
     logger.info('Generating client confirmation message...')
     df_consolidated = pd.DataFrame([consolidated_dict])
 

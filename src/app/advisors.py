@@ -9,14 +9,13 @@ bp = Blueprint('advisors', __name__)
 @verify_scope('advisors/create')
 @format_response
 def create_advisor_route():
-    payload = request.get_json(force=True)
+    payload = request.get_json(force=True)  
     advisor = payload.get('advisor', None)
     return create_advisor(advisor)
 
-@bp.route('/read', methods=['POST'])
+@bp.route('/read', methods=['GET'])
 @verify_scope('advisors/read')
 @format_response
 def advisors_route():
-    payload = request.get_json(force=True)
-    query = payload.get('query', None)
+    query = request.args.get('query', {})
     return read_advisors(query)

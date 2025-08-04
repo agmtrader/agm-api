@@ -13,12 +13,17 @@ def create_route():
     application = payload.get('application', None)
     return create_application(application=application)
 
-@bp.route('/read', methods=['POST'])
+@bp.route('/read', methods=['GET'])
 @verify_scope('applications/read')
 @format_response
 def read_route():
-    payload = request.get_json(force=True)
-    query = payload.get('query', None)
+    query = {}
+    id = request.args.get('id', None)
+    lead_id = request.args.get('lead_id', None)
+    if id:
+        query['id'] = id
+    if lead_id:
+        query['lead_id'] = lead_id
     return read_applications(query=query)
 
 @bp.route('/update', methods=['POST'])

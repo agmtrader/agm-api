@@ -126,7 +126,7 @@ class Supabase:
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             file_name = Column(Text, nullable=False)
-            file_length = Column(Integer, nullable=False)
+            file_length = Column(Text, nullable=False)
             sha1_checksum = Column(Text, nullable=False)
             mime_type = Column(Text, nullable=False)
             data = Column(Text, nullable=False)

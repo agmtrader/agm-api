@@ -5,7 +5,6 @@ from src.utils.managers.secret_manager import get_secret
 from src.utils.exception import handle_exception
 from src.utils.logger import logger
 from datetime import datetime
-from typing import List
 
 logger.announcement('Initializing Interactive Brokers Web API Service', type='info')
 logger.announcement('Initialized Interactive Brokers Web API Service', type='success')
@@ -136,7 +135,7 @@ class IBKRWebAPI:
         return response.json()
 
     @handle_exception
-    def update_account(self, account_management_requests):
+    def submit_account_management_requests(self, account_management_requests):
         logger.info(f"Updating account.")
         url = f"{self.BASE_URL}/gw/api/v1/accounts"
         token = self.get_bearer_token()

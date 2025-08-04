@@ -29,6 +29,13 @@ def upload_document(account_id: str = None, file_name: str = None, file_length: 
 
 @handle_exception
 def read_documents_by_account_id(account_id: str = None) -> list:
+    """
+    Read all documents for an account
+    Args:
+        account_id: The ID of the account to read documents for
+    Returns:
+        A list of documents for the account
+    """
     account_documents = db.read(table='account_document', query={'account_id': account_id})
     documents = []
     for account_document in account_documents:
@@ -55,8 +62,8 @@ def get_registration_tasks(account_id: str = None) -> list:
     return ibkr_web_api.get_registration_tasks(account_id=account_id)
 
 @handle_exception
-def update_account(account_management_requests: dict = None) -> dict:
-    return ibkr_web_api.update_account(account_management_requests=account_management_requests)
+def submit_account_management_requests(account_management_requests: dict = None) -> dict:
+    return ibkr_web_api.submit_account_management_requests(account_management_requests=account_management_requests)
 
 @handle_exception
 def get_forms(forms: list = None) -> dict:
