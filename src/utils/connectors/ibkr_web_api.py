@@ -290,8 +290,6 @@ class IBKRWebAPI:
         logger.success(f"Form fetched successfully")
         result = response.json()
 
-        print(result)
-
         # Filter formDetails to only English forms
         form_details = result.get('formDetails')
         if form_details and isinstance(form_details, list):
