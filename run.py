@@ -13,7 +13,7 @@ load_dotenv()
 public_routes = ['docs', 'index', 'token', 'oauth.login', 'oauth.create', 'yfinance.get_scroller_data']
 
 def jwt_required_except_login():
-    logger.info(f'\nRequest endpoint: {request.endpoint}')
+    logger.info(f'\nRequest endpoint: {request.endpoint} from {request.remote_addr}')
     if request.endpoint not in public_routes:
         try:
             verify_jwt_in_request()
