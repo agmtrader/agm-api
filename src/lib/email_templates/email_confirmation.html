@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -42,44 +42,56 @@
         .section {
             margin-bottom: 20px;
         }
-        .transaction-title {
-            font-size: 24px;
-            font-weight: 600;
-            margin-bottom: 24px;
-            text-align: center;
-        }
-        .transaction-details {
+        .code-box {
             background-color: #F8F9FA;
             border: 1px solid #E2E8F0;
             border-radius: 8px;
-            padding: 20px;
+            padding: 32px;
             margin: 16px 0;
+            text-align: center;
         }
-        .transaction-details p {
-            margin: 8px 0;
-        }
-        .transaction-details strong {
+        .code-box p {
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: 6px;
+            margin: 0;
             color: #1A365D;
+        }
+        .important-note {
+            background-color: #FFF5F5;
+            border-left: 4px solid #F56565;
+            padding: 16px;
+            margin: 16px 0;
+            border-radius: 4px;
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="logo">
             <img src="cid:logo" alt="AGM Logo">
         </div>
         <div class="content">
-            <h1 class="transaction-title">Confirmación de transacción</h1>
-            <div class="transaction-details">
-                {% for line in content.message.split('\n') %}
-                    {% set parts = line.split(':') %}
-                    <p>
-                        <strong>{{ parts[0] }}</strong>
-                        {% if parts|length > 1 %}
-                            : {{ parts[1:] | join(':') }}
-                        {% endif %}
-                    </p>
-                {% endfor %}
+            <h1>Confirmación de Correo Electrónico</h1>
+
+            <div class="section">
+                <p>Estimado/a {{ content.name }},</p>
+                <p>Para completar la verificación de su correo electrónico, por favor ingrese el siguiente código en la plataforma:</p>
+            </div>
+
+            <div class="code-box">
+                <p>{{ content.pin }}</p>
+            </div>
+
+            <div class="section">
+                <p>Este código expirará en <strong>10&nbsp;minutos</strong>. Si no solicitó esta verificación, puede ignorar este mensaje.</p>
+            </div>
+
+            <div class="section">
+                <p>Si necesita ayuda, no dude en responder a este correo o en contactarnos directamente.</p>
+                <p>Saludos cordiales,</p>
+                <p class="signature">El equipo de AGM</p>
             </div>
         </div>
     </div>

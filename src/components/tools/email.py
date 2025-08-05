@@ -100,8 +100,6 @@ class Gmail:
     # Convert dictionary to readable plain text format
     if isinstance(content, dict):
         text_content = "\n".join(f"{key}: {value}" for key, value in content.items())
-    else:
-        text_content = str(content)
 
     # Attach plain text and HTML versions
     text_part = MIMEText(text_content.encode('utf-8'), 'plain', 'utf-8')
@@ -132,33 +130,29 @@ class Gmail:
     return {'raw': raw_message}
 
   @handle_exception
-  def send_account_access_email(self, content, client_email):
-    subject = 'Accesos a su nueva cuenta AGM'
-    email_template = 'account_access'
-    return self.send_email(content, client_email, subject, email_template)
-
-  @handle_exception
   def send_trade_ticket_email(self, content, client_email):
     subject = 'Confirmación de Transacción'
     email_template = 'trade_ticket'
     return self.send_email(content, client_email, subject, email_template)
+  
+  @handle_exception
+  def send_email_confirmation(self, content, client_email):
+    subject = 'Confirmación de Correo Electrónico'
+    email_template = 'email_confirmation'
+    bcc = ""
+    cc = ""
+    return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)
 
   @handle_exception
-  def send_email_change_email(self, client_email, advisor_email):
+  def send_email_change_email(self, client_email: str, advisor_email: str = None):
     subject = 'Urgente: Actualización de Correo Electrónico'
     email_template = 'email_change'
     bcc = ""
-    cc = f"jc@agmtechnology.com,hc@agmtechnology.com,{advisor_email}"
+    cc = f"jc@agmtechnology.com,hc@agmtechnology.com"
+    if advisor_email:
+      cc += f",{advisor_email}"
     return self.send_email("", client_email, subject, email_template, bcc=bcc, cc=cc)
 
-  @handle_exception
-  def send_two_factor_reminder_email(self, content, client_email):
-    subject = 'Urgente: Activación de Autenticación de Dos Factores'
-    email_template = 'two_factor_reminder'
-    bcc = ""
-    cc = "jc@agmtechnology.com,hc@agmtechnology.com"
-    return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)
-  
   @handle_exception
   def send_application_link_email(self, content, client_email, lang='es'):
     subject = 'Link de formulario para apertura de cuenta'
