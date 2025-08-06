@@ -204,7 +204,7 @@ class IBKRWebAPI:
                     },
                 })
             except Exception as e:
-                logger.warning(f"Failed to build document for form {form_no}: {e}")
+                logger.error(f"Failed to build document for form {form_no}: {e}")
 
         if not built_documents:
             raise Exception("Failed to build any document payloads – all form fetches failed.")

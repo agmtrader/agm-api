@@ -392,8 +392,8 @@ class DatabaseManager:
                     session.execute(tbl.delete())
 
                 if not data:
-                    logger.warning(f'No data to import to table: {table}')
-                    return jsonify({'inserted': 0})
+                    logger.error(f'No data to import to table: {table}')
+                    raise Exception(f'No data to import to table: {table}')
 
                 current_time = datetime.now().strftime('%Y%m%d%H%M%S')
                 for item in data:

@@ -65,7 +65,6 @@ def get_secret(secret_id: str):
             json_string = response.payload.data.decode("UTF-8")
             secrets = json.loads(json_string)
         except Exception as e:
-            logger.warning(f"UTF-8 decode failed: {e}")
             try:
                 json_string = response.payload.data.decode("ascii")
                 secrets = json_string

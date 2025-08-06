@@ -465,7 +465,6 @@ class GoogleDrive:
     if not parse:
       return downloaded_file.getvalue()
     else:
-      logger.warning("Downloading parsed file. This may take a while.")
       if mime_type == 'text/csv':
         list_data = pd.read_csv(StringIO(downloaded_file.getvalue().decode('latin1'))).fillna('').to_dict(orient='records')
       elif mime_type in ('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'):
@@ -510,7 +509,6 @@ class GoogleDrive:
     if not parse:
       return exported_file.getvalue()
     else:
-      logger.warning("Exporting parsed file. This may take a while.")
       if mime_type == 'text/csv':
         list_data = pd.read_csv(StringIO(exported_file.getvalue().decode('latin1'))).fillna('').to_dict(orient='records')
         logger.success("Successfully exported parsed file.")

@@ -29,7 +29,7 @@ def verify_scope(required_scope):
                     logger.success(f'User has {partial_scope} scope, granting access')
                     return fn(*args, **kwargs)
             
-            logger.warning(f'User attempted to access {required_scope} without proper authorization. User scopes: {user_scopes}')
+            logger.error(f'User attempted to access {required_scope} without proper authorization. User scopes: {user_scopes}')
             return jsonify({"error": "Insufficient scope"}), 403
         return wrapper
     return decorator

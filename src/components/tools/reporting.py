@@ -14,6 +14,7 @@ import pandas as pd
 import os
 import sys
 
+logger.announcement('Initializing Reporting Service', type='info')
 ratings = {
     # S&P Ratings
     "AAA": {"Short-term": "A-1+", "NAIC": 1, "Class1": "Prime", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 1, "S&P Equivalent": "AAA", "Source": "S&P"},
@@ -63,30 +64,21 @@ ratings = {
     "C": {"Short-term": "Not prime", "NAIC": 6, "Class1": "In default", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 21, "S&P Equivalent": "C", "Source": "Moody's"},
     "D": {"Short-term": "Not prime", "NAIC": 6, "Class1": "In default", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 22, "S&P Equivalent": "D", "Source": "Moody's"},
 }
-
-logger.announcement('Initializing Reporting Service', type='info')
 Drive = GoogleDrive()
 cst = pytz.timezone('America/Costa_Rica')
 cst_time = datetime.now(cst)
-logger.announcement('Initialized Reporting Service', type='success')
-
 batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
 backups_folder_id = '1d9RShyGidP04XdnH87pUHsADghgOiWj3'
 resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+logger.announcement('Initialized Reporting Service', type='success')
 
 """
-IBKR Clients -> Advisor with Account ID
-Alias Name -> format for alias
-NAV -> format for nav
-Clients -> Advisor with Account ID
-
 TODO:
 - Fetch and upload the other four sources:
     - Clients List
     - Contact List Summary
     - RTD
     - Tasks for Subaccounts
-
 """
 
 def get_dimensional_table():
@@ -169,6 +161,15 @@ def get_open_positions_report():
         raise Exception('Open positions file not found or multiple files found')
     open_positions = Drive.download_file(file_id=open_positions_file[0]['id'], parse=True)
     return open_positions
+
+def get_proposals_equity_report():
+    """
+    Get the proposals equity report.
+    
+    :return: Response object with proposals equity report or error message
+    """
+    proposals_equity = Drive.export_file(file_id='1AqpIE7LRV40J-Aew5fA-P6gEfji3Yb-Rp5DohI9BQFY', mime_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', parse=True)
+    return proposals_equity
 
 def get_securities_bond_dictionary():
     """
@@ -924,7 +925,6 @@ def get_payment_frequency_from_text(frequency_text):
     # Default to semi-annual if no match found (most common for bonds)
     return 2
 
-# Calculate YTM using formula: (Coupon + ((100-Price)/Years_to_Maturity)) / ((100+Price)/2)
 def get_bond_ytm(price, coupon, years_to_maturity):
     try:
         # Use the first available price (Last, Ask, or Bid)
@@ -1315,11 +1315,11 @@ def rename_ibkr_batch_files(folder_path):
 
     return
 
-def get_filename_from_path(path): # Returns the filename from a given path
+def get_filename_from_path(path):
 
     return os.path.basename(path)
 
-def melt_nav(file_path): # Melt the NAV file for getting a long format
+def melt_nav(file_path):
 
     df = pd.read_csv(file_path)
 

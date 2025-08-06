@@ -1,5 +1,5 @@
 from flask import Blueprint
-from src.components.tools.reporting import get_clients_report, get_nav_report, run, get_dimensional_table, get_rtd_report, get_open_positions_report, get_securities_bond_dictionary, get_client_fees
+from src.components.tools.reporting import get_clients_report, get_nav_report, run, get_dimensional_table, get_rtd_report, get_open_positions_report, get_securities_bond_dictionary, get_client_fees, get_proposals_equity_report
 from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
 
@@ -46,6 +46,12 @@ def get_rtd_report_route():
 @format_response
 def get_open_positions_report_route():
     return get_open_positions_report()
+
+@bp.route('/proposals_equity', methods=['GET'])
+@verify_scope('reporting/proposals_equity')
+@format_response
+def get_proposals_equity_report_route():
+    return get_proposals_equity_report()
 
 @bp.route('/securities_bond', methods=['GET'])
 @verify_scope('reporting/securities_bond')
