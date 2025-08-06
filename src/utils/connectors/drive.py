@@ -77,7 +77,7 @@ class GoogleDrive:
     self._credentials = None
     
     self._initialized = True
-    logger.announcement('Drive initialization prepared (lazy connection)', type='success')
+    logger.announcement('Initialized Drive service', type='success')
 
   def _get_credentials(self):
     """Get fresh credentials from secret manager"""

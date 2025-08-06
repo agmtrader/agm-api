@@ -1,7 +1,7 @@
 from flask import Blueprint, request
 from src.components.accounts import create_account, read_accounts, upload_document, read_documents_by_account_id
 from src.components.accounts import get_pending_tasks, get_registration_tasks
-from src.components.accounts import read_account_details, get_forms, submit_account_management_requests
+from src.components.accounts import read_account_details, get_forms, submit_account_management_requests, update_account
 from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
 
@@ -27,6 +27,15 @@ def read_route():
     if user_id:
         query['user_id'] = user_id
     return read_accounts(query=query)
+
+@bp.route('/update', methods=['POST'])
+@verify_scope('accounts/update')
+@format_response
+def update_account_route():
+    payload = request.get_json(force=True)
+    query = payload.get('query', None)
+    account = payload.get('account', None)
+    return update_account(query=query, account=account)
 
 @bp.route('/documents', methods=['GET'])
 @verify_scope('accounts/read')

@@ -100,12 +100,10 @@ class Gmail:
     # Convert dictionary to readable plain text format
     if isinstance(content, dict):
         text_content = "\n".join(f"{key}: {value}" for key, value in content.items())
+        text_part = MIMEText(text_content.encode('utf-8'), 'plain', 'utf-8')
+        message.attach(text_part)
 
-    # Attach plain text and HTML versions
-    text_part = MIMEText(text_content.encode('utf-8'), 'plain', 'utf-8')
     html_part = MIMEText(html_content_inlined.encode('utf-8'), 'html', 'utf-8')
-    
-    message.attach(text_part)
     message.attach(html_part)
 
     # Create the final multipart message
