@@ -18,7 +18,7 @@ def send_trade_ticket_email_route():
 @format_response
 def send_confirmation_email_route():
   payload = request.get_json(force=True)
-  return Email.send_email_confirmation(payload['content'], payload['client_email'])
+  return Email.send_email_confirmation(payload['content'], payload['client_email'], payload['lang'])
 
 @bp.route('/send_email/application_link', methods=['POST'])
 @verify_scope('email/send_email')

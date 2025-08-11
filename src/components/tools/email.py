@@ -132,14 +132,6 @@ class Gmail:
     subject = 'Confirmación de Transacción'
     email_template = 'trade_ticket'
     return self.send_email(content, client_email, subject, email_template)
-  
-  @handle_exception
-  def send_email_confirmation(self, content, client_email):
-    subject = 'Confirmación de Correo Electrónico'
-    email_template = 'email_confirmation'
-    bcc = ""
-    cc = ""
-    return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)
 
   @handle_exception
   def send_email_change_email(self, client_email: str, advisor_email: str = None):
@@ -152,8 +144,16 @@ class Gmail:
     return self.send_email("", client_email, subject, email_template, bcc=bcc, cc=cc)
 
   @handle_exception
+  def send_email_confirmation(self, content, client_email, lang='es'):
+    subject = 'Confirmación de Correo Electrónico' if lang == 'es' else 'Email Confirmation'
+    email_template = f'application_email_confirmation_{lang}'
+    bcc = ""
+    cc = ""
+    return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)
+  
+  @handle_exception
   def send_application_link_email(self, content, client_email, lang='es'):
-    subject = 'Link de formulario para apertura de cuenta'
+    subject = 'Link de formulario para apertura de cuenta' if lang == 'es' else 'Application Link'
     email_template = f'application_link_{lang}'
     bcc = ""
     cc = "jc@agmtechnology.com,hc@agmtechnology.com"
