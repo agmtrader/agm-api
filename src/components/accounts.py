@@ -11,8 +11,6 @@ logger.announcement('Initialized Accounts Service', type='success')
 
 @handle_exception
 def create_account(account: dict = None) -> dict:
-    if account is None:
-        account = {}
     logger.info(f"Attempting to create account with data: {account}")
     account_id = db.create(table='account', data=account)
     return {'id': account_id}

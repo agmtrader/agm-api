@@ -149,6 +149,26 @@ class Supabase:
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             name = Column(Text, nullable=False)
 
+        class PendingTask(self.Base):
+            __tablename__ = 'pending_task'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            description = Column(Text, nullable=False)
+            date = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            closed = Column(Text, nullable=True, default=None)
+
+        class PendingTaskFollowUp(self.Base):
+            __tablename__ = 'pending_task_follow_up'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            pending_task_id = Column(UUID(as_uuid=True), ForeignKey('pending_task.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            description = Column(Text, nullable=False)
+            completed = Column(Boolean, nullable=False, default=False)
+            date = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+
         # Contacts
         self.User = User
         self.Application = Application
@@ -168,6 +188,10 @@ class Supabase:
 
         # Trade Tickets
         self.TradeTicket = TradeTicket
+
+        # Pending Tasks
+        self.PendingTask = PendingTask
+        self.PendingTaskFollowUp = PendingTaskFollowUp
 
 # Create a single instance that can be imported and used throughout the application
 db = Supabase().db
