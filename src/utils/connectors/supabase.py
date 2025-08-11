@@ -158,6 +158,7 @@ class Supabase:
             description = Column(Text, nullable=False)
             date = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             closed = Column(Text, nullable=True, default=None)
+            tags = Column(ARRAY(Text), nullable=True)
 
         class PendingTaskFollowUp(self.Base):
             __tablename__ = 'pending_task_follow_up'
