@@ -1,18 +1,8 @@
 import pandas as pd
 from src.components.tools.reporting import get_open_positions_report, get_proposals_equity_report, get_rtd_report
 from src.components.tools.risk_profiles import riskProfiles
-from yfinance import *
 from src.utils.logger import logger
-from datetime import datetime, timedelta
-import yfinance as yf
-
-def fetch_historical_prices_etfs(etfs_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Fetch historical prices for ETFs using yfinance
-    """
-    logger.announcement('Fetching historical prices for ETFs...')
-    return
-    # Create a list of tickers to fetch
+import numpy as np
 
 def generate_investment_proposal(risk_profile_id: str):
 
@@ -31,15 +21,65 @@ def generate_investment_proposal(risk_profile_id: str):
     # Get proposals equity report
     proposals_equity = get_proposals_equity_report()
     proposals_equity_df = pd.DataFrame(proposals_equity)
-
-    # Extract only ETFs from State Street Family
-    etfs_df = proposals_equity_df[proposals_equity_df['Family'] == 'State Street']
-    print(etfs_df)
     
-    # Fetch historical prices for ETFs
-    etfs_historical_df = fetch_historical_prices_etfs(etfs_df)
-    print(etfs_historical_df)
+    """
+    ticker_list = proposals_equity_df['Ticker'].tolist()
 
+    market_data_df = yf.download(ticker_list, period='max', interval='1d')
+    print(market_data_df)
+    """
+    
+    spy_df = proposals_equity_df[proposals_equity_df['sheet_name'] == 'SPY']
+    spy_df = spy_df[['sheet_name', 'Date', 'Close']]
+
+    # Compute SPY year-over-year yields for the most recent five 1-year periods
+    try:
+        spy_df_calc = spy_df.copy()
+        spy_df_calc['Date'] = pd.to_datetime(spy_df_calc['Date'])
+        spy_df_calc = spy_df_calc[['Date', 'Close']].dropna()
+        spy_df_calc['Close'] = spy_df_calc['Close'].astype(float)
+        spy_series = spy_df_calc.set_index('Date')['Close'].sort_index()
+
+        if len(spy_series) >= 1250:  # roughly 5 years of trading days
+            t_current = spy_series.index.max()
+            t_minus_1y = t_current - pd.DateOffset(years=1)
+            t_minus_2y = t_current - pd.DateOffset(years=2)
+            t_minus_3y = t_current - pd.DateOffset(years=3)
+            t_minus_4y = t_current - pd.DateOffset(years=4)
+            t_minus_5y = t_current - pd.DateOffset(years=5)
+
+            def price_asof(target_date: pd.Timestamp) -> float:
+                return spy_series.loc[:target_date].iloc[-1]
+
+            p_t = price_asof(t_current)
+            p_t_1 = price_asof(t_minus_1y)
+            p_t_2 = price_asof(t_minus_2y)
+            p_t_3 = price_asof(t_minus_3y)
+            p_t_4 = price_asof(t_minus_4y)
+            p_t_5 = price_asof(t_minus_5y)
+
+            y_t_to_t1 = (p_t / p_t_1) - 1.0
+            y_t1_to_t2 = (p_t_1 / p_t_2) - 1.0
+            y_t2_to_t3 = (p_t_2 / p_t_3) - 1.0
+            y_t3_to_t4 = (p_t_3 / p_t_4) - 1.0
+            y_t4_to_t5 = (p_t_4 / p_t_5) - 1.0
+
+            yoy_yields = [y_t_to_t1, y_t1_to_t2, y_t2_to_t3, y_t3_to_t4, y_t4_to_t5]
+            avg_yield = np.round(sum(yoy_yields) / len(yoy_yields), 4) * 100
+
+            logger.announcement(
+                f"SPY YoY yields — t→t-1y: {y_t_to_t1:.2%}, "
+                f"t-1y→t-2y: {y_t1_to_t2:.2%}, "
+                f"t-2y→t-3y: {y_t2_to_t3:.2%}, "
+                f"t-3y→t-4y: {y_t3_to_t4:.2%}, "
+                f"t-4y→t-5y: {y_t4_to_t5:.2%}. "
+                f"Average: {avg_yield:.2%}"
+            )
+        else:
+            logger.warning('Not enough SPY history to compute five 1-year period yields.')
+    except Exception as exc:
+        logger.error(f'Failed computing SPY YoY yields: {exc}')
+    
     # Get RTD report
     rtd_report = get_rtd_report()
     rtd_df = pd.DataFrame(rtd_report)
@@ -115,7 +155,11 @@ def generate_investment_proposal(risk_profile_id: str):
         percentage = risk_profile[asset_type['name']]
         assets_to_invest = int(total_assets * percentage)
         if asset_type['name'] == 'etfs':
-            continue
+            asset_type['bonds'].append({
+                'Symbol_x': 'SPY',
+                'Current Yield': avg_yield,
+                'S&P Equivalent': 'ETF',
+            })
         for equivalent in asset_type['equivalents']:
             # Filter bonds by S&P equivalent (ignoring + / - modifiers) and keep the highest yields
             equivalent_df = merged_df[
@@ -125,7 +169,7 @@ def generate_investment_proposal(risk_profile_id: str):
                     == equivalent
             ]
             top_bonds = equivalent_df.head(assets_to_invest - len(asset_type['bonds']))
-            asset_type['bonds'].extend(top_bonds.to_dict(orient='records'))
+            asset_type['bonds'].extend(top_bonds[['Symbol_x', 'Current Yield', 'S&P Equivalent']].to_dict(orient='records'))
 
     # Print results
     for asset_type in bond_asset_types:
@@ -133,6 +177,7 @@ def generate_investment_proposal(risk_profile_id: str):
         logger.announcement(f'Percentage: {risk_profile[asset_type["name"]]}')
         logger.announcement(f'Assets to invest: {len(asset_type["bonds"])}')
         for bond in asset_type['bonds']:
+            print(bond)
             logger.info(f'Bond: {bond["Symbol_x"]} - {bond["Current Yield"]} - {bond["S&P Equivalent"]}')
 
     return bond_asset_types

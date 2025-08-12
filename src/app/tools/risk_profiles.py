@@ -14,12 +14,14 @@ def create():
     data = payload.get('data', None)
     return create_risk_profile(data=data)
 
-@bp.route('/read', methods=['POST'])
+@bp.route('/read', methods=['GET'])
 @verify_scope('risk_profiles/read')
 @format_response
 def read():
-    payload = request.get_json(force=True)
-    query = payload.get('query', None)
+    query = {}
+    id = request.args.get('id', None)
+    if id:
+        query['id'] = id
     return read_risk_profiles(query=query)
 
 @bp.route('/list', methods=['GET'])
