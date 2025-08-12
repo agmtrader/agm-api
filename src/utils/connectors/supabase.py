@@ -159,6 +159,8 @@ class Supabase:
             date = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             closed = Column(Text, nullable=True, default=None)
             tags = Column(ARRAY(Text), nullable=True)
+            priority = Column(Integer, nullable=False)
+            emails_to_notify = Column(ARRAY(Text), nullable=True)
 
         class PendingTaskFollowUp(self.Base):
             __tablename__ = 'pending_task_follow_up'
