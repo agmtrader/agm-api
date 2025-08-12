@@ -17,5 +17,8 @@ def create_advisor_route():
 @verify_scope('advisors/read')
 @format_response
 def advisors_route():
-    query = request.args.get('query', {})
-    return read_advisors(query)
+    query = {}
+    id = request.args.get('id', None)
+    if id:
+        query['id'] = id
+    return read_advisors(query=query)
