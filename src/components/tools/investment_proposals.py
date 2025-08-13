@@ -201,3 +201,8 @@ def create_investment_proposal(risk_profile: dict = None):
     logger.success(f'Investment proposal saved with id: {proposal_id}')
 
     return proposal_record
+
+@handle_exception
+def read_investment_proposals(query: dict = None):
+    investment_proposals = db.read(table='investment_proposal', query=query)
+    return investment_proposals
