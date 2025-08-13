@@ -126,7 +126,7 @@ class GoogleDrive:
   def _ensure_fresh_connection(self):
     """Ensure we have a fresh, working connection"""
     if self._is_connection_stale():
-      logger.info("Connection appears stale, refreshing...")
+      logger.info("Refreshing connection...")
       self.service = self._create_service()
 
   def _force_connection_refresh(self):

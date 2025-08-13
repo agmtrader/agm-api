@@ -5,7 +5,7 @@ from src.utils.exception import handle_exception
 logger.announcement('Initializing Risk Profile Service', type='info')
 logger.announcement('Initialized Risk Profile Service', type='success')
 
-riskProfiles = [
+risk_archetypes = [
   {
     'id': 1,
     'name': 'Conservative A',
@@ -13,7 +13,6 @@ riskProfiles = [
     'bonds_bbb': 0.7,
     'bonds_bb': 0,
     'etfs': 0,
-    'average_yield': .06103,
     'min_score': 0,
     'max_score': 0.9
   },
@@ -24,7 +23,6 @@ riskProfiles = [
     'bonds_bbb': 0.54,
     'bonds_bb': .18,
     'etfs': .1,
-    'average_yield': .0723,
     'min_score': 0.9,
     'max_score': 1.25
   },
@@ -35,7 +33,6 @@ riskProfiles = [
     'bonds_bbb': 0.48,
     'bonds_bb': 0.16,
     'etfs': 0.2,
-    'average_yield': .0764,
     'min_score': 1.25,
     'max_score': 1.5
   },
@@ -46,7 +43,6 @@ riskProfiles = [
     'bonds_bbb': 0.375,
     'bonds_bb': 0.15,
     'etfs': 0.25,
-    'average_yield': .0736,
     'min_score': 1.5,
     'max_score': 2
   },
@@ -57,7 +53,6 @@ riskProfiles = [
     'bonds_bbb': 0.35,
     'bonds_bb': 0.21,
     'etfs': 0.3,
-    'average_yield': .06103,
     'min_score': 2,
     'max_score': 2.5
   },
@@ -68,7 +63,6 @@ riskProfiles = [
     'bonds_bbb': 0.325,
     'bonds_bb': .195,
     'etfs': .35,
-    'average_yield': .0845,
     'min_score': 2.5,
     'max_score': 2.75
   },
@@ -79,7 +73,6 @@ riskProfiles = [
     'bonds_bbb': 0.30,
     'bonds_bb': 0.18,
     'etfs': 0.4,
-    'average_yield': .0865,
     'min_score': 2.75,
     'max_score': 3
   },
@@ -90,15 +83,14 @@ riskProfiles = [
     'bonds_bbb': 0.25,
     'bonds_bb': 0.20,
     'etfs': 0.5,
-    'average_yield': .0925,
     'min_score': 3,
     'max_score': 10
   }
 ]
 
 @handle_exception
-def list_risk_profiles():
-    return riskProfiles
+def list_risk_archetypes():
+    return risk_archetypes
 
 @handle_exception
 def create_risk_profile(data: dict):

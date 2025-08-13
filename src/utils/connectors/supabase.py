@@ -141,6 +141,17 @@ class Supabase:
             score = Column(Text, nullable=False)
             name = Column(Text, nullable=False)
 
+        class InvestmentProposal(self.Base):
+            __tablename__ = 'investment_proposal'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            risk_profile_id = Column(UUID(as_uuid=True), ForeignKey('risk_profile.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            aaa_a = Column(ARRAY(JSONB), nullable=False)
+            bbb = Column(ARRAY(JSONB), nullable=False)
+            bb = Column(ARRAY(JSONB), nullable=False)
+            etfs = Column(ARRAY(JSONB), nullable=False)
+
         class TradeTicket(self.Base):
             __tablename__ = 'trade_ticket'
             id = Column(Text, primary_key=True)
@@ -188,6 +199,9 @@ class Supabase:
         
         # Risk Profiles
         self.RiskProfile = RiskProfile    
+
+        # Investment Proposals
+        self.InvestmentProposal = InvestmentProposal
 
         # Trade Tickets
         self.TradeTicket = TradeTicket

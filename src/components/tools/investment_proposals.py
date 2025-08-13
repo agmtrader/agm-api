@@ -1,13 +1,13 @@
 import pandas as pd
 from src.components.tools.reporting import get_open_positions_report, get_proposals_equity_report, get_rtd_report
-from src.components.tools.risk_profiles import riskProfiles
+from src.components.tools.risk_profiles import risk_archetypes
 from src.utils.connectors.supabase import db
 from src.utils.exception import handle_exception
 from src.utils.logger import logger
 import numpy as np
 
 @handle_exception
-def create_investment_proposal(risk_profile_id: str):
+def create_investment_proposal(risk_profile: dict = None):
 
     logger.announcement('Generating investment proposal...')
 
@@ -29,13 +29,13 @@ def create_investment_proposal(risk_profile_id: str):
     ticker_list = proposals_equity_df['Ticker'].tolist()
 
     market_data_df = yf.download(ticker_list, period='max', interval='1d')
-    print(market_data_df)
     """
     
     spy_df = proposals_equity_df[proposals_equity_df['sheet_name'] == 'SPY']
     spy_df = spy_df[['sheet_name', 'Date', 'Close']]
 
     # Compute SPY year-over-year yields for the most recent five 1-year periods
+    avg_yield = None
     try:
         spy_df_calc = spy_df.copy()
         spy_df_calc['Date'] = pd.to_datetime(spy_df_calc['Date'])
@@ -69,15 +69,6 @@ def create_investment_proposal(risk_profile_id: str):
 
             yoy_yields = [y_t_to_t1, y_t1_to_t2, y_t2_to_t3, y_t3_to_t4, y_t4_to_t5]
             avg_yield = np.round(sum(yoy_yields) / len(yoy_yields), 4) * 100
-
-            logger.announcement(
-                f"SPY YoY yields — t→t-1y: {y_t_to_t1:.2%}, "
-                f"t-1y→t-2y: {y_t1_to_t2:.2%}, "
-                f"t-2y→t-3y: {y_t2_to_t3:.2%}, "
-                f"t-3y→t-4y: {y_t3_to_t4:.2%}, "
-                f"t-4y→t-5y: {y_t4_to_t5:.2%}. "
-                f"Average: {avg_yield:.2%}"
-            )
         else:
             logger.warning('Not enough SPY history to compute five 1-year period yields.')
     except Exception as exc:
@@ -124,9 +115,12 @@ def create_investment_proposal(risk_profile_id: str):
     merged_df[non_numeric_cols] = merged_df[non_numeric_cols].fillna('')
 
     # Get risk profile
-    risk_profile = next((rp for rp in riskProfiles if str(rp['id']) == str(risk_profile_id)), None)
-    if not risk_profile:
-        raise Exception(f'Risk profile with id {risk_profile_id} not found')
+    logger.announcement(f'Risk profile: {risk_profile}')
+    risk_score = risk_profile['score']
+    risk_profile_id = risk_profile['id']
+    risk_archetype = next((rp for rp in risk_archetypes if str(rp['min_score']) <= str(risk_score) and str(rp['max_score']) >= str(risk_score)), None)
+    if not risk_archetype:
+        raise Exception(f'Risk profile with score {risk_score} not found')
 
     investment_proposal = [
         {
@@ -155,12 +149,12 @@ def create_investment_proposal(risk_profile_id: str):
 
     # Populate bonds for each asset type
     for asset_type in investment_proposal:
-        percentage = risk_profile[asset_type['name']]
+        percentage = risk_archetype[asset_type['name']]
         assets_to_invest = int(total_assets * percentage)
         if asset_type['name'] == 'etfs':
             asset_type['bonds'].append({
                 'Symbol_x': 'SPY',
-                'Current Yield': avg_yield,
+                'Current Yield': float(avg_yield) if avg_yield is not None else 0.0,
                 'S&P Equivalent': 'ETF',
             })
         for equivalent in asset_type['equivalents']:
@@ -177,12 +171,33 @@ def create_investment_proposal(risk_profile_id: str):
     # Print results
     for asset_type in investment_proposal:
         logger.announcement(f'Asset Type: {asset_type["name"]}')
-        logger.announcement(f'Percentage: {risk_profile[asset_type["name"]]}')
+        logger.announcement(f'Percentage: {risk_archetype[asset_type["name"]]}')
         logger.announcement(f'Assets to invest: {len(asset_type["bonds"])}')
         for bond in asset_type['bonds']:
-            print(bond)
             logger.info(f'Bond: {bond["Symbol_x"]} - {bond["Current Yield"]} - {bond["S&P Equivalent"]}')
 
-    # Create investment proposal
-    #db.create(table='investment_proposal', data=investment_proposal)
-    return investment_proposal
+    # Normalize and persist investment proposal to match database schema
+    def normalize_bond(record: dict):
+        return {
+            'symbol': str(record.get('Symbol_x', '')),
+            'current_yield': float(record.get('Current Yield', 0) or 0),
+            'equivalent': str(record.get('S&P Equivalent', '')),
+        }
+
+    def get_bucket(name: str):
+        bucket = next((x for x in investment_proposal if x['name'] == name), None)
+        return [normalize_bond(b) for b in (bucket['bonds'] if bucket else [])]
+
+    proposal_record = {
+        'aaa_a': get_bucket('bonds_aaa_a'),
+        'bbb': get_bucket('bonds_bbb'),
+        'bb': get_bucket('bonds_bb'),
+        'etfs': get_bucket('etfs'),
+        'risk_profile_id': risk_profile_id,
+    }
+
+    logger.announcement('Saving investment proposal...')
+    proposal_id = db.create(table='investment_proposal', data=proposal_record)
+    logger.success(f'Investment proposal saved with id: {proposal_id}')
+
+    return proposal_record
