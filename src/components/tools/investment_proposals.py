@@ -1,10 +1,13 @@
 import pandas as pd
 from src.components.tools.reporting import get_open_positions_report, get_proposals_equity_report, get_rtd_report
 from src.components.tools.risk_profiles import riskProfiles
+from src.utils.connectors.supabase import db
+from src.utils.exception import handle_exception
 from src.utils.logger import logger
 import numpy as np
 
-def generate_investment_proposal(risk_profile_id: str):
+@handle_exception
+def create_investment_proposal(risk_profile_id: str):
 
     logger.announcement('Generating investment proposal...')
 
@@ -125,7 +128,7 @@ def generate_investment_proposal(risk_profile_id: str):
     if not risk_profile:
         raise Exception(f'Risk profile with id {risk_profile_id} not found')
 
-    bond_asset_types = [
+    investment_proposal = [
         {
             'name': 'bonds_aaa_a',
             'equivalents': ['AAA', 'AA', 'A'],
@@ -151,7 +154,7 @@ def generate_investment_proposal(risk_profile_id: str):
     total_assets = 20
 
     # Populate bonds for each asset type
-    for asset_type in bond_asset_types:
+    for asset_type in investment_proposal:
         percentage = risk_profile[asset_type['name']]
         assets_to_invest = int(total_assets * percentage)
         if asset_type['name'] == 'etfs':
@@ -172,7 +175,7 @@ def generate_investment_proposal(risk_profile_id: str):
             asset_type['bonds'].extend(top_bonds[['Symbol_x', 'Current Yield', 'S&P Equivalent']].to_dict(orient='records'))
 
     # Print results
-    for asset_type in bond_asset_types:
+    for asset_type in investment_proposal:
         logger.announcement(f'Asset Type: {asset_type["name"]}')
         logger.announcement(f'Percentage: {risk_profile[asset_type["name"]]}')
         logger.announcement(f'Assets to invest: {len(asset_type["bonds"])}')
@@ -180,4 +183,6 @@ def generate_investment_proposal(risk_profile_id: str):
             print(bond)
             logger.info(f'Bond: {bond["Symbol_x"]} - {bond["Current Yield"]} - {bond["S&P Equivalent"]}')
 
-    return bond_asset_types
+    # Create investment proposal
+    #db.create(table='investment_proposal', data=investment_proposal)
+    return investment_proposal
