@@ -117,8 +117,6 @@ def generate_trade_confirmation_message(flex_query_dict, indices):
         "Price",
         "Price (including Commissions)",
         "Amount",
-        "SettleDate",
-        "TradeDate",
         "TotalAmount"
     ]
 
