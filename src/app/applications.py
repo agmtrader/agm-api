@@ -20,10 +20,13 @@ def read_route():
     query = {}
     id = request.args.get('id', None)
     lead_id = request.args.get('lead_id', None)
+    user_id = request.args.get('user_id', None)
     if id:
         query['id'] = id
     if lead_id:
         query['lead_id'] = lead_id
+    if user_id: 
+        query['user_id'] = user_id
     return read_applications(query=query)
 
 @bp.route('/update', methods=['POST'])

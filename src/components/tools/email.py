@@ -138,7 +138,7 @@ class Gmail:
     subject = 'Urgente: Actualización de Correo Electrónico'
     email_template = 'email_change'
     bcc = ""
-    cc = f"jc@agmtechnology.com,hc@agmtechnology.com"
+    cc = f"jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com"
     if advisor_email:
       cc += f",{advisor_email}"
     return self.send_email("", client_email, subject, email_template, bcc=bcc, cc=cc)
