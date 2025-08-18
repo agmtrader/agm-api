@@ -96,6 +96,7 @@ class Supabase:
             master_account_id = Column(Text, nullable=True)
             date_sent_to_ibkr = Column(Text, nullable=True)
             application = Column(JSONB, nullable=True)
+            status = Column(Text, nullable=False, default='Started')
         
         class Account(self.Base):
             __tablename__ = 'account'
