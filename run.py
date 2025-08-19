@@ -10,7 +10,7 @@ from src.utils.managers.secret_manager import get_secret
 
 load_dotenv()
 
-public_routes = ['docs', 'index', 'token', 'oauth.login', 'oauth.create', 'yfinance.get_scroller_data']
+public_routes = ['docs', 'index', 'token', 'users.login', 'users.create']
 
 def jwt_required_except_login():
     logger.info(f'\nRequest endpoint: {request.endpoint} from {request.remote_addr}')
@@ -125,23 +125,13 @@ def start_api():
     from src.app.ada import gemini
     app.register_blueprint(gemini.bp, url_prefix='/ada')
 
-    # Auth
-    from src.app.auth import oauth
-    app.register_blueprint(oauth.bp, url_prefix='/oauth')
-
-    # Documents
-    #from src.app.documents import client_documents
-    #app.register_blueprint(client_documents.bp, url_prefix='/documents/clients')
-
     # Tools
-    from src.app.tools import reporting, risk_profiles, trade_tickets, investment_proposals
+    from src.app.tools import email, investment_proposals, reporting, risk_profiles, trade_tickets
+    app.register_blueprint(email.bp, url_prefix='/email')
+    app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')
     app.register_blueprint(reporting.bp, url_prefix='/reporting')
     app.register_blueprint(risk_profiles.bp, url_prefix='/risk_profiles')
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
-    app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')
-    
-    from src.app.tools import email
-    app.register_blueprint(email.bp, url_prefix='/email')
 
     # CRUD
     from src.app import accounts, advisors, applications, leads, pending_tasks, users

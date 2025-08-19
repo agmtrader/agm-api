@@ -24,14 +24,6 @@ def read_user_by_id(id: str) -> dict:
         raise Exception(f'Single entry has {len(user)} matches.')
 
 @handle_exception
-def read_user_by_credentials(email, password):
-    user = db.read(table='user', query={'email': email, 'password': password})
-    if len(user) == 1:
-        return user[0]
-    else:
-        raise Exception(f'Single entry has {len(user)} matches.')
-
-@handle_exception
 def update_user(user):
     user = db.update(table='user', data=user)
     return user
