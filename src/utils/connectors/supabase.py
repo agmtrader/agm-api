@@ -141,6 +141,7 @@ class Supabase:
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             score = Column(Text, nullable=False)
             name = Column(Text, nullable=False)
+            answers = Column(JSONB, nullable=True)
 
         class InvestmentProposal(self.Base):
             __tablename__ = 'investment_proposal'
