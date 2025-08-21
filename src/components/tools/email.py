@@ -4,6 +4,7 @@ from google.oauth2.credentials import Credentials
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
+from email.utils import formataddr
 from jinja2 import Environment, FileSystemLoader
 from premailer import transform
 
@@ -95,7 +96,10 @@ class Gmail:
     # Create a multipart message
     message = MIMEMultipart('alternative')
     message['Subject'] = subject
-    message['From'] = "info@agmtechnology.com"
+    display_name = "AGM Technology"
+    email_address = "info@agmtechnology.com"
+    formatted_from = formataddr((display_name, email_address))
+    message['From'] = formatted_from
 
     # Convert dictionary to readable plain text format
     if isinstance(content, dict):
@@ -110,7 +114,7 @@ class Gmail:
     final_message = MIMEMultipart('related')
     final_message['Subject'] = subject
     final_message['To'] = client_email
-    final_message['From'] = "info@agmtechnology.com"
+    final_message['From'] = formatted_from
     final_message['Bcc'] = bcc
     final_message['Cc'] = cc
 
