@@ -185,6 +185,16 @@ class Supabase:
             completed = Column(Boolean, nullable=False, default=False)
             date = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
 
+        class EmailChange(self.Base):
+            __tablename__ = 'email_change'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            ibkr_account_number = Column(Text, nullable=False)
+            email = Column(Text, nullable=True)
+            temporal_email = Column(Text, nullable=True)
+            Title = Column(Text, nullable=True)
+            sheet_name = Column(Text, nullable=True)
+            ibkr_username = Column(Text, nullable=True)
+
         # Contacts
         self.User = User
         self.Application = Application
@@ -211,6 +221,9 @@ class Supabase:
         # Pending Tasks
         self.PendingTask = PendingTask
         self.PendingTaskFollowUp = PendingTaskFollowUp
+
+        # Email Change
+        self.EmailChange = EmailChange
 
 # Create a single instance that can be imported and used throughout the application
 db = Supabase().db

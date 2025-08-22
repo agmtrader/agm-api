@@ -162,3 +162,118 @@ class Gmail:
     bcc = ""
     cc = "jc@agmtechnology.com,hc@agmtechnology.com"
     return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)
+
+  @handle_exception
+  def get_inbox_emails_from_sender(self, sender: str, include_body: bool = False):
+    """
+    Read all emails in the inbox that match the provided sender.
+
+    Args:
+      sender: Email address (or partial) of the sender to search for, e.g. "noreply@example.com".
+      include_body: If True, returns decoded text/html bodies when available.
+
+    Returns:
+      List of dictionaries with message metadata (and body if requested).
+    """
+    logger.announcement(f'Fetching inbox emails from sender: {sender}', type='info')
+
+    query = f'from:{sender} in:inbox'
+    user_id = 'me'
+    messages = []
+
+    page_token = None
+    while True:
+      request = self.service.users().messages().list(userId=user_id, q=query, pageToken=page_token)
+      response = request.execute()
+
+      for item in response.get('messages', []):
+        msg = self.service.users().messages().get(
+          userId=user_id,
+          id=item['id'],
+          format='full' if include_body else 'metadata',
+          metadataHeaders=['Subject', 'From', 'To', 'Date']
+        ).execute()
+
+        headers = msg.get('payload', {}).get('headers', []) if msg.get('payload') else []
+        subject = self._get_header(headers, 'Subject')
+        from_header = self._get_header(headers, 'From')
+        to_header = self._get_header(headers, 'To')
+        date_header = self._get_header(headers, 'Date')
+
+        message_entry = {
+          'id': msg.get('id'),
+          'threadId': msg.get('threadId'),
+          'snippet': msg.get('snippet'),
+          'subject': subject,
+          'from': from_header,
+          'to': to_header,
+          'date': date_header,
+        }
+
+        if include_body:
+          body = self._extract_message_body(msg.get('payload', {}))
+          message_entry['body'] = body
+
+        messages.append(message_entry)
+
+      page_token = response.get('nextPageToken')
+      if not page_token:
+        break
+
+    logger.success(f'Fetched {len(messages)} emails from sender: {sender}')
+    return messages
+
+  def _extract_message_body(self, payload):
+    """
+    Extract text and html bodies from a Gmail message payload.
+
+    Returns a dict: { 'text': str, 'html': str }
+    """
+    result = {'text': '', 'html': ''}
+
+    if not payload:
+      return result
+
+    # Handle single-part messages
+    body = payload.get('body', {})
+    data = body.get('data')
+    mime_type = payload.get('mimeType', '')
+    if data:
+      try:
+        decoded = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
+      except Exception:
+        decoded = ''
+      if mime_type == 'text/plain':
+        result['text'] += decoded
+      elif mime_type == 'text/html':
+        result['html'] += decoded
+
+    # Handle multi-part messages recursively
+    def walk(parts):
+      for part in parts or []:
+        part_mime = part.get('mimeType', '')
+        part_body = part.get('body', {})
+        part_data = part_body.get('data')
+        if part_data:
+          try:
+            part_decoded = base64.urlsafe_b64decode(part_data).decode('utf-8', errors='ignore')
+          except Exception:
+            part_decoded = ''
+          if part_mime == 'text/plain':
+            result['text'] += part_decoded
+          elif part_mime == 'text/html':
+            result['html'] += part_decoded
+        # Nested parts
+        if part.get('parts'):
+          walk(part.get('parts'))
+
+    if payload.get('parts'):
+      walk(payload.get('parts'))
+
+    return result
+
+  def _get_header(self, headers, name):
+    for header in headers or []:
+      if header.get('name', '').lower() == name.lower():
+        return header.get('value')
+    return None
