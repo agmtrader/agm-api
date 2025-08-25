@@ -25,15 +25,12 @@ def create_follow_up(lead_id: str = None, follow_up: dict = None):
 @handle_exception
 def read_leads(query: dict = None):
     leads = db.read(table='lead', query=query)
-    follow_ups = db.read(table='follow_up', query=query)
-
-    filtered_follow_ups = []
-    for lead in leads:
-        for follow_up in follow_ups:
-            if follow_up['lead_id'] == lead['id']:
-                filtered_follow_ups.append(follow_up)
-
-    return {'leads': leads, 'follow_ups': filtered_follow_ups}
+    if 'id' in query:
+        follow_ups_query = {'lead_id': query['id']}
+    else:
+        follow_ups_query = {}
+    follow_ups = db.read(table='follow_up', query=follow_ups_query)
+    return {'leads': leads, 'follow_ups': follow_ups}
 
 @handle_exception
 def read_follow_ups(query: dict = None):

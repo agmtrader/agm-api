@@ -165,7 +165,7 @@ class Supabase:
         class PendingTask(self.Base):
             __tablename__ = 'pending_task'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False, unique=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             description = Column(Text, nullable=False)
