@@ -34,3 +34,8 @@ def read_pending_tasks(query: dict = None):
                 filtered_pending_task_follow_ups.append(pending_task_follow_up)
 
     return {'pending_tasks': pending_tasks, 'follow_ups': filtered_pending_task_follow_ups}
+
+@handle_exception
+def update_pending_task(query: dict = None, task: dict = None):
+    db.update(table='pending_task', query=query, data=task)
+    return {'id': query['id']}

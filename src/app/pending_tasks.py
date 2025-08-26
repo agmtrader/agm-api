@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.pending_tasks import create_pending_task, read_pending_tasks
+from src.components.pending_tasks import create_pending_task, read_pending_tasks, update_pending_task
 from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
 
@@ -27,3 +27,12 @@ def read_pending_tasks_route():
     if account_id:
         query['account_id'] = account_id
     return read_pending_tasks(query=query)
+
+@bp.route('/update', methods=['POST'])
+@verify_scope('pending_tasks/update')
+@format_response
+def update_pending_task_route():
+    payload = request.get_json(force=True)
+    query = payload.get('query', None)
+    task = payload.get('task', None)
+    return update_pending_task(query=query, task=task)

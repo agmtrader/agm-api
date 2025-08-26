@@ -164,6 +164,14 @@ class Gmail:
     return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)
 
   @handle_exception
+  def send_task_reminder_email(self, content, agm_user_email):
+    subject = 'Task Reminder'
+    email_template = 'task_reminder'
+    bcc = ""
+    cc = ""
+    return self.send_email(content, agm_user_email, subject, email_template, bcc=bcc, cc=cc)
+
+  @handle_exception
   def get_inbox_emails_from_sender(self, sender: str, include_body: bool = False):
     """
     Read all emails in the inbox that match the provided sender.

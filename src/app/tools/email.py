@@ -26,3 +26,10 @@ def send_confirmation_email_route():
 def send_application_link_email_route():
   payload = request.get_json(force=True)
   return Email.send_application_link_email(payload['content'], payload['client_email'], payload['lang'])
+
+@bp.route('/send_email/task_reminder', methods=['POST'])
+@verify_scope('email/send_email')
+@format_response
+def send_task_reminder_email_route():
+  payload = request.get_json(force=True)
+  return Email.send_task_reminder_email(payload['content'], payload['agm_user_email'])
