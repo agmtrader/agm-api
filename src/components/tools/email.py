@@ -4,7 +4,7 @@ from google.oauth2.credentials import Credentials
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
-from email.utils import formataddr
+from email.utils import formataddr, parsedate_to_datetime
 from jinja2 import Environment, FileSystemLoader
 from premailer import transform
 
@@ -14,6 +14,8 @@ from src.utils.managers.secret_manager import get_secret
 
 import os
 import base64
+import re
+from datetime import datetime, timezone
 
 class Gmail:
 
@@ -208,6 +210,7 @@ class Gmail:
         to_header = self._get_header(headers, 'To')
         date_header = self._get_header(headers, 'Date')
 
+        # Base message fields
         message_entry = {
           'id': msg.get('id'),
           'threadId': msg.get('threadId'),
@@ -221,6 +224,28 @@ class Gmail:
         if include_body:
           body = self._extract_message_body(msg.get('payload', {}))
           message_entry['body'] = body
+
+        # Enrichment: parsed date (tz-aware), epoch seconds and ISO
+        try:
+          parsed_dt = parsedate_to_datetime(date_header) if date_header else None
+          if parsed_dt and parsed_dt.tzinfo is None:
+            parsed_dt = parsed_dt.replace(tzinfo=timezone.utc)
+          if parsed_dt:
+            message_entry['date_iso'] = parsed_dt.astimezone(timezone.utc).isoformat()
+            message_entry['date_ts'] = int(parsed_dt.timestamp())
+        except Exception:
+          pass
+
+        # Enrichment: category and details
+        category = self._categorize_message(subject or '', from_header or '')
+        message_entry['category'] = category
+        try:
+          details = self._extract_details(category, subject or '', message_entry.get('snippet') or '', (message_entry.get('body') or {}).get('text', ''))
+          if details:
+            message_entry['details'] = details
+        except Exception:
+          # Non-fatal if extraction fails
+          pass
 
         messages.append(message_entry)
 
@@ -284,4 +309,85 @@ class Gmail:
     for header in headers or []:
       if header.get('name', '').lower() == name.lower():
         return header.get('value')
+    return None
+
+  def _categorize_message(self, subject: str, from_header: str) -> str:
+    subj = subject.lower()
+    if 'message center notification' in subj:
+      return 'message_center_notification'
+    if 'message summary' in subj:
+      return 'message_summary'
+    if 'mutual fund/etf advisory' in subj:
+      return 'fund_etf_advisory'
+    if 'earnings notification' in subj:
+      return 'earnings_notification'
+    if 'option expiration notification' in subj:
+      return 'options_expiration'
+    if 'dividend-triggered option exercise advisory' in subj:
+      return 'dividend_option_exercise'
+    if 'monthly activity statement' in subj:
+      return 'monthly_statement'
+    if 'reminder to think before you click' in subj:
+      return 'security_reminder'
+    if 'important message' in subj:
+      return 'important_account_alert'
+    if subj.startswith('fyi: changes in analyst ratings') or 'analyst ratings' in subj:
+      return 'analyst_ratings'
+    if 'confirmation of request' in subj:
+      return 'request_confirmation'
+    return 'other'
+
+  def _extract_details(self, category: str, subject: str, snippet: str, body_text: str):
+    text = ' '.join([subject or '', snippet or '', body_text or ''])
+    text = re.sub(r'\s+', ' ', text)
+    if category == 'earnings_notification':
+      # Example: "- NVDA declaring Q2 '26 earning on 27-AUG-2025 AfterClose. ... Implied Move: +/-6.8%."
+      m = re.search(r'-\s*([A-Z]{1,6})\s+declaring\s+(Q\d+\s*[\'\u2019]?\d{2})\s+earning\s+on\s+([0-9]{1,2}-[A-Z]{3}-[0-9]{4})\s+(BeforeOpen|AfterClose)', text, re.IGNORECASE)
+      implied = re.search(r'Implied Move:\s*([+\-]?[0-9]+(?:\.[0-9]+)?)%', text)
+      details = {}
+      if m:
+        details['ticker'] = m.group(1).upper()
+        details['quarter'] = m.group(2).upper()
+        details['date'] = m.group(3)
+        details['session'] = m.group(4)
+      if implied:
+        details['implied_move_pct'] = float(implied.group(1))
+      return details or None
+    if category == 'options_expiration':
+      # Capture a few option lines: "- TSLA 15AUG2025 200 P in Account(Qty): U****467(10)"
+      option_items = re.findall(r'-\s*([A-Z]{1,6})\s+(\d{2}[A-Z]{3}\d{4})\s+([0-9]+)\s+([CP])\b', text)
+      accounts = re.findall(r'U\*+\d+', text)
+      if option_items or accounts:
+        return {
+          'options': [
+            { 'ticker': t.upper(), 'expiry': exp, 'strike': int(strike), 'type': opt }
+            for (t, exp, strike, opt) in option_items
+          ],
+          'accounts': list(dict.fromkeys(accounts))
+        }
+      return None
+    if category == 'fund_etf_advisory':
+      # "- IBIT in Account(Qty): U****416(70)"
+      tickers = re.findall(r'-\s*([A-Z]{2,10})\b', text)
+      accounts = re.findall(r'U\*+\d+', text)
+      if tickers or accounts:
+        return { 'tickers': list(dict.fromkeys([t.upper() for t in tickers])), 'accounts': list(dict.fromkeys(accounts)) }
+      return None
+    if category == 'message_summary' or category == 'message_center_notification':
+      master = re.search(r'master account\s+([A-Z]\*+\d+)', text, re.IGNORECASE)
+      unread = re.search(r'summarizes\s+unread\s+message\(s\)', text, re.IGNORECASE)
+      return { 'master_account': master.group(1) if master else None, 'has_unread': bool(unread) }
+    if category == 'monthly_statement':
+      month_year = re.search(r'Monthly Activity Statement for\s+([A-Za-z]+\s+\d{4})', text)
+      account = re.search(r'account\s+([FU]\*+\d+)', text)
+      return { 'period': month_year.group(1) if month_year else None, 'account': account.group(1) if account else None }
+    if category == 'analyst_ratings':
+      # No structured fields reliably present; return a simple marker
+      return { 'topic': 'analyst_ratings_update' }
+    if category == 'security_reminder':
+      return { 'topic': 'security_phishing_reminder' }
+    if category == 'important_account_alert':
+      return { 'topic': 'important_action_required' }
+    if category == 'request_confirmation':
+      return { 'topic': 'request_confirmation' }
     return None
