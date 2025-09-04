@@ -81,21 +81,6 @@ TODO:
     - Tasks for Subaccounts
 """
 
-def get_dimensional_table():
-    """
-    Get the clients report.
-    
-    :return: Response object with clients report or error message
-    """
-    accounts = read_accounts(query={})
-    clients = get_clients_report()
-    accounts_df = pd.DataFrame(accounts)
-    clients_df = pd.DataFrame(clients)
-
-    consolidated_df = pd.merge(clients_df, accounts_df, left_on='Account ID', right_on='ibkr_account_number', how='left')
-    consolidated_df = consolidated_df.fillna('')
-    return {'consolidated': consolidated_df.to_dict(orient='records')}
-
 def get_clients_report():
     """
     Get the clients list.
@@ -208,7 +193,7 @@ def extract() -> dict:
         try:
             flex_queries[query_id] = getFlexQuery(query_id)
         except Exception as e:
-            logger.warning(f'Error fetching Flex Query: {e}')
+            logger.error(f'Error fetching Flex Query for {query_id}: {e}')
             continue
     logger.announcement('Flex Queries fetched.', type='success')
 
@@ -218,7 +203,7 @@ def extract() -> dict:
         try:
             Drive.upload_file(file_name=key, mime_type='text/csv', file_data=value, parent_folder_id=batch_folder_id)
         except Exception as e:
-            logger.warning(f'Error uploading Flex Query: {e}')
+            logger.error(f'Error uploading Flex Query for {key}: {e}')
             continue
     logger.announcement('Flex Queries uploaded to batch folder.', type='success')
     time.sleep(2)

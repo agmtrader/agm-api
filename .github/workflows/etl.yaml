@@ -3,73 +3,111 @@ name: Daily ETL Pipeline
 on:
   schedule:
     - cron: '30 13 * * *'   # Every day at 1 PM UTC (7:00 AM CST)
-  workflow_dispatch:        # Manual trigger
+  workflow_dispatch:
 
 jobs:
   etl:
     runs-on: ubuntu-latest
 
     steps:
-    # 1 ─────────────────────────────────────────────────────────
-    - name: Request access token
-      id: token                # so we can reference outputs
-      run: |
-        response=$(curl -s -w "\n%{http_code}" -X POST \
-          -H "Content-Type: application/json" \
-          -d '{"token":"${{ secrets.AUTHENTICATION_TOKEN }}","scopes":"all"}' \
-          https://api.agmtechnology.com/token)
+      # 1 ─────────────────────────────────────────────────────────
+      - name: Request access token
+        id: token
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"token":"${{ secrets.AUTHENTICATION_TOKEN }}","scopes":"all"}' \
+            https://api.agmtechnology.com/token)
 
-        http_status=$(echo "$response" | tail -n1)
-        body=$(echo "$response" | sed '$d')
+          http_status=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
 
-        # expose for later steps
-        echo "http_status=$http_status"    >> "$GITHUB_OUTPUT"
-        echo "body=$body"                  >> "$GITHUB_OUTPUT"
+          echo "http_status=$http_status" >> "$GITHUB_OUTPUT"
+          echo "body=$body"               >> "$GITHUB_OUTPUT"
 
-        if [ "$http_status" != "200" ]; then
-          echo "Token request failed with status $http_status"
-          exit 1
-        fi
+          if [ "$http_status" != "200" ]; then
+            echo "Token request failed with status $http_status"
+            exit 1
+          fi
 
-        access_token=$(echo "$body" | jq -r '.access_token')
-        if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
-          echo "access_token not found in response"
-          exit 1
-        fi
-        echo "access_token=$access_token"  >> "$GITHUB_OUTPUT"
+          access_token=$(echo "$body" | jq -r '.access_token')
+          if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
+            echo "access_token not found in response"
+            exit 1
+          fi
+          echo "access_token=$access_token" >> "$GITHUB_OUTPUT"
 
-    # 2 ─────────────────────────────────────────────────────────
-    - name: Trigger reporting run
-      id: reporting
-      run: |
-        status=$(curl -s -o /dev/null -w "%{http_code}" \
-          -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
-          -X GET https://api.agmtechnology.com/reporting/run)
+      # 2 ─────────────────────────────────────────────────────────
+      - name: Trigger reporting run
+        id: reporting
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
+            -X GET https://api.agmtechnology.com/reporting/run)
 
-        echo "http_status=$status" >> "$GITHUB_OUTPUT"
+          echo "http_status=$status" >> "$GITHUB_OUTPUT"
 
-        if [ "$status" != "200" ]; then
-          echo "Reporting run request failed with status $status"
-          exit 1
-        fi
+          if [ "$status" != "200" ]; then
+            echo "Reporting run request failed with status $status"
+            exit 1
+          fi
 
-    # 3 ─────────────────────────────────────────────────────────
-    - name: Summarise results
-      run: |
-        {
-          echo "## ETL summary :clipboard:"
-          echo ""
-          echo "| Action | HTTP status |"
-          echo "| ------ | ----------- |"
-          echo "| Token request   | \`${{ steps.token.outputs.http_status }}\` |"
-          echo "| Reporting run   | \`${{ steps.reporting.outputs.http_status }}\` |"
-        } >> "$GITHUB_STEP_SUMMARY"
+      # 3 ─────────────────────────────────────────────────────────
+      - name: Summarise results
+        run: |
+          {
+            echo "## ETL summary :clipboard:"
+            echo ""
+            echo "| Action | HTTP status |"
+            echo "| ------ | ----------- |"
+            echo "| Token request   | \`${{ steps.token.outputs.http_status }}\` |"
+            echo "| Reporting run   | \`${{ steps.reporting.outputs.http_status }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-    # 4 (Optional) ──────────────────────────────────────────────
-    # - name: Upload raw responses
-    #   uses: actions/upload-artifact@v4
-    #   with:
-    #     name: etl-raw-responses
-    #     path: |
-    #       ${{ runner.temp }}/token-response.json
-    #       ${{ runner.temp }}/reporting-response.json
+  notify-success:
+    needs: etl
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send success email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "✅ Daily ETL Pipeline SUCCEEDED"
+          to: your@email.com
+          from: github-actions@yourdomain.com
+          body: |
+            The Daily ETL Pipeline workflow completed successfully 🎉
+
+            Repo: ${{ github.repository }}
+            Branch: ${{ github.ref }}
+            Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Summary:
+            - Token request: ${{ needs.etl.outputs.token_status }}
+            - Reporting run: ${{ needs.etl.outputs.reporting_status }}
+
+  notify-failure:
+    needs: etl
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send failure email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "🚨 Daily ETL Pipeline FAILED"
+          to: your@email.com
+          from: github-actions@yourdomain.com
+          body: |
+            The Daily ETL Pipeline workflow failed ❌
+
+            Repo: ${{ github.repository }}
+            Branch: ${{ github.ref }}
+            Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
