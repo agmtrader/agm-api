@@ -33,3 +33,47 @@ jobs:
             --region us-central1 \
             --platform managed \
             --quiet
+
+  notify-success:
+    needs: redeploy
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send success email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "✅ Daily Cloud Run Refresh SUCCEEDED"
+          to: aa@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: |
+            The Daily Cloud Run Refresh workflow completed successfully 🎉
+
+            Repo: ${{ github.repository }}
+            Branch: ${{ github.ref }}
+            Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+  notify-failure:
+    needs: redeploy
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send failure email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "🚨 Daily Cloud Run Refresh FAILED"
+          to: aa@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: |
+            The Daily Cloud Run Refresh workflow failed ❌
+
+            Repo: ${{ github.repository }}
+            Branch: ${{ github.ref }}
+            Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
