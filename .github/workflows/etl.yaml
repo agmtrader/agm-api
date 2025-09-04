@@ -77,8 +77,8 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: "✅ Daily ETL Pipeline SUCCEEDED"
-          to: your@email.com
-          from: github-actions@yourdomain.com
+          to: aa@agmtechnology.com
+          from: aa@agmtechnology.com
           body: |
             The Daily ETL Pipeline workflow completed successfully 🎉
 
@@ -103,8 +103,8 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: "🚨 Daily ETL Pipeline FAILED"
-          to: your@email.com
-          from: github-actions@yourdomain.com
+          to: aa@agmtechnology.com
+          from: aa@agmtechnology.com
           body: |
             The Daily ETL Pipeline workflow failed ❌
 
