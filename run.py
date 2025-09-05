@@ -7,6 +7,8 @@ from flask_limiter.util import get_remote_address
 from src.utils.logger import logger
 from datetime import timedelta
 from src.utils.managers.secret_manager import get_secret
+from src.utils.response import format_response
+from src.utils.exception import ServiceError
 
 load_dotenv()
 
@@ -89,37 +91,40 @@ def start_api():
     # JWT Token
     from src.components.users import read_user_by_id
     @app.route('/token', methods=['POST'])
+    @format_response
     def token():
         logger.announcement('Token request.')
         payload = request.get_json(force=True)
 
-        token = payload['token']
-        scopes = payload['scopes']
+        token_value = payload.get('token')
+        scopes = payload.get('scopes')
 
-        if token is None or token == '':
-            return jsonify({"msg": "Unauthorized"}), 401
-
-        if scopes is None or scopes == '':
-            return jsonify({"msg": "Unauthorized"}), 401
+        if not token_value or not scopes:
+            raise ServiceError("Unauthorized", status_code=401)
 
         expires_delta = DEFAULT_TOKEN_EXPIRES
-        user = read_user_by_id(str(token))
 
-        if user and user is not None and user['id'] == token:
+        # Validate user
+        try:
+            user = read_user_by_id(str(token_value))
+        except Exception:
+            raise ServiceError("Unauthorized", status_code=401)
+
+        if user and user['id'] == token_value:
             logger.info(f'Generating access token for user with scopes {scopes}.')
             access_token = create_access_token(
-                identity=token,
+                identity=token_value,
                 additional_claims={"scopes": scopes},
                 expires_delta=expires_delta
             )
-            logger.announcement(f'Authenticated user', 'success')
-            return jsonify(
-                access_token=access_token,
-                expires_in=int(expires_delta.total_seconds())
-            ), 200
+            logger.announcement('Authenticated user', 'success')
+            return {
+                "access_token": access_token,
+                "expires_in": int(expires_delta.total_seconds())
+            }
 
-        logger.error(f'Failed to authenticate user {token}')
-        return jsonify({"msg": "Unauthorized"}), 401
+        logger.error(f'Failed to authenticate user {token_value}')
+        raise ServiceError("Unauthorized", status_code=401)
     
     # Ada
     from src.app.ada import gemini

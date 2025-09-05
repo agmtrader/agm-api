@@ -7,6 +7,7 @@ from email.mime.image import MIMEImage
 from email.utils import formataddr, parsedate_to_datetime
 from jinja2 import Environment, FileSystemLoader
 from premailer import transform
+from bs4 import BeautifulSoup
 
 from src.utils.logger import logger
 from src.utils.exception import handle_exception
@@ -241,7 +242,7 @@ class Gmail:
         category = self._categorize_message(subject or '', from_header or '')
         message_entry['category'] = category
         try:
-          details = self._extract_details(category, subject or '', message_entry.get('snippet') or '', (message_entry.get('body') or {}).get('text', ''))
+          details = self._extract_details(category, subject or '', message_entry.get('snippet') or '', (message_entry.get('body') or {}).get('text', ''), (message_entry.get('body') or {}).get('html', ''))
           if details:
             message_entry['details'] = details
         except Exception:
@@ -338,7 +339,7 @@ class Gmail:
       return 'request_confirmation'
     return 'other'
 
-  def _extract_details(self, category: str, subject: str, snippet: str, body_text: str):
+  def _extract_details(self, category: str, subject: str, snippet: str, body_text: str, body_html: str = ''):
     text = ' '.join([subject or '', snippet or '', body_text or ''])
     text = re.sub(r'\s+', ' ', text)
     if category == 'earnings_notification':
@@ -374,10 +375,61 @@ class Gmail:
       if tickers or accounts:
         return { 'tickers': list(dict.fromkeys([t.upper() for t in tickers])), 'accounts': list(dict.fromkeys(accounts)) }
       return None
-    if category == 'message_summary' or category == 'message_center_notification':
+    if category == 'message_summary':
       master = re.search(r'master account\s+([A-Z]\*+\d+)', text, re.IGNORECASE)
-      unread = re.search(r'summarizes\s+unread\s+message\(s\)', text, re.IGNORECASE)
-      return { 'master_account': master.group(1) if master else None, 'has_unread': bool(unread) }
+      # Parse html table for row data
+      rows_data = []
+      if body_html:
+        try:
+          soup = BeautifulSoup(body_html, 'html.parser')
+          # find first table that has a header cell containing "Subject"
+          table = None
+          for tbl in soup.find_all('table'):
+            th_texts = [th.get_text(strip=True).lower() for th in tbl.find_all('th')]
+            if any('subject' in t for t in th_texts):
+              table = tbl
+              break
+          if table:
+            # identify column indices based on header labels
+            headers = [th.get_text(strip=True).lower() for th in table.find_all('th')]
+            def col(name):
+              for idx, h in enumerate(headers):
+                if name in h:
+                  return idx
+              return None
+            for tr in table.find_all('tr')[1:]:
+              tds = tr.find_all(['td', 'th'])
+              if not tds:
+                continue
+              def safe(idx):
+                return tds[idx].get_text(strip=True) if idx is not None and idx < len(tds) else ''
+              rows_data.append({
+                'subject': safe(col('subject')),
+                'category': safe(col('category')),
+                'message_type': safe(col('message type')),
+                'unread_count': safe(col('unread')),
+                'newest_date': safe(col('newest')),
+              })
+        except Exception:
+          pass
+      unread = bool(rows_data)  # if rows exist, they are unread summary rows
+      return { 'master_account': master.group(1) if master else None, 'rows': rows_data, 'has_unread': unread }
+    if category == 'message_center_notification':
+      master = re.search(r'Account\s+([A-Z]\*+\d+)', text, re.IGNORECASE)
+      # Extract ticket numbers and descriptions from html body
+      tickets = []
+      if body_html:
+        try:
+          soup = BeautifulSoup(body_html, 'html.parser')
+          # This assumes ticket numbers are inside elements containing "Ticket Number:" text
+          for elem in soup.find_all(text=re.compile(r'Ticket Number', re.IGNORECASE)):
+            ticket_text = elem.parent.get_text(" ", strip=True)
+            m = re.search(r'Ticket Number[:\s]*([A-Z0-9]+)', ticket_text)
+            if m:
+              tickets.append({ 'ticket': m.group(1), 'description': ticket_text })
+        except Exception:
+          pass
+      return { 'master_account': master.group(1) if master else None, 'tickets': tickets }
     if category == 'monthly_statement':
       month_year = re.search(r'Monthly Activity Statement for\s+([A-Za-z]+\s+\d{4})', text)
       account = re.search(r'account\s+([FU]\*+\d+)', text)

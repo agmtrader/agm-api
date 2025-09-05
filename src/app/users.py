@@ -3,6 +3,7 @@ from src.components.users import read_users, update_user, create_user
 from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
 from src.utils.logger import logger
+from src.utils.exception import ServiceError
 
 bp = Blueprint('users', __name__)
 
@@ -32,9 +33,10 @@ def login():
     users = read_users(query={'email': email, 'password': password})
     if len(users) == 1:
         return users[0]
-    else:
-        logger.error(f'Single entry has {len(users)} matches.')
-        raise Exception(f'Single entry has {len(users)} matches.')
+
+    logger.error(f'Single entry has {len(users)} matches.')
+    # Raise 400 for client-side error (bad credentials)
+    raise ServiceError(f'Single entry has {len(users)} matches.', status_code=400)
 
 @bp.route('/read', methods=['GET'])
 @verify_scope('users/read')
