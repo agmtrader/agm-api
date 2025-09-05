@@ -793,7 +793,6 @@ def get_size_preasure(BID_size, ASK_size):
         size_preasure = BID_size - ASK_size
         return size_preasure
     except Exception as e:
-        print(f"Error calculating size preasure: {e}")
         return None
 
 def get_current_yield(coupon, last, ask, bid):
@@ -873,7 +872,6 @@ def get_bond_duration(maturity_date, coupon_rate, price, frequency):
         duration = sum(weighted_pvs) / price
 
     except Exception as e:
-        #print(f"Error calculating duration: {e}")
         return 0
 
     return duration
@@ -964,7 +962,6 @@ def get_fraction_as_float(fraction_text):
             # If no fraction, convert the text directly to float
             return float(fraction_text)
     except Exception as e:
-        print(f"Error converting {fraction_text}: {e}")
         return None  # Return None or some default value in case of conversion error
 
 def get_coupon_from_ibkr_description(text):
@@ -1011,7 +1008,6 @@ def get_maturity_from_ibkr_description(text):
                 year = '20' + year
             maturity = datetime.datetime.strptime(f'{year}-{month}-{day}', '%Y-%m-%d').date()
     except Exception as e:
-        print(f"Error converting maturity date {maturity}: {e}")
         maturity = None
     return maturity
 
@@ -1088,9 +1084,6 @@ def list_files_recursively(root_folder):
             full_path = os.path.join(dirpath, filename)
             file_paths.append(full_path)
             
-
-    # Print total number of files found
-    print(f"\nTotal files found: {len(file_paths)}")
     return file_paths
 
 def get_file_created_date(file_path):
@@ -1115,13 +1108,10 @@ def get_file_created_date(file_path):
         # Convert timestamp to datetime object
         creation_datetime = datetime.datetime.fromtimestamp(creation_time)
         
-        print(f"\nFile creation date: {creation_datetime}")
         return creation_datetime
         
     except FileNotFoundError:
-        print(f"Error: File '{file_path}' not found")
     except Exception as e:
-        print(f"Error: {str(e)}")
 
 def get_latest_ibkr_query(folder_path: str, query_number: str, daily: bool):
 
@@ -1155,8 +1145,6 @@ def get_latest_ibkr_query(folder_path: str, query_number: str, daily: bool):
             
     latest_filename = selected_files[0] # Get the latest uploaded file
 
-    print(f'\nLatest backup found:')
-    print(f'file: {latest_filename}')
     # Find the full path of latest uploaded file
     latest_filepath = None
     for path in all_paths:
@@ -1164,7 +1152,6 @@ def get_latest_ibkr_query(folder_path: str, query_number: str, daily: bool):
             latest_filepath = path
             break
 
-    print(f'folder: {os.path.dirname(latest_filepath)}')
 
     return latest_filepath
 
@@ -1205,14 +1192,10 @@ def rename_files_for_daily_reports(folder_path):
             # Rename the file
             os.rename(file_path, new_filepath)
             
-            print(f"\nFile renamed from: {filename}")
-            print(f"To: {new_filename}")
             return new_filepath
             
         except FileNotFoundError:
-            print(f"Error: File '{file_path}' not found")
         except Exception as e:
-            print(f"Error: {str(e)}")
 
 
     FilesToRename = ['clients.xls',
@@ -1234,20 +1217,11 @@ def rename_files_for_daily_reports(folder_path):
             # Get list of files in the folder
             files = os.listdir(folder_path)
             
-            print(f"\nFiles in {folder_path}:")
-            print("=" * (len(folder_path) + 8))
-            
-            # Print each file
-            for file in files:
-                print(file)
-                
             return files
             
         except FileNotFoundError:
-            print(f"Error: Folder '{folder_path}' not found")
             return []
         except Exception as e:
-            print(f"Error listing files: {str(e)}")
             return []
 
 
@@ -1256,15 +1230,9 @@ def rename_files_for_daily_reports(folder_path):
 
     ListOfFiles = list_files_in_folder(folder_path)
 
-    print("\nChecking for required files...\n")
-
-
     for file in FilesToRename:
         if file in ListOfFiles:
-            print(f"\n✓ Found: {file}")
             rename_file_with_date(f'{folder_path}/{file}')
-        else:
-            print(f"\n✗ Missing: {file}")
 
 def rename_ibkr_batch_files(folder_path):
 
@@ -1277,7 +1245,6 @@ def rename_ibkr_batch_files(folder_path):
         if not (file.endswith('.csv') and ('_' in file or any(query in file for query in queries))):
             continue
             
-        #print(f"Processing file: {file}")
         
         # Only try to split if there are underscores
         if '_' in file:
@@ -1292,16 +1259,10 @@ def rename_ibkr_batch_files(folder_path):
                     date = filename[2]
                 else:
                     date = f'{filename[2]}_{filename[3]}'
-                
-                #print(f'Filename: {filename}')
-                #print(f'Date: {date}')
 
                 file_path = os.path.join(folder_path, file)
-                print(f'File: {file_path}')
                 new_filename = f'{filename[5]}_{date}.csv'
-                #print(f'New filename: {new_filename}')
                 new_filepath = os.path.join(folder_path, new_filename)
-                print(f'New filepath: {new_filepath}')
                 os.rename(file_path, new_filepath)
 
     return

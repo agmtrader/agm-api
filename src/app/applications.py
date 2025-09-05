@@ -40,8 +40,6 @@ def read_route():
         query['user_id'] = user_id
     applications = read_applications(query=query)
 
-    print(f"Strip application: {strip_application}")
-
     if strip_application == True and isinstance(applications, list):
         for application in applications:
             if isinstance(application, dict):
