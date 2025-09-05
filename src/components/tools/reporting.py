@@ -1111,7 +1111,11 @@ def get_file_created_date(file_path):
         return creation_datetime
         
     except FileNotFoundError:
+        logger.error(f"File not found: {file_path}")
+        raise Exception(f"File not found: {file_path}")
     except Exception as e:
+        logger.error(f"Error getting file created date: {e}")
+        raise Exception(f"Error getting file created date: {e}")
 
 def get_latest_ibkr_query(folder_path: str, query_number: str, daily: bool):
 
@@ -1195,7 +1199,11 @@ def rename_files_for_daily_reports(folder_path):
             return new_filepath
             
         except FileNotFoundError:
+            logger.error(f"File not found: {file_path}")
+            raise Exception(f"File not found: {file_path}")
         except Exception as e:
+            logger.error(f"Error renaming file: {e}")
+            raise Exception(f"Error renaming file: {e}")
 
 
     FilesToRename = ['clients.xls',
