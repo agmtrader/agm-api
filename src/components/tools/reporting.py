@@ -90,6 +90,7 @@ def get_clients_report():
     files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
     clients_file = [client for client in files_in_resources_folder if 'ibkr_clients' in client['name']]
     if len(clients_file) != 1:
+        logger.error('Clients file not found or multiple files found')
         raise Exception('Clients file not found or multiple files found')
     clients = Drive.download_file(file_id=clients_file[0]['id'], parse=True)
     return clients
@@ -104,6 +105,7 @@ def get_client_fees():
     client_fees_file = [client_fees for client_fees in files_in_resources_folder if 'ibkr_client_fees' in client_fees['name']]
     logger.info(f'Client fees file: {client_fees_file}')
     if len(client_fees_file) != 1:
+        logger.error('Client fees file not found or multiple files found')
         raise Exception('Client fees file not found or multiple files found')
     client_fees = Drive.download_file(file_id=client_fees_file[0]['id'], parse=True)
     return client_fees
@@ -117,6 +119,7 @@ def get_nav_report():
     files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
     nav_file = [nav for nav in files_in_resources_folder if 'ibkr_nav' in nav['name']]
     if len(nav_file) != 1:
+        logger.error('Nav file not found or multiple files found')
         raise Exception('Nav file not found or multiple files found')
     nav = Drive.download_file(file_id=nav_file[0]['id'], parse=True)
     return nav
@@ -130,6 +133,7 @@ def get_rtd_report():
     files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
     rtd_file = [rtd for rtd in files_in_resources_folder if 'ibkr_rtd' in rtd['name']]
     if len(rtd_file) != 1:
+        logger.error('RTD file not found or multiple files found')
         raise Exception('RTD file not found or multiple files found')
     rtd = Drive.download_file(file_id=rtd_file[0]['id'], parse=True)
     return rtd  
@@ -143,6 +147,7 @@ def get_open_positions_report():
     files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
     open_positions_file = [open_positions for open_positions in files_in_resources_folder if 'ibkr_open_positions_all' in open_positions['name']]
     if len(open_positions_file) != 1:
+        logger.error('Open positions file not found or multiple files found')
         raise Exception('Open positions file not found or multiple files found')
     open_positions = Drive.download_file(file_id=open_positions_file[0]['id'], parse=True)
     return open_positions
@@ -178,8 +183,9 @@ def run():
     try:
         extract()
         transform()
-    except Exception as e:
-        raise Exception(f'Error running ETL pipeline: {e}')
+    except:
+        logger.error(f'Error running ETL pipeline')
+        raise Exception(f'Error running ETL pipeline')
     return {'status': 'success'}
 
 def extract() -> dict:
@@ -192,8 +198,8 @@ def extract() -> dict:
     for query_id in flex_query_ids:
         try:
             flex_queries[query_id] = getFlexQuery(query_id)
-        except Exception as e:
-            logger.error(f'Error fetching Flex Query for {query_id}: {e}')
+        except:
+            logger.error(f'Error fetching Flex Query for {query_id}')
             continue
     logger.announcement('Flex Queries fetched.', type='success')
 
@@ -202,9 +208,10 @@ def extract() -> dict:
     for key, value in flex_queries.items():
         try:
             Drive.upload_file(file_name=key, mime_type='text/csv', file_data=value, parent_folder_id=batch_folder_id)
-        except Exception as e:
-            logger.error(f'Error uploading Flex Query for {key}: {e}')
+        except:
+            logger.error(f'Error uploading Flex Query for {key}')
             continue
+        
     logger.announcement('Flex Queries uploaded to batch folder.', type='success')
     time.sleep(2)
 
@@ -235,10 +242,6 @@ def transform() -> dict:
         logger.announcement(f'Processing {report_type.capitalize()} file.', type='info')
         process_report(config)
     logger.announcement('Files processed.', type='success')
-
-    # Process finance data
-    logger.announcement('Fetching finance data.', type='info')
-    #get_finance_data()
 
     logger.announcement('Reports successfully transformed.', type='success')
     return {'status': 'success'}
@@ -278,13 +281,15 @@ def rename_files_in_batch():
         elif ('RTD' in f['name']):
             new_name = ('RTD ' + today_date + '.csv')
         else:
-            new_name = f['name']
+            logger.error(f'File {f["name"]} did not match any pattern in when renaming files in batch. Defaulting to yesterday date.')
+            new_name = f['name'] + yesterday_date + '.csv'
 
         try:
             Drive.rename_file(file_id=f['id'], new_name=new_name)
             count += 1
-        except Exception as e:
-            raise Exception(f'Error renaming file: {e}')
+        except:
+            logger.error(f'Error renaming file.')
+            raise Exception(f'Error renaming file.')
         
     logger.announcement(f'{count} files renamed.', type='success')
     return count
@@ -342,8 +347,9 @@ def sort_batch_files_to_backup_folders():
         try:
             Drive.move_file(f=f, newParentId=new_parent_id)
             count += 1
-        except Exception as e:
-            raise Exception(f'Error moving file to destination: {e}')
+        except:
+            logger.error(f'Error moving file to destination')
+            raise Exception(f'Error moving file to destination')
 
     logger.announcement(f'{count} files moved to backup folders.', type='success')
     return count

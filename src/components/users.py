@@ -21,6 +21,7 @@ def read_user_by_id(id: str) -> dict:
     if len(user) == 1:
         return user[0]
     else:
+        logger.error(f'Single entry has {len(user)} matches.')
         raise Exception(f'Single entry has {len(user)} matches.')
 
 @handle_exception

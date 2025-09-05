@@ -2,6 +2,7 @@ from flask import Blueprint, request
 from src.components.users import read_users, update_user, create_user
 from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
+from src.utils.logger import logger
 
 bp = Blueprint('users', __name__)
 
@@ -15,6 +16,7 @@ def create():
     existing_user = read_users(query={'email': user['email']})
 
     if existing_user and len(existing_user) > 1:
+        logger.error(f'User email already exists')
         raise Exception('User email already exists')
     
     user = create_user(user=user)
@@ -31,6 +33,7 @@ def login():
     if len(users) == 1:
         return users[0]
     else:
+        logger.error(f'Single entry has {len(users)} matches.')
         raise Exception(f'Single entry has {len(users)} matches.')
 
 @bp.route('/read', methods=['GET'])

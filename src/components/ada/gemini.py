@@ -64,6 +64,6 @@ class Gemini:
                 }
             }
             
-        except Exception as e:
-            logger.error(f"Error in Gemini chat: {str(e)}")
-            raise e
+        except:
+            logger.error(f"Error in Gemini chat")
+            raise Exception(f"Error in Gemini chat.")

@@ -120,6 +120,7 @@ def create_investment_proposal(risk_profile: dict = None):
     risk_profile_id = risk_profile['id']
     risk_archetype = next((rp for rp in risk_archetypes if rp['min_score'] <= risk_score and rp['max_score'] >= risk_score), None)
     if not risk_archetype:
+        logger.error(f'Risk profile with score {risk_score} not found')
         raise Exception(f'Risk profile with score {risk_score} not found')
 
     investment_proposal = [

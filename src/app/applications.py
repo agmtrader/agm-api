@@ -2,6 +2,7 @@ from flask import Blueprint, request
 from src.components.applications import create_application, read_applications, send_to_ibkr, update_application
 from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
+from src.utils.logger import logger
 
 bp = Blueprint('applications', __name__)
 
@@ -28,6 +29,7 @@ def read_route():
     elif strip_application_param == '1':
         strip_application = True
     else:
+        logger.error(f'Invalid strip_application parameter: {strip_application_param}')
         raise Exception('Invalid strip_application parameter')
 
     if id:

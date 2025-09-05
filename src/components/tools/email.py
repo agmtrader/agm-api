@@ -80,7 +80,8 @@ class Gmail:
       current_dir = os.path.dirname(os.path.abspath(__file__))
       env = Environment(loader=FileSystemLoader(os.path.join(current_dir, '../../lib/email_templates')))
       template = env.get_template(f'{email_template}.html')
-    except Exception as e:
+    except:
+      logger.error(f'Template {email_template}.html not found')
       raise Exception(f'Template {email_template}.html not found')
 
     # Prepare the content based on its type
