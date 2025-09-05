@@ -131,9 +131,10 @@ def start_api():
     app.register_blueprint(gemini.bp, url_prefix='/ada')
 
     # Tools
-    from src.app.tools import email, investment_proposals, reporting, risk_profiles, trade_tickets
+    from src.app.tools import email, investment_proposals, message_center, reporting, risk_profiles, trade_tickets
     app.register_blueprint(email.bp, url_prefix='/email')
     app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')
+    app.register_blueprint(message_center.bp, url_prefix='/message_center')
     app.register_blueprint(reporting.bp, url_prefix='/reporting')
     app.register_blueprint(risk_profiles.bp, url_prefix='/risk_profiles')
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
