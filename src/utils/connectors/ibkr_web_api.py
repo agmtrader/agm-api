@@ -53,9 +53,9 @@ class IBKRWebAPI:
             return None
 
     def __init__(self):
-        self.BASE_URL = "https://qa.interactivebrokers.com"
-        self.CLIENT_ID = "AGMTechnology-FD-QA"
-        self.KEY_ID = "main"
+        self.BASE_URL = "https://api.ibkr.com"
+        self.CLIENT_ID = "AGMTechnology-FA-PROD"
+        self.KEY_ID = "main2"
         self.CLIENT_PRIVATE_KEY = get_secret("IBKR_ACCOUNT_MANAGEMENT_PRIVATE_KEY")
 
         # Initialize token cache

@@ -86,10 +86,6 @@ jobs:
             Branch: ${{ github.ref }}
             Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-            Summary:
-            - Token request: ${{ needs.etl.outputs.token_status }}
-            - Reporting run: ${{ needs.etl.outputs.reporting_status }}
-
   notify-failure:
     needs: etl
     if: ${{ failure() }}
