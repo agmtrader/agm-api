@@ -32,7 +32,7 @@ def getFlexQuery(queryId):
 
     # Retry while the response contains an ErrorCode (IBKR returns 200 even on errors)
     while ('ErrorCode' in generatedTemplateResponse.text) and retry_count < max_retries:
-        logger.warning(f'Flex Query Template Generation Failed. Preview: {generatedTemplateResponse.text[0:100]}')
+        logger.error(f'Flex Query Template Generation Failed. Preview: {generatedTemplateResponse.text[0:100]}')
         logger.info(f'Retrying... Attempt {retry_count} of {max_retries}')
         time.sleep(retry_delay)
         generatedTemplateResponse = rq.get(url=generatedTemplateURL)
@@ -66,7 +66,7 @@ def getFlexQuery(queryId):
 
     generatedReportResponse = rq.get(url=generatedReportURL, allow_redirects=True)
     while 'ErrorCode' in generatedReportResponse.text and retry_count < max_retries:
-        logger.warning(f'Flex Query Generation Failed. Preview: {generatedReportResponse.text[0:100]}')
+        logger.error(f'Flex Query Generation Failed. Preview: {generatedReportResponse.text[0:100]}')
         logger.info(f'Retrying... Attempt {retry_count} of {max_retries}')
         time.sleep(retry_delay)
         generatedReportResponse = rq.get(url=generatedReportURL, allow_redirects=True)
