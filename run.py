@@ -100,6 +100,7 @@ def start_api():
         scopes = payload.get('scopes')
 
         if not token_value or not scopes:
+            logger.error('Token or scopes is missing')
             raise ServiceError("Unauthorized", status_code=401)
 
         expires_delta = DEFAULT_TOKEN_EXPIRES
@@ -108,6 +109,7 @@ def start_api():
         try:
             user = read_user_by_id(str(token_value))
         except Exception:
+            logger.error('Failed to authenticate user')
             raise ServiceError("Unauthorized", status_code=401)
 
         if user and user['id'] == token_value:
