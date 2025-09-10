@@ -50,24 +50,3 @@ jobs:
             echo "Automatic agreements and disclosures upload request failed with status $status"
             exit 1
           fi
-
-      # 3 ─────────────────────────────────────────────────────────
-      - name: Summarise results
-        run: |
-          {
-            echo "## Agreements & Disclosures upload summary :clipboard:"
-            echo ""
-            echo "| Action | HTTP status |"
-            echo "| ------ | ----------- |"
-            echo "| Token request | \`${{ steps.token.outputs.http_status }}\` |"
-            echo "| Agreements upload | \`${{ steps.upload.outputs.http_status }}\` |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # 4 (Optional) ──────────────────────────────────────────────
-      # - name: Upload raw responses
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: agreements-upload-raw-responses
-      #     path: |
-      #       ${{ runner.temp }}/token-response.json
-      #       ${{ runner.temp }}/agreements-upload-response.json

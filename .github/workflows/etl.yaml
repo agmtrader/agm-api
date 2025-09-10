@@ -13,34 +13,27 @@ jobs:
       # 1 ─────────────────────────────────────────────────────────
       - name: Request access token
         id: token
-        uses: Wandalen/wretry.action@v2
-        with:
-          command: |
-            response=$(curl -s -w "\n%{http_code}" -X POST \
-              -H "Content-Type: application/json" \
-              -d '{"token":"${{ secrets.AUTHENTICATION_TOKEN }}","scopes":"all"}' \
-              https://api.agmtechnology.com/token)
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"token":"${{ secrets.AUTHENTICATION_TOKEN }}","scopes":"all"}' \
+            https://api.agmtechnology.com/token)
 
-            http_status=$(echo "$response" | tail -n1)
-            body=$(echo "$response" | sed '$d')
+          http_status=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
 
-            echo "http_status=$http_status" >> "$GITHUB_OUTPUT"
-            echo "body=$body"               >> "$GITHUB_OUTPUT"
+          echo "http_status=$http_status" >> "$GITHUB_OUTPUT"
 
-            if [ "$http_status" != "200" ]; then
-              echo "Token request failed with status $http_status"
-              exit 1
-            fi
+          if [ "$http_status" != "200" ]; then
+            echo "Token request failed with status $http_status"
+            exit 1
+          fi
 
-            access_token=$(echo "$body" | jq -r '.access_token')
-            if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
-              echo "access_token not found in response"
-              exit 1
-            fi
-            echo "access_token=$access_token" >> "$GITHUB_OUTPUT"
-            echo "ACCESS_TOKEN=$access_token" >> "$GITHUB_ENV"
-          attempt_limit: 2      # 1 original + 1 retry
-          attempt_delay: 5000   # 5-second pause (ms)
+          access_token=$(echo "$body" | jq -r '.access_token')
+          if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
+            echo "access_token not found in response"
+            exit 1
+          fi
 
       # 2 ─────────────────────────────────────────────────────────
       - name: Trigger reporting run
@@ -60,19 +53,7 @@ jobs:
             fi
           attempt_limit: 10     # 1 original + 9 retries
           attempt_delay: 600000 # 10-minute pause (ms)
-
-      # 3 ─────────────────────────────────────────────────────────
-      - name: Summarise results
-        run: |
-          {
-            echo "## ETL summary :clipboard:"
-            echo ""
-            echo "| Action | HTTP status |"
-            echo "| ------ | ----------- |"
-            echo "| Token request   | \`${{ steps.token.outputs.http_status }}\` |"
-            echo "| Reporting run   | \`${{ steps.reporting.outputs.http_status }}\` |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
+          
   notify-success:
     needs: etl
     if: ${{ success() }}
@@ -86,15 +67,13 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: "✅ Daily ETL Pipeline SUCCEEDED"
-          to: aa@agmtechnology.com
+          to: |
+            aa@agmtechnology.com
+            cr@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
-            The Daily ETL Pipeline workflow completed successfully 🎉
-
-            Repo: ${{ github.repository }}
-            Branch: ${{ github.ref }}
-            Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
+            The ETL Pipeline completed successfully at ${CURRENT_TIME} 🎉
+          
   notify-failure:
     needs: etl
     if: ${{ failure() }}
@@ -108,11 +87,9 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: "🚨 Daily ETL Pipeline FAILED"
-          to: aa@agmtechnology.com
+          to: |
+            aa@agmtechnology.com
+            cr@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
-            The Daily ETL Pipeline workflow failed ❌
-
-            Repo: ${{ github.repository }}
-            Branch: ${{ github.ref }}
-            Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            The ETL Pipeline failed at ${CURRENT_TIME} ❌
