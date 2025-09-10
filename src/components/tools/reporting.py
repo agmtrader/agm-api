@@ -193,7 +193,7 @@ def extract() -> dict:
 
     # Fetch Flex Queries
     logger.announcement('Fetching Flex Queries.', type='info')
-    flex_query_ids = ['732333', '734782', '742588']
+    flex_query_ids = ['732383', '734782', '742588']
     flex_queries = {}
     for query_id in flex_query_ids:
         try:

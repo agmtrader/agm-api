@@ -75,7 +75,7 @@ jobs:
             cr@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
-            The ETL Pipeline completed successfully at ${CURRENT_TIME} 🎉
+            The ETL Pipeline completed successfully.
           
   notify-failure:
     needs: etl
@@ -95,4 +95,4 @@ jobs:
             cr@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
-            The ETL Pipeline failed at ${CURRENT_TIME} ❌
+            The ETL Pipeline failed.
