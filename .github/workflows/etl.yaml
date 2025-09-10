@@ -38,9 +38,8 @@ jobs:
               exit 1
             fi
             echo "access_token=$access_token" >> "$GITHUB_OUTPUT"
-          retry_count: 1         # total attempts = 1 original + 1 retry
-          retry_delay: 5000     # 5-second wait between attempts (milliseconds)
-          retry_on: error
+          attempt_limit: 2      # 1 original + 1 retry
+          attempt_delay: 5000   # 5-second pause (ms)
 
       # 2 ─────────────────────────────────────────────────────────
       - name: Trigger reporting run
@@ -58,9 +57,8 @@ jobs:
               echo "Reporting run request failed with status $status"
               exit 1
             fi
-          retry_count: 9 # total attempts = 1 original + 9 retries
-          retry_delay: 600000 # 10-minute wait between attempts (milliseconds)
-          retry_on: error
+          attempt_limit: 10     # 1 original + 9 retries
+          attempt_delay: 600000 # 10-minute pause (ms)
 
       # 3 ─────────────────────────────────────────────────────────
       - name: Summarise results
