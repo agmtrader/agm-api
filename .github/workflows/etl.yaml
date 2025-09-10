@@ -23,6 +23,7 @@ jobs:
           body=$(echo "$response" | sed '$d')
 
           echo "http_status=$http_status" >> "$GITHUB_OUTPUT"
+          echo "body=$body"               >> "$GITHUB_OUTPUT"
 
           if [ "$http_status" != "200" ]; then
             echo "Token request failed with status $http_status"
@@ -34,6 +35,8 @@ jobs:
             echo "access_token not found in response"
             exit 1
           fi
+          echo "access_token=$access_token" >> "$GITHUB_OUTPUT"
+          echo "ACCESS_TOKEN=$access_token" >> "$GITHUB_ENV"
 
       # 2 ─────────────────────────────────────────────────────────
       - name: Trigger reporting run
