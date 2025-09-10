@@ -70,9 +70,7 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: "✅ Daily ETL Pipeline SUCCEEDED"
-          to: |
-            aa@agmtechnology.com
-            cr@agmtechnology.com
+          to: aa@agmtechnology.com,cr@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
             The ETL Pipeline completed successfully.
@@ -90,9 +88,7 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: "🚨 Daily ETL Pipeline FAILED"
-          to: |
-            aa@agmtechnology.com
-            cr@agmtechnology.com
+          to: aa@agmtechnology.com,cr@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
             The ETL Pipeline failed.
