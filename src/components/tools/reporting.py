@@ -200,7 +200,7 @@ def extract() -> dict:
             flex_queries[query_id] = getFlexQuery(query_id)
         except:
             logger.error(f'Error fetching Flex Query for {query_id}')
-            continue
+            raise Exception(f'Error fetching Flex Query for {query_id}')
     logger.announcement('Flex Queries fetched.', type='success')
 
     # Upload Flex Queries to batch folder
@@ -210,7 +210,7 @@ def extract() -> dict:
             Drive.upload_file(file_name=key, mime_type='text/csv', file_data=value, parent_folder_id=batch_folder_id)
         except:
             logger.error(f'Error uploading Flex Query for {key}')
-            continue
+            raise Exception(f'Error uploading Flex Query for {key}')
         
     logger.announcement('Flex Queries uploaded to batch folder.', type='success')
     time.sleep(2)
