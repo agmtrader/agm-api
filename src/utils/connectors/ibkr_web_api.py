@@ -54,8 +54,8 @@ class IBKRWebAPI:
 
     def __init__(self):
         self.BASE_URL = "https://api.ibkr.com"
-        self.CLIENT_ID = "AGMTechnology-FA-PROD"
-        self.KEY_ID = "main2"
+        self.CLIENT_ID = "AGMTechnology-FD2"
+        self.KEY_ID = "prodfd"
         self.CLIENT_PRIVATE_KEY = get_secret("IBKR_ACCOUNT_MANAGEMENT_PRIVATE_KEY")
 
         # Initialize token cache
@@ -152,6 +152,92 @@ class IBKRWebAPI:
         if response.status_code != 200:
             raise Exception(f"Error {response.status_code}: {response.text}")
         logger.success(f"Account updated successfully")
+        return response.json()
+
+    @handle_exception
+    def apply_fee_template(self, account_id: str, template_name: str):
+        """Apply a fee template to the specified account.
+
+        Args:
+            account_id (str): The IBKR account ID.
+            template_name (str): Name of the fee template to apply.
+
+        Returns:
+            dict: API response after applying fee template.
+        """
+        logger.info(f"Applying fee template {template_name} to account {account_id}")
+
+        url = f"{self.BASE_URL}/gw/api/v1/accounts"
+
+        body = {
+            "accountManagementRequests": {
+                "applyFeeTemplate": {
+                    "accountId": account_id,
+                    "templateName": template_name
+                }
+            }
+        }
+
+        token = self.get_bearer_token()
+        if not token:
+            raise Exception("No token found")
+
+        signed_jwt = self.sign_request(body)
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/jwt"
+        }
+
+        response = requests.patch(url, headers=headers, data=signed_jwt)
+        if response.status_code != 200:
+            logger.error(f"Error {response.status_code}: {response.text}")
+            raise Exception(f"Error {response.status_code}: {response.text}")
+
+        logger.success("Fee template applied successfully")
+        return response.json()
+
+    @handle_exception
+    def update_account_alias(self, account_id: str, new_alias: str):
+        """Update the alias for a given account.
+
+        Args:
+            account_id (str): The account number whose alias will be updated.
+            new_alias (str): Desired alias string.
+
+        Returns:
+            dict: API response after updating the alias.
+        """
+        logger.info(f"Updating alias for account {account_id} to {new_alias}")
+
+        url = f"{self.BASE_URL}/gw/api/v1/accounts"
+
+        body = {
+            "accountManagementRequests": {
+                "updateAccountAlias": {
+                    "referenceAccountId": account_id,
+                    "accountAlias": new_alias
+                }
+            }
+        }
+
+        token = self.get_bearer_token()
+        if not token:
+            raise Exception("No token found")
+
+        signed_jwt = self.sign_request(body)
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/jwt"
+        }
+
+        response = requests.patch(url, headers=headers, data=signed_jwt)
+        if response.status_code != 200:
+            logger.error(f"Error {response.status_code}: {response.text}")
+            raise Exception(f"Error {response.status_code}: {response.text}")
+
+        logger.success("Account alias updated successfully")
         return response.json()
 
     @handle_exception
@@ -330,6 +416,27 @@ class IBKRWebAPI:
                     logger.info(f'PDF file {file_name} does not match English form {en_forms[0].get("fileName")}')
                     file_data['data'] = ''
         return result
+
+    @handle_exception
+    def get_security_questions(self):
+        """Retrieve list of security questions from IBKR."""
+        logger.info("Fetching security questions")
+
+        url = f"{self.BASE_URL}/api/v1/enumerations/security-questions"
+
+        token = self.get_bearer_token()
+        if not token:
+            raise Exception("No token found")
+
+        headers = {"Authorization": f"Bearer {token}"}
+
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            logger.error(f"Error {response.status_code}: {response.text}")
+            raise Exception(f"Error {response.status_code}: {response.text}")
+
+        logger.success("Security questions fetched successfully")
+        return response.json()
 
     def get_bearer_token(self):
         current_time = int(time.time())

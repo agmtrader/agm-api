@@ -76,3 +76,20 @@ def get_forms(forms: list = None) -> dict:
 @handle_exception
 def process_documents(documents: list = None) -> dict:
     return ibkr_web_api.process_documents(documents=documents)
+
+# Apply fee template
+@handle_exception
+def apply_fee_template(account_id: str = None, template_name: str = None) -> dict:
+    """Apply a fee template to an account via IBKR API."""
+    return ibkr_web_api.apply_fee_template(account_id=account_id, template_name=template_name)
+
+# Update account alias
+@handle_exception
+def update_account_alias(account_id: str = None, new_alias: str = None) -> dict:
+    """Update account alias via IBKR API."""
+    return ibkr_web_api.update_account_alias(account_id=account_id, new_alias=new_alias)
+
+# Get security questions
+@handle_exception
+def get_security_questions() -> dict:
+    return ibkr_web_api.get_security_questions()

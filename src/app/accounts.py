@@ -1,6 +1,6 @@
 from flask import Blueprint, request
 from src.components.accounts import create_account, read_accounts, upload_document, read_documents_by_account_id
-from src.components.accounts import get_pending_tasks, get_registration_tasks
+from src.components.accounts import get_pending_tasks, get_registration_tasks, view_fee_template
 from src.components.accounts import read_account_details, get_forms, submit_account_management_requests, update_account
 from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
@@ -91,6 +91,36 @@ def pending_tasks_route():
         return {"error": "Missing account_id"}, 400
     return get_pending_tasks(account_id=account_id)
 
+@bp.route('/ibkr/fee_template', methods=['POST'])
+@verify_scope('accounts/update')
+@format_response
+def apply_fee_template_route():
+    payload = request.get_json(force=True)
+    account_id = payload.get('account_id')
+    template_name = payload.get('template_name')
+    if not account_id or not template_name:
+        return {"error": "Missing account_id or template_name"}, 400
+    return apply_fee_template(account_id=account_id, template_name=template_name)
+
+# Update Alias
+@bp.route('/ibkr/account_alias', methods=['POST'])
+@verify_scope('accounts/update')
+@format_response
+def update_account_alias_route():
+    payload = request.get_json(force=True)
+    account_id = payload.get('account_id')
+    new_alias = payload.get('new_alias')
+    if not account_id or new_alias is None:
+        return {"error": "Missing account_id or new_alias"}, 400
+    return update_account_alias(account_id=account_id, new_alias=new_alias)
+
+# Security Questions
+@bp.route('/ibkr/security_questions', methods=['GET'])
+@verify_scope('accounts/read')
+@format_response
+def get_security_questions_route():
+    return get_security_questions()
+
 @bp.route('/ibkr/forms', methods=['POST'])
 @verify_scope('accounts/forms')
 @format_response
@@ -98,12 +128,3 @@ def get_forms_route():
     payload = request.get_json(force=True)
     forms_data = payload.get('forms', None)
     return get_forms(forms=forms_data)
-
-"""
-@bp.route('/documents', methods=['POST'])
-@verify_scope('accounts/documents')
-@format_response
-def process_documents_route():
-    documents = ['3230', '3024', '4070', '3044', '3089', '4304', '4404', '5013', '5001', '4024', '9130', '3074', '3203', '3070', '3094', '3071', '4587', '2192', '2191', '3077', '4399', '4684', '2109', '4016', '4289']
-    return process_documents(documents=documents)
-"""
