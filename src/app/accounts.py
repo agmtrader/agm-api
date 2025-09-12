@@ -1,6 +1,6 @@
 from flask import Blueprint, request
 from src.components.accounts import create_account, read_accounts, upload_document, read_documents_by_account_id
-from src.components.accounts import get_pending_tasks, get_registration_tasks, view_fee_template
+from src.components.accounts import get_pending_tasks, get_registration_tasks
 from src.components.accounts import read_account_details, get_forms, submit_account_management_requests, update_account
 from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
@@ -102,7 +102,6 @@ def apply_fee_template_route():
         return {"error": "Missing account_id or template_name"}, 400
     return apply_fee_template(account_id=account_id, template_name=template_name)
 
-# Update Alias
 @bp.route('/ibkr/account_alias', methods=['POST'])
 @verify_scope('accounts/update')
 @format_response
@@ -114,7 +113,6 @@ def update_account_alias_route():
         return {"error": "Missing account_id or new_alias"}, 400
     return update_account_alias(account_id=account_id, new_alias=new_alias)
 
-# Security Questions
 @bp.route('/ibkr/security_questions', methods=['GET'])
 @verify_scope('accounts/read')
 @format_response
