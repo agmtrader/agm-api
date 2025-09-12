@@ -33,3 +33,10 @@ def send_application_link_email_route():
 def send_task_reminder_email_route():
   payload = request.get_json(force=True)
   return Email.send_task_reminder_email(payload['content'], payload['agm_user_email'])
+
+@bp.route('/send_email/credentials', methods=['POST'])
+@verify_scope('email/send_email')
+@format_response
+def send_credentials_email_route():
+  payload = request.get_json(force=True)
+  return Email.send_credentials_email(payload['content'], payload['client_email'], payload['lang'])

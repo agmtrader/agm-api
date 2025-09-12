@@ -39,6 +39,7 @@ class Gmail:
       logger.error(f"Error initializing Gmail: {str(e)}")
       raise Exception(f"Error initializing Gmail: {str(e)}")
     
+  # Sending
   @handle_exception
   def send_email(self, content, client_email, subject, email_template, bcc="aa@agmtechnology.com,cr@agmtechnology.com,jc@agmtechnology.com,hc@agmtechnology.com,rc@agmtechnology.com", cc=""):
     """
@@ -136,22 +137,6 @@ class Gmail:
     return {'raw': raw_message}
 
   @handle_exception
-  def send_trade_ticket_email(self, content, client_email):
-    subject = 'Confirmación de Transacción'
-    email_template = 'trade_ticket'
-    return self.send_email(content, client_email, subject, email_template)
-
-  @handle_exception
-  def send_email_change_email(self, client_email: str, advisor_email: str = None):
-    subject = 'Urgente: Actualización de Correo Electrónico'
-    email_template = 'email_change'
-    bcc = ""
-    cc = f"jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com"
-    if advisor_email:
-      cc += f",{advisor_email}"
-    return self.send_email("", client_email, subject, email_template, bcc=bcc, cc=cc)
-
-  @handle_exception
   def send_email_confirmation(self, content, client_email, lang='es'):
     subject = 'Confirmación de Correo Electrónico' if lang == 'es' else 'Email Confirmation'
     email_template = f'application_email_confirmation_{lang}'
@@ -160,11 +145,17 @@ class Gmail:
     return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)
   
   @handle_exception
+  def send_trade_ticket_email(self, content, client_email):
+    subject = 'Confirmación de Transacción'
+    email_template = 'trade_ticket'
+    return self.send_email(content, client_email, subject, email_template)
+
+  @handle_exception
   def send_application_link_email(self, content, client_email, lang='es'):
     subject = 'Link de formulario para apertura de cuenta' if lang == 'es' else 'Application Link'
     email_template = f'application_link_{lang}'
     bcc = ""
-    cc = "jc@agmtechnology.com,hc@agmtechnology.com"
+    cc = "jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com"
     return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)
 
   @handle_exception
@@ -175,6 +166,15 @@ class Gmail:
     cc = ""
     return self.send_email(content, agm_user_email, subject, email_template, bcc=bcc, cc=cc)
 
+  @handle_exception
+  def send_credentials_email(self, content, client_email, lang='es'):
+    subject = 'Credenciales de acceso para cuenta AGM' if lang == 'es' else 'Access Credentials for AGM Account'
+    email_template = f'credentials_{lang}'
+    bcc = ""
+    cc = "jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com"
+    return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)
+
+  # Reading
   @handle_exception
   def get_inbox_emails_from_sender(self, sender: str, include_body: bool = False):
     """
