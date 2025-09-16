@@ -48,48 +48,45 @@ def read_documents_by_account_id(account_id: str = None) -> list:
             documents.append(d)
     return documents
 
-# Account Management
+# IBKR Web API
 @handle_exception
-def list_accounts() -> dict:
-    return ibkr_web_api.list_accounts()
+def list_accounts(master_account: str = None) -> dict:
+    return ibkr_web_api.list_accounts(master_account=master_account)
 
 @handle_exception
-def read_account_details(account_id: str = None) -> dict:
-    return ibkr_web_api.get_account_details(account_id=account_id)
+def read_account_details(account_id: str = None, master_account: str = None) -> dict:
+    return ibkr_web_api.get_account_details(account_id=account_id, master_account=master_account)
 
 @handle_exception
-def get_pending_tasks(account_id: str = None) -> list:
-    return ibkr_web_api.get_pending_tasks(account_id=account_id)
+def get_pending_tasks(account_id: str = None, master_account: str = None) -> list:
+    return ibkr_web_api.get_pending_tasks(account_id=account_id, master_account=master_account)
 
 @handle_exception
-def get_registration_tasks(account_id: str = None) -> list:
-    return ibkr_web_api.get_registration_tasks(account_id=account_id)
+def get_registration_tasks(account_id: str = None, master_account: str = None) -> list:
+    return ibkr_web_api.get_registration_tasks(account_id=account_id, master_account=master_account)
 
 @handle_exception
-def submit_account_management_requests(account_management_requests: dict = None) -> dict:
-    return ibkr_web_api.submit_account_management_requests(account_management_requests=account_management_requests)
+def submit_account_management_requests(account_management_requests: dict = None, master_account: str = None) -> dict:
+    return ibkr_web_api.submit_account_management_requests(account_management_requests=account_management_requests, master_account=master_account)
 
 @handle_exception
-def get_forms(forms: list = None) -> dict:
-    return ibkr_web_api.get_forms(forms=forms)
+def get_forms(forms: list = None, master_account: str = None) -> dict:
+    return ibkr_web_api.get_forms(forms=forms, master_account=master_account)
 
 @handle_exception
-def process_documents(documents: list = None) -> dict:
-    return ibkr_web_api.process_documents(documents=documents)
+def process_documents(documents: list = None, master_account: str = None) -> dict:
+    return ibkr_web_api.process_documents(documents=documents, master_account=master_account)
 
-# Apply fee template
 @handle_exception
-def apply_fee_template(account_id: str = None, template_name: str = None) -> dict:
+def apply_fee_template(account_id: str = None, template_name: str = None, master_account: str = None) -> dict:
     """Apply a fee template to an account via IBKR API."""
-    return ibkr_web_api.apply_fee_template(account_id=account_id, template_name=template_name)
+    return ibkr_web_api.apply_fee_template(account_id=account_id, template_name=template_name, master_account=master_account)
 
-# Update account alias
 @handle_exception
-def update_account_alias(account_id: str = None, new_alias: str = None) -> dict:
+def update_account_alias(account_id: str = None, new_alias: str = None, master_account: str = None) -> dict:
     """Update account alias via IBKR API."""
-    return ibkr_web_api.update_account_alias(account_id=account_id, new_alias=new_alias)
+    return ibkr_web_api.update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
 
-# Get security questions
 @handle_exception
-def get_security_questions() -> dict:
-    return ibkr_web_api.get_security_questions()
+def get_security_questions(master_account: str = None) -> dict:
+    return ibkr_web_api.get_security_questions(master_account=master_account)

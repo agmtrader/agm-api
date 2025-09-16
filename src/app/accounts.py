@@ -63,7 +63,8 @@ def upload_document_route():
 @format_response
 def read_accounts_details_route():
     account_id = request.args.get('account_id', None)
-    return read_account_details(account_id=account_id)
+    master_account = request.args.get('master_account', None)
+    return read_account_details(account_id=account_id, master_account=master_account)
 
 @bp.route('/ibkr/update', methods=['POST'])
 @verify_scope('accounts/update')
@@ -71,25 +72,28 @@ def read_accounts_details_route():
 def submit_account_management_requests_route():
     payload = request.get_json(force=True)
     account_management_requests_data = payload.get('account_management_requests', None)
-    return submit_account_management_requests(account_management_requests=account_management_requests_data)
+    master_account = payload.get('master_account', None)
+    return submit_account_management_requests(account_management_requests=account_management_requests_data, master_account=master_account)
 
 @bp.route('/ibkr/registration_tasks', methods=['GET'])
 @verify_scope('accounts/read')
 @format_response
 def registration_tasks_route():
     account_id = request.args.get('account_id', None)
+    master_account = request.args.get('master_account', None)
     if not account_id:
         return {"error": "Missing account_id"}, 400
-    return get_registration_tasks(account_id=account_id)
+    return get_registration_tasks(account_id=account_id, master_account=master_account)
 
 @bp.route('/ibkr/pending_tasks', methods=['GET'])
 @verify_scope('accounts/read')
 @format_response
 def pending_tasks_route():
     account_id = request.args.get('account_id', None)
+    master_account = request.args.get('master_account', None)
     if not account_id:
         return {"error": "Missing account_id"}, 400
-    return get_pending_tasks(account_id=account_id)
+    return get_pending_tasks(account_id=account_id, master_account=master_account)
 
 @bp.route('/ibkr/fee_template', methods=['POST'])
 @verify_scope('accounts/update')
@@ -98,9 +102,10 @@ def apply_fee_template_route():
     payload = request.get_json(force=True)
     account_id = payload.get('account_id')
     template_name = payload.get('template_name')
+    master_account = payload.get('master_account', None)
     if not account_id or not template_name:
         return {"error": "Missing account_id or template_name"}, 400
-    return apply_fee_template(account_id=account_id, template_name=template_name)
+    return apply_fee_template(account_id=account_id, template_name=template_name, master_account=master_account)
 
 @bp.route('/ibkr/account_alias', methods=['POST'])
 @verify_scope('accounts/update')
@@ -109,15 +114,17 @@ def update_account_alias_route():
     payload = request.get_json(force=True)
     account_id = payload.get('account_id')
     new_alias = payload.get('new_alias')
+    master_account = payload.get('master_account', None)
     if not account_id or new_alias is None:
         return {"error": "Missing account_id or new_alias"}, 400
-    return update_account_alias(account_id=account_id, new_alias=new_alias)
+    return update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
 
 @bp.route('/ibkr/security_questions', methods=['GET'])
 @verify_scope('accounts/read')
 @format_response
 def get_security_questions_route():
-    return get_security_questions()
+    master_account = request.args.get('master_account', None)
+    return get_security_questions(master_account=master_account)
 
 @bp.route('/ibkr/forms', methods=['POST'])
 @verify_scope('accounts/forms')
@@ -125,4 +132,5 @@ def get_security_questions_route():
 def get_forms_route():
     payload = request.get_json(force=True)
     forms_data = payload.get('forms', None)
-    return get_forms(forms=forms_data)
+    master_account = payload.get('master_account', None)
+    return get_forms(forms=forms_data, master_account=master_account)

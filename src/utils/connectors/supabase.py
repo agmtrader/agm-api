@@ -93,7 +93,7 @@ class Supabase:
             user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             lead_id = Column(UUID(as_uuid=True), ForeignKey('lead.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
-            master_account_id = Column(Text, nullable=True)
+            master_account = Column(Text, nullable=True)
             date_sent_to_ibkr = Column(Text, nullable=True)
             application = Column(JSONB, nullable=True)
             status = Column(Text, nullable=False, default='Started')
@@ -112,6 +112,7 @@ class Supabase:
             temporal_email = Column(Text, nullable=True)
             temporal_password = Column(Text, nullable=True)
             fee_template = Column(Text, nullable=True)
+            master_account = Column(Text, nullable=True)
 
         class AccountDocument(self.Base):
             __tablename__ = 'account_document'

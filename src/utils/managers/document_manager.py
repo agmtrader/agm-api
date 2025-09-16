@@ -8,23 +8,16 @@ class DocumentManager:
     @handle_exception
     def upload_document(self, account_id, file_name, file_length, sha1_checksum, mime_type, data):
         """
-        Uploads a document to Google Drive and saves metadata/content in the database.
+        Uploads a document to the database and links it to an account.
         Args:
             account_id (str): UUID of the account to link the document to.
-            document_data (dict): Data matching ibkr_document_schema.
-            drive_folder_id (str): Google Drive folder ID to upload to.
+            file_name (str): Name of the file.
+            file_length (int): Length of the file.
+            sha1_checksum (str): SHA1 checksum of the file.
+            mime_type (str): MIME type of the file.
+            data (str): Base64 encoded data of the file.
         Returns:
             dict: Information about the uploaded document.
-        """
-
-        # Upload to Google Drive
-        """
-        Drive.upload_file(
-            file_name=file_name,
-            mime_type=mime_type,
-            file_data=data,
-            parent_folder_id='1jjqJKQ6orXb69I2nRfbqzMW8L_P8njkg'
-        )
         """
 
         # Save to document table

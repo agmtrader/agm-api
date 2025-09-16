@@ -63,99 +63,144 @@ class IBKRWebAPI:
         self._token_expiry = 0
         self.TOKEN_REFRESH_BUFFER = 300
 
+    def _apply_credentials(self, master_account: str):
+        """
+        Temporarily switch credentials according to the requested master account type.
+        Args:
+            master_account (str): 'ad' for Advisor, 'br' for Fully-Disclosed Broker.
+        Returns:
+            tuple: (original_client_id, original_key_id, original_private_key)
+        """
+        original = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
+        self.CLIENT_PRIVATE_KEY = get_secret("IBKR_ACCOUNT_MANAGEMENT_PRIVATE_KEY")
+        if not master_account:
+            raise Exception("Master account is required")
+        if (master_account).lower() == 'ad':
+            self.CLIENT_ID = "AGMTechnology-FA2"
+            self.KEY_ID = "prodfa"
+        elif (master_account).lower() == 'br':
+            self.CLIENT_ID = "AGMTechnology-FD2"
+            self.KEY_ID = "prodfd"
+        else:
+            raise Exception(f"Invalid master_account: {master_account}")
+        # Flush cached token whenever credentials change
+        self._token = None
+        self._token_expiry = 0
+        return original
+
     @handle_exception
-    def list_accounts(self):
-        logger.info("Getting accounts")
-        logger.info(f"Base URL: {self.BASE_URL}")
-        url = f"{self.BASE_URL}/gw/api/v1/accounts/status?startDate=2022-03-01&endDate=2025-06-19"
-        token = self.get_bearer_token()
-        if not token:
-            raise Exception("No token found")
-        
-        headers = {
-            "Authorization": f"Bearer {token}"
-        }
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            raise Exception(f"Error {response.status_code}: {response.text}")
-        
-        logger.success(f"Accounts fetched successfully")
-        return response.json()
+    def list_accounts(self, master_account: str = None):
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info("Getting accounts")
+            logger.info(f"Base URL: {self.BASE_URL}")
+            url = f"{self.BASE_URL}/gw/api/v1/accounts/status?startDate=2022-03-01&endDate=2025-06-19"
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+            
+            headers = {
+                "Authorization": f"Bearer {token}"
+            }
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            
+            logger.success(f"Accounts fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
     
     @handle_exception
-    def get_account_details(self, account_id):
-        logger.info(f"Getting account details for {account_id}")
-        url = f"{self.BASE_URL}/gw/api/v1/accounts/{account_id}/details"
-        token = self.get_bearer_token()
-        if not token:
-            raise Exception("No token found")
-        
-        headers = {
-            "Authorization": f"Bearer {token}"
-        }
+    def get_account_details(self, account_id, master_account: str = None):
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Getting account details for {account_id}")
+            url = f"{self.BASE_URL}/gw/api/v1/accounts/{account_id}/details"
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+            
+            headers = {
+                "Authorization": f"Bearer {token}"
+            }
 
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            raise Exception(f"Error {response.status_code}: {response.text}")
-        
-        logger.success(f"Account details fetched successfully")
-        return response.json()
-
-    @handle_exception
-    def get_registration_tasks(self, account_id):
-        logger.info(f"Getting registration tasks for account {account_id}")
-        url = f"{self.BASE_URL}/gw/api/v1/accounts/{account_id}/tasks?type=registration"
-        token = self.get_bearer_token()
-        if not token:
-            raise Exception("No token found")
-        headers = {
-            "Authorization": f"Bearer {token}"
-        }
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            raise Exception(f"Error {response.status_code}: {response.text}")
-        logger.success(f"Registration tasks fetched successfully")
-        return response.json()
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            
+            logger.success(f"Account details fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def get_pending_tasks(self, account_id):
-        logger.info(f"Getting pending tasks for account {account_id}")
-        url = f"{self.BASE_URL}/gw/api/v1/accounts/{account_id}/tasks?type=pending"
-        token = self.get_bearer_token()
-        if not token:
-            raise Exception("No token found")
-
-        headers = {
-            "Authorization": f"Bearer {token}"
-        }
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            raise Exception(f"Error {response.status_code}: {response.text}")
-        logger.success(f"Pending tasks fetched successfully")
-        return response.json()
-
-    @handle_exception
-    def submit_account_management_requests(self, account_management_requests):
-        logger.info(f"Updating account.")
-        url = f"{self.BASE_URL}/gw/api/v1/accounts"
-        token = self.get_bearer_token()
-        if not token:
-            raise Exception("No token found")
-
-        account_management_requests = self.sign_request(account_management_requests)
-        
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/jwt"
-        }
-        response = requests.patch(url, headers=headers, data=account_management_requests)
-        if response.status_code != 200:
-            raise Exception(f"Error {response.status_code}: {response.text}")
-        logger.success(f"Account updated successfully")
-        return response.json()
+    def get_registration_tasks(self, account_id, master_account: str = None):
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Getting registration tasks for account {account_id}")
+            url = f"{self.BASE_URL}/gw/api/v1/accounts/{account_id}/tasks?type=registration"
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {token}"
+            }
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success(f"Registration tasks fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def apply_fee_template(self, account_id: str, template_name: str):
+    def get_pending_tasks(self, account_id, master_account: str = None):
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Getting pending tasks for account {account_id}")
+            url = f"{self.BASE_URL}/gw/api/v1/accounts/{account_id}/tasks?type=pending"
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            headers = {
+                "Authorization": f"Bearer {token}"
+            }
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success(f"Pending tasks fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def submit_account_management_requests(self, account_management_requests, master_account: str = None):
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Updating account.")
+            url = f"{self.BASE_URL}/gw/api/v1/accounts"
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            account_management_requests = self.sign_request(account_management_requests)
+            
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt"
+            }
+            response = requests.patch(url, headers=headers, data=account_management_requests)
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success(f"Account updated successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def apply_fee_template(self, account_id: str, template_name: str, master_account: str = None):
         """Apply a fee template to the specified account.
 
         Args:
@@ -165,40 +210,44 @@ class IBKRWebAPI:
         Returns:
             dict: API response after applying fee template.
         """
-        logger.info(f"Applying fee template {template_name} to account {account_id}")
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Applying fee template {template_name} to account {account_id}")
 
-        url = f"{self.BASE_URL}/gw/api/v1/accounts"
+            url = f"{self.BASE_URL}/gw/api/v1/accounts"
 
-        body = {
-            "accountManagementRequests": {
-                "applyFeeTemplate": {
-                    "accountId": account_id,
-                    "templateName": template_name
+            body = {
+                "accountManagementRequests": {
+                    "applyFeeTemplate": {
+                        "accountId": account_id,
+                        "templateName": template_name
+                    }
                 }
             }
-        }
 
-        token = self.get_bearer_token()
-        if not token:
-            raise Exception("No token found")
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
 
-        signed_jwt = self.sign_request(body)
+            signed_jwt = self.sign_request(body)
 
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/jwt"
-        }
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt"
+            }
 
-        response = requests.patch(url, headers=headers, data=signed_jwt)
-        if response.status_code != 200:
-            logger.error(f"Error {response.status_code}: {response.text}")
-            raise Exception(f"Error {response.status_code}: {response.text}")
+            response = requests.patch(url, headers=headers, data=signed_jwt)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
 
-        logger.success("Fee template applied successfully")
-        return response.json()
+            logger.success("Fee template applied successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def update_account_alias(self, account_id: str, new_alias: str):
+    def update_account_alias(self, account_id: str, new_alias: str, master_account: str = None):
         """Update the alias for a given account.
 
         Args:
@@ -208,40 +257,44 @@ class IBKRWebAPI:
         Returns:
             dict: API response after updating the alias.
         """
-        logger.info(f"Updating alias for account {account_id} to {new_alias}")
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Updating alias for account {account_id} to {new_alias}")
 
-        url = f"{self.BASE_URL}/gw/api/v1/accounts"
+            url = f"{self.BASE_URL}/gw/api/v1/accounts"
 
-        body = {
-            "accountManagementRequests": {
-                "updateAccountAlias": {
-                    "referenceAccountId": account_id,
-                    "accountAlias": new_alias
+            body = {
+                "accountManagementRequests": {
+                    "updateAccountAlias": {
+                        "referenceAccountId": account_id,
+                        "accountAlias": new_alias
+                    }
                 }
             }
-        }
 
-        token = self.get_bearer_token()
-        if not token:
-            raise Exception("No token found")
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
 
-        signed_jwt = self.sign_request(body)
+            signed_jwt = self.sign_request(body)
 
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/jwt"
-        }
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt"
+            }
 
-        response = requests.patch(url, headers=headers, data=signed_jwt)
-        if response.status_code != 200:
-            logger.error(f"Error {response.status_code}: {response.text}")
-            raise Exception(f"Error {response.status_code}: {response.text}")
+            response = requests.patch(url, headers=headers, data=signed_jwt)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
 
-        logger.success("Account alias updated successfully")
-        return response.json()
+            logger.success("Account alias updated successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def process_documents(self, documents: list = None) -> dict:
+    def process_documents(self, documents: list = None, master_account: str = None) -> dict:
         """Auto-sign and upload IBKR forms given their form numbers.
 
         The caller should supply a plain list/array of form numbers, e.g. `["2001", "8001"]`.
@@ -251,192 +304,208 @@ class IBKRWebAPI:
             3. Sign the resulting *DocumentSubmissionRequest* as a JWT and POST it to
                ``/gw/api/v1/accounts/documents``.
         """
+        try:
+            original_creds = self._apply_credentials(master_account)
+            if documents is None or not isinstance(documents, list):
+                raise Exception("process_documents expects a list of form numbers (strings or ints).")
 
-        if documents is None or not isinstance(documents, list):
-            raise Exception("process_documents expects a list of form numbers (strings or ints).")
+            form_numbers = [str(f) for f in documents]
 
-        form_numbers = [str(f) for f in documents]
+            logger.info(f"Building DocumentSubmissionRequest for forms: {form_numbers}")
 
-        logger.info(f"Building DocumentSubmissionRequest for forms: {form_numbers}")
+            timestamp = int(datetime.utcnow().strftime("%Y%m%d%H%M%S"))
 
-        timestamp = int(datetime.utcnow().strftime("%Y%m%d%H%M%S"))
+            built_documents = []
+            for form_no in form_numbers:
+                try:
+                    form_result = self.get_forms(forms=[form_no])
+                    form_details = form_result.get("formDetails", [])
+                    if not form_details:
+                        logger.warning(f"No formDetails returned for form {form_no}")
+                        continue
 
-        built_documents = []
-        for form_no in form_numbers:
-            try:
-                form_result = self.get_forms(forms=[form_no])
-                form_details = form_result.get("formDetails", [])
-                if not form_details:
-                    logger.warning(f"No formDetails returned for form {form_no}")
-                    continue
+                    form = form_details[0]
+                    file_data = form_result.get("fileData", {})
 
-                form = form_details[0]
-                file_data = form_result.get("fileData", {})
+                    built_documents.append({
+                        "signedBy": ["Account Holder"],
+                        "attachedFile": {
+                            "fileName": form.get("fileName"),
+                            "fileLength": form.get("fileLength"),
+                            "sha1Checksum": form.get("sha1Checksum"),
+                        },
+                        "formNumber": int(form.get("formNumber")),
+                        "validAddress": False,
+                        "execLoginTimestamp": timestamp,
+                        "execTimestamp": timestamp,
+                        "payload": {
+                            "mimeType": "application/pdf",
+                            "data": file_data.get("data"),
+                        },
+                    })
+                except Exception as e:
+                    logger.error(f"Failed to build document for form {form_no}: {e}")
 
-                built_documents.append({
-                    "signedBy": ["Account Holder"],
-                    "attachedFile": {
-                        "fileName": form.get("fileName"),
-                        "fileLength": form.get("fileLength"),
-                        "sha1Checksum": form.get("sha1Checksum"),
-                    },
-                    "formNumber": int(form.get("formNumber")),
-                    "validAddress": False,
-                    "execLoginTimestamp": timestamp,
-                    "execTimestamp": timestamp,
-                    "payload": {
-                        "mimeType": "application/pdf",
-                        "data": file_data.get("data"),
-                    },
-                })
-            except Exception as e:
-                logger.error(f"Failed to build document for form {form_no}: {e}")
+            if not built_documents:
+                raise Exception("Failed to build any document payloads – all form fetches failed.")
 
-        if not built_documents:
-            raise Exception("Failed to build any document payloads – all form fetches failed.")
-
-        submission_request = {
-            "processDocuments": {
-                "documents": built_documents,
-                "inputLanguage": "en",
-                "translation": False,
+            submission_request = {
+                "processDocuments": {
+                    "documents": built_documents,
+                    "inputLanguage": "en",
+                    "translation": False,
+                }
             }
-        }
 
-        logger.info("Uploading documents via /accounts/documents endpoint")
-        url = f"{self.BASE_URL}/gw/api/v1/accounts/documents"
+            logger.info("Uploading documents via /accounts/documents endpoint")
+            url = f"{self.BASE_URL}/gw/api/v1/accounts/documents"
 
-        token = self.get_bearer_token()
-        if not token:
-            raise Exception("No token found")
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
 
-        signed_jwt = self.sign_request(submission_request)
+            signed_jwt = self.sign_request(submission_request)
 
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/jwt"
-        }
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt"
+            }
 
-        response = requests.post(url, headers=headers, data=signed_jwt)
-        logger.info(f"Response: {response.text}")
-        
-        if response.status_code != 200:
-            raise Exception(f"Error {response.status_code}: {response.text}")
+            response = requests.post(url, headers=headers, data=signed_jwt)
+            logger.info(f"Response: {response.text}")
+            
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
 
-        logger.success("Documents uploaded successfully")
-        return response.json()
-
-    @handle_exception
-    def send_to_ibkr(self, application):
-        logger.info("Sending application to Interactive Brokers")
-        url = f"{self.BASE_URL}/gw/api/v1/accounts"
-
-        # Get OAuth2 token (refresh if needed)
-        token = self.get_bearer_token()
-        if not token:
-            raise Exception("No token found")
-
-        # Sign the application payload
-        signed_jwt = self.sign_request(application)
-
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/jwt"
-        }
-
-        response = requests.post(url, headers=headers, data=signed_jwt)
-        data = response.json()
-        if response.status_code != 200:
-            raise Exception(data)
-
-        logger.success(f"Application sent to Interactive Brokers successfully")
-        return data
+            logger.success("Documents uploaded successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def get_forms(self, forms: list = None):
-        logger.info("Getting forms")
-        url = f"{self.BASE_URL}/gw/api/v1/forms?fromDate=2016-10-20&toDate=&getDocs=T"
-        if forms:
-            forms = ",".join(str(f) for f in forms)
-            url += f"&formNo={forms}"
-        
-        token = self.get_bearer_token()
-        if not token:
-            raise Exception("No token found")
-        headers = {
-            "Authorization": f"Bearer {token}"
-        }
-        import base64
-        import io
-        import zipfile
+    def send_to_ibkr(self, application, master_account: str = None):
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Sending application to Interactive Brokers using master account type: {master_account}")
+            url = f"{self.BASE_URL}/gw/api/v1/accounts"
 
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            raise Exception(f"Error {response.status_code}: {response.text}")
-        logger.success(f"Form fetched successfully")
-        result = response.json()
+            # Get OAuth2 token (refresh if needed) with the overridden credentials
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
 
-        # Filter formDetails to only English forms
-        form_details = result.get('formDetails')
-        if form_details and isinstance(form_details, list):
-            en_forms = [f for f in form_details if f.get('language') == 'en']
-            result['formDetails'] = en_forms
-        else:
-            en_forms = []
+            # Sign the application payload with the overridden credentials
+            signed_jwt = self.sign_request(application)
 
-        file_data = result.get('fileData')
-        if file_data and 'data' in file_data:
-            file_name = file_data.get('name')
-            data_b64 = file_data['data']
-            if file_name and file_name.endswith('.zip') and en_forms:
-                # Extract the PDF matching the English form fileName
-                pdf_file_name = en_forms[0].get('fileName')
-                zip_bytes = base64.b64decode(data_b64)
-                with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-                    if pdf_file_name and pdf_file_name in zf.namelist():
-                        with zf.open(pdf_file_name) as pdf_file:
-                            pdf_bytes = pdf_file.read()
-                            pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
-                            file_data['data'] = pdf_b64
-                            file_data['name'] = pdf_file_name
-                    else:
-                        logger.error(f'English PDF file {pdf_file_name} not found in ZIP archive')
-                        # fallback: first PDF in zip
-                        for name in zf.namelist():
-                            if name.lower().endswith('.pdf'):
-                                with zf.open(name) as pdf_file:
-                                    pdf_bytes = pdf_file.read()
-                                    pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
-                                    file_data['data'] = pdf_b64
-                                    file_data['name'] = name
-                                    break
-            elif file_name and file_name.endswith('.pdf') and en_forms:
-                # Only keep fileData if it matches an English form
-                if file_name != en_forms[0].get('fileName'):
-                    logger.info(f'PDF file {file_name} does not match English form {en_forms[0].get("fileName")}')
-                    file_data['data'] = ''
-        return result
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt"
+            }
+
+            response = requests.post(url, headers=headers, data=signed_jwt)
+            data = response.json()
+            if response.status_code != 200:
+                raise Exception(data)
+
+            logger.success("Application sent to Interactive Brokers successfully")
+            return data
+        finally:
+            # Restore original credentials to avoid side-effects
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def get_security_questions(self):
+    def get_forms(self, forms: list = None, master_account: str = None):
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info("Getting forms")
+            url = f"{self.BASE_URL}/gw/api/v1/forms?fromDate=2016-10-20&toDate=&getDocs=T"
+            if forms:
+                forms = ",".join(str(f) for f in forms)
+                url += f"&formNo={forms}"
+            
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {token}"
+            }
+            import base64
+            import io
+            import zipfile
+
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success(f"Form fetched successfully")
+            result = response.json()
+
+            # Filter formDetails to only English forms
+            form_details = result.get('formDetails')
+            if form_details and isinstance(form_details, list):
+                en_forms = [f for f in form_details if f.get('language') == 'en']
+                result['formDetails'] = en_forms
+            else:
+                en_forms = []
+
+            file_data = result.get('fileData')
+            if file_data and 'data' in file_data:
+                file_name = file_data.get('name')
+                data_b64 = file_data['data']
+                if file_name and file_name.endswith('.zip') and en_forms:
+                    # Extract the PDF matching the English form fileName
+                    pdf_file_name = en_forms[0].get('fileName')
+                    zip_bytes = base64.b64decode(data_b64)
+                    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+                        if pdf_file_name and pdf_file_name in zf.namelist():
+                            with zf.open(pdf_file_name) as pdf_file:
+                                pdf_bytes = pdf_file.read()
+                                pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
+                                file_data['data'] = pdf_b64
+                                file_data['name'] = pdf_file_name
+                        else:
+                            logger.error(f'English PDF file {pdf_file_name} not found in ZIP archive')
+                            # fallback: first PDF in zip
+                            for name in zf.namelist():
+                                if name.lower().endswith('.pdf'):
+                                    with zf.open(name) as pdf_file:
+                                        pdf_bytes = pdf_file.read()
+                                        pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
+                                        file_data['data'] = pdf_b64
+                                        file_data['name'] = name
+                                        break
+                elif file_name and file_name.endswith('.pdf') and en_forms:
+                    # Only keep fileData if it matches an English form
+                    if file_name != en_forms[0].get('fileName'):
+                        logger.info(f'PDF file {file_name} does not match English form {en_forms[0].get("fileName")}')
+                        file_data['data'] = ''
+            return result
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def get_security_questions(self, master_account: str = None):
         """Retrieve list of security questions from IBKR."""
-        logger.info("Fetching security questions")
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info("Fetching security questions")
 
-        url = f"{self.BASE_URL}/api/v1/enumerations/security-questions"
+            url = f"{self.BASE_URL}/api/v1/enumerations/security-questions"
 
-        token = self.get_bearer_token()
-        if not token:
-            raise Exception("No token found")
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
 
-        headers = {"Authorization": f"Bearer {token}"}
+            headers = {"Authorization": f"Bearer {token}"}
 
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            logger.error(f"Error {response.status_code}: {response.text}")
-            raise Exception(f"Error {response.status_code}: {response.text}")
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
 
-        logger.success("Security questions fetched successfully")
-        return response.json()
+            logger.success("Security questions fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     def get_bearer_token(self):
         current_time = int(time.time())
