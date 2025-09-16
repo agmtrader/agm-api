@@ -66,7 +66,7 @@ class Supabase:
         class Advisor(self.Base):
             __tablename__ = 'advisor'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            contact_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             code = Column(Integer, nullable=False, unique=True)
@@ -78,8 +78,8 @@ class Supabase:
         class Lead(self.Base):
             __tablename__ = 'lead'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            contact_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
-            referrer_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            referrer_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             description = Column(Text, nullable=False)
@@ -102,14 +102,13 @@ class Supabase:
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             lead_id = Column(UUID(as_uuid=True), ForeignKey('lead.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             master_account = Column(Text, nullable=True)
             date_sent_to_ibkr = Column(Text, nullable=True)
             application = Column(JSONB, nullable=True)
             status = Column(Text, nullable=False, default='Started')
-            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
         
         class Account(self.Base):
             __tablename__ = 'account'
@@ -118,7 +117,7 @@ class Supabase:
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             application_id = Column(UUID(as_uuid=True), ForeignKey('application.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
-            user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             ibkr_account_number = Column(Text, nullable=False, unique=True)
             ibkr_username = Column(Text, nullable=True)
             ibkr_password = Column(Text, nullable=True)
