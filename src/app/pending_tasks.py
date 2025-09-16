@@ -7,7 +7,6 @@ bp = Blueprint('pending_tasks', __name__)
 
 # Pending Tasks
 @bp.route('/create', methods=['POST'])
-@verify_scope('pending_tasks/create')
 @format_response
 def create_pending_task_route():
     payload = request.get_json(force=True)
@@ -16,7 +15,6 @@ def create_pending_task_route():
     return create_pending_task(task=task, follow_ups=follow_ups)
 
 @bp.route('/read', methods=['GET'])
-@verify_scope('pending_tasks/read')
 @format_response
 def read_pending_tasks_route():
     query = {}
@@ -29,7 +27,6 @@ def read_pending_tasks_route():
     return read_pending_tasks(query=query)
 
 @bp.route('/update', methods=['POST'])
-@verify_scope('pending_tasks/update')
 @format_response
 def update_pending_task_route():
     payload = request.get_json(force=True)

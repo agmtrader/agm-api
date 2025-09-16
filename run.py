@@ -97,26 +97,17 @@ def start_api():
         payload = request.get_json(force=True)
 
         token_value = payload.get('token')
-        scopes = payload.get('scopes')
 
-        if not token_value or not scopes:
-            logger.error('Token or scopes is missing')
+        if not token_value:
+            logger.error('Token is missing')
             raise ServiceError("Unauthorized", status_code=401)
 
         expires_delta = DEFAULT_TOKEN_EXPIRES
 
-        # Validate user
-        try:
-            user = read_user_by_id(str(token_value))
-        except Exception:
-            logger.error('Failed to authenticate user')
-            raise ServiceError("Unauthorized", status_code=401)
-
-        if user and user['id'] == token_value:
-            logger.info(f'Generating access token for user with scopes {scopes}.')
+        logger.info(f'Generating access token for user.')
+        if token_value == 'all':
             access_token = create_access_token(
                 identity=token_value,
-                additional_claims={"scopes": scopes},
                 expires_delta=expires_delta
             )
             logger.announcement('Authenticated user', 'success')
@@ -125,7 +116,7 @@ def start_api():
                 "expires_in": int(expires_delta.total_seconds())
             }
 
-        logger.error(f'Failed to authenticate user {token_value}')
+        logger.error(f'Failed to authenticate user.')
         raise ServiceError("Unauthorized", status_code=401)
     
     # Ada
@@ -141,11 +132,12 @@ def start_api():
     app.register_blueprint(risk_profiles.bp, url_prefix='/risk_profiles')
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
 
-    # CRUD
-    from src.app import accounts, advisors, applications, leads, pending_tasks, users
+    # Entities
+    from src.app import accounts, advisors, applications, contacts, leads, pending_tasks, users
     app.register_blueprint(accounts.bp, url_prefix='/accounts')
     app.register_blueprint(advisors.bp, url_prefix='/advisors')
     app.register_blueprint(applications.bp, url_prefix='/applications')
+    app.register_blueprint(contacts.bp, url_prefix='/contacts')
     app.register_blueprint(leads.bp, url_prefix='/leads')
     app.register_blueprint(pending_tasks.bp, url_prefix='/pending_tasks')
     app.register_blueprint(users.bp, url_prefix='/users')

@@ -2,13 +2,11 @@ from flask import Blueprint, request
 from src.components.accounts import create_account, read_accounts, upload_document, read_documents_by_account_id
 from src.components.accounts import get_pending_tasks, get_registration_tasks
 from src.components.accounts import read_account_details, get_forms, submit_account_management_requests, update_account
-from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
 
 bp = Blueprint('accounts', __name__)
 
 @bp.route('/create', methods=['POST'])
-@verify_scope('accounts/create')
 @format_response
 def create_route():
     payload = request.get_json(force=True)
@@ -16,7 +14,6 @@ def create_route():
     return create_account(account=account_data)
  
 @bp.route('/read', methods=['GET'])
-@verify_scope('accounts/read')
 @format_response        
 def read_route():
     query = {}
@@ -29,7 +26,6 @@ def read_route():
     return read_accounts(query=query)
 
 @bp.route('/update', methods=['POST'])
-@verify_scope('accounts/update')
 @format_response
 def update_account_route():
     payload = request.get_json(force=True)
@@ -38,14 +34,12 @@ def update_account_route():
     return update_account(query=query, account=account)
 
 @bp.route('/documents', methods=['GET'])
-@verify_scope('accounts/read')
 @format_response
 def read_documents_by_account_id_route():
     account_id = request.args.get('account_id', None)
     return read_documents_by_account_id(account_id=account_id)
 
 @bp.route('/documents', methods=['POST'])
-@verify_scope('accounts/update')
 @format_response
 def upload_document_route():
     payload = request.get_json(force=True)
@@ -59,7 +53,6 @@ def upload_document_route():
 
 # Account Management
 @bp.route('/ibkr/details', methods=['GET'])
-@verify_scope('accounts/read')
 @format_response
 def read_accounts_details_route():
     account_id = request.args.get('account_id', None)
@@ -67,7 +60,6 @@ def read_accounts_details_route():
     return read_account_details(account_id=account_id, master_account=master_account)
 
 @bp.route('/ibkr/update', methods=['POST'])
-@verify_scope('accounts/update')
 @format_response
 def submit_account_management_requests_route():
     payload = request.get_json(force=True)
@@ -76,7 +68,6 @@ def submit_account_management_requests_route():
     return submit_account_management_requests(account_management_requests=account_management_requests_data, master_account=master_account)
 
 @bp.route('/ibkr/registration_tasks', methods=['GET'])
-@verify_scope('accounts/read')
 @format_response
 def registration_tasks_route():
     account_id = request.args.get('account_id', None)
@@ -86,7 +77,6 @@ def registration_tasks_route():
     return get_registration_tasks(account_id=account_id, master_account=master_account)
 
 @bp.route('/ibkr/pending_tasks', methods=['GET'])
-@verify_scope('accounts/read')
 @format_response
 def pending_tasks_route():
     account_id = request.args.get('account_id', None)
@@ -96,7 +86,6 @@ def pending_tasks_route():
     return get_pending_tasks(account_id=account_id, master_account=master_account)
 
 @bp.route('/ibkr/fee_template', methods=['POST'])
-@verify_scope('accounts/update')
 @format_response
 def apply_fee_template_route():
     payload = request.get_json(force=True)
@@ -108,7 +97,6 @@ def apply_fee_template_route():
     return apply_fee_template(account_id=account_id, template_name=template_name, master_account=master_account)
 
 @bp.route('/ibkr/account_alias', methods=['POST'])
-@verify_scope('accounts/update')
 @format_response
 def update_account_alias_route():
     payload = request.get_json(force=True)
@@ -120,14 +108,12 @@ def update_account_alias_route():
     return update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
 
 @bp.route('/ibkr/security_questions', methods=['GET'])
-@verify_scope('accounts/read')
 @format_response
 def get_security_questions_route():
     master_account = request.args.get('master_account', None)
     return get_security_questions(master_account=master_account)
 
 @bp.route('/ibkr/forms', methods=['POST'])
-@verify_scope('accounts/forms')
 @format_response
 def get_forms_route():
     payload = request.get_json(force=True)

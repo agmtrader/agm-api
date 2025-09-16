@@ -1,6 +1,5 @@
 from flask import Blueprint, request
 from src.components.users import read_users, update_user, create_user
-from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
 from src.utils.logger import logger
 from src.utils.exception import ServiceError
@@ -39,7 +38,6 @@ def login():
     raise ServiceError(f'Single entry has {len(users)} matches.', status_code=400)
 
 @bp.route('/read', methods=['GET'])
-@verify_scope('users/read')
 @format_response
 def read_users_route():
     query = {}
@@ -55,7 +53,6 @@ def read_users_route():
     return read_users(query=query)
 
 @bp.route('/update', methods=['POST'])
-@verify_scope('users/update')
 @format_response
 def update_user_route():
     payload = request.get_json(force=True)

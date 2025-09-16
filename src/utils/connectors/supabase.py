@@ -51,6 +51,18 @@ class Supabase:
             phone = Column(Text, nullable=True)
             last_login = Column(Text, nullable=True)
 
+        class Contact(self.Base):
+            __tablename__ = 'contact'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            email = Column(Text, nullable=True, unique=True)
+            image = Column(Text, nullable=True)
+            name = Column(Text, nullable=False)
+            country = Column(Text, nullable=True)
+            company_name = Column(Text, nullable=True)
+            phone = Column(Text, nullable=True)
+
         class Advisor(self.Base):
             __tablename__ = 'advisor'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -97,6 +109,7 @@ class Supabase:
             date_sent_to_ibkr = Column(Text, nullable=True)
             application = Column(JSONB, nullable=True)
             status = Column(Text, nullable=False, default='Started')
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
         
         class Account(self.Base):
             __tablename__ = 'account'
@@ -137,11 +150,12 @@ class Supabase:
             __tablename__ = 'risk_profile'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=True)
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             risk_profile_id = Column(Integer, nullable=False)
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             score = Column(Text, nullable=False)
-            name = Column(Text, nullable=False)
+            name = Column(Text, nullable=True)
             answers = Column(JSONB, nullable=True)
 
         class InvestmentProposal(self.Base):
@@ -188,6 +202,7 @@ class Supabase:
 
         # Contacts
         self.User = User
+        self.Contact = Contact
         self.Application = Application
         self.Advisor = Advisor
 

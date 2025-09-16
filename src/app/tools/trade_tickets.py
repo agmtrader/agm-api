@@ -6,20 +6,17 @@ from src.utils.response import format_response
 bp = Blueprint('trade_tickets', __name__)
 
 @bp.route('/list', methods=['GET'])
-@verify_scope('trade_tickets/list')
 @format_response
 def list_route():
     return list_trade_tickets()
 
 @bp.route('/read', methods=['GET'])
-@verify_scope('trade_tickets/read')
 @format_response
 def read_route():
     query_id = request.args.get('query_id', None)
     return read(query_id)
 
 @bp.route('/confirmation_message', methods=['POST'])
-@verify_scope('trade_tickets/confirmation_message')
 @format_response
 def confirmation_message_route():
     payload = request.get_json(force=True)

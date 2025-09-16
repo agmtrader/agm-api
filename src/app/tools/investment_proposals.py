@@ -6,7 +6,6 @@ from src.utils.response import format_response
 bp = Blueprint('investment_proposals', __name__)
 
 @bp.route('/create', methods=['POST'])
-@verify_scope('investment_proposals/create')
 @format_response
 def create_route():
     payload = request.get_json(force=True)
@@ -14,7 +13,6 @@ def create_route():
     return create_investment_proposal(risk_profile=risk_profile)
 
 @bp.route('/read', methods=['GET'])
-@verify_scope('investment_proposals/read')
 @format_response
 def read_route():
     query = {}

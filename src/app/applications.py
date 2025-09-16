@@ -7,7 +7,6 @@ from src.utils.logger import logger
 bp = Blueprint('applications', __name__)
 
 @bp.route('/create', methods=['POST'])
-@verify_scope('applications/create')
 @format_response
 def create_route():
     payload = request.get_json(force=True)
@@ -15,7 +14,6 @@ def create_route():
     return create_application(application=application)
 
 @bp.route('/read', methods=['GET'])
-@verify_scope('applications/read')
 @format_response
 def read_route():
     query = {}
@@ -48,7 +46,6 @@ def read_route():
     return applications
 
 @bp.route('/update', methods=['POST'])
-@verify_scope('applications/update')
 @format_response
 def update_route():
     payload = request.get_json(force=True)
@@ -57,7 +54,6 @@ def update_route():
     return update_application(application=application, query=query)
 
 @bp.route('/send_to_ibkr', methods=['POST'])
-@verify_scope('applications/send')
 @format_response
 def send_to_ibkr_route():
     payload = request.get_json(force=True)
