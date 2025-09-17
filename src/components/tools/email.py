@@ -165,6 +165,14 @@ class Gmail:
     bcc = ""
     cc = ""
     return self.send_email(content, agm_user_email, subject, email_template, bcc=bcc, cc=cc)
+  
+  @handle_exception
+  def send_lead_reminder_email(self, content, agm_user_email):
+    subject = 'Lead Reminder'
+    email_template = 'lead_reminder'
+    bcc = ""
+    cc = ""
+    return self.send_email(content, agm_user_email, subject, email_template, bcc=bcc, cc=cc)
 
   @handle_exception
   def send_credentials_email(self, content, client_email, lang='es'):

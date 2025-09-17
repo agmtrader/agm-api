@@ -30,6 +30,12 @@ def send_task_reminder_email_route():
   payload = request.get_json(force=True)
   return Email.send_task_reminder_email(payload['content'], payload['agm_user_email'])
 
+@bp.route('/send_email/lead_reminder', methods=['POST'])
+@format_response
+def send_lead_reminder_email_route():
+  payload = request.get_json(force=True)
+  return Email.send_lead_reminder_email(payload['content'], payload['agm_user_email'])
+
 @bp.route('/send_email/credentials', methods=['POST'])
 @format_response
 def send_credentials_email_route():
