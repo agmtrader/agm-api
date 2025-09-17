@@ -19,7 +19,7 @@ jobs:
             # Fetch access token
             response=$(curl -s -w "\n%{http_code}" -X POST \
               -H "Content-Type: application/json" \
-              -d '{"token":"${{ secrets.AUTHENTICATION_TOKEN }}","scopes":"all"}' \
+              -d '{"token":"all"}' \
               https://api.agmtechnology.com/token)
 
             http_status=$(echo "$response" | tail -n1)
