@@ -88,5 +88,10 @@ def update_account_alias(account_id: str = None, new_alias: str = None, master_a
     return ibkr_web_api.update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
 
 @handle_exception
+def update_account_email(reference_user_name: str = None, new_email: str = None, access: bool = True, master_account: str = None) -> dict:
+    """Update account email via IBKR API."""
+    return ibkr_web_api.update_account_email(reference_user_name=reference_user_name, new_email=new_email, access=access, master_account=master_account)
+
+@handle_exception
 def get_security_questions(master_account: str = None) -> dict:
     return ibkr_web_api.get_security_questions(master_account=master_account)

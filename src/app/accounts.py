@@ -2,7 +2,7 @@ from flask import Blueprint, request
 from src.components.accounts import create_account, read_accounts, upload_document, read_documents_by_account_id
 from src.components.accounts import get_pending_tasks, get_registration_tasks
 from src.components.accounts import read_account_details, get_forms, submit_account_management_requests, update_account, get_security_questions
-from src.components.accounts import apply_fee_template, update_account_alias
+from src.components.accounts import apply_fee_template, update_account_alias, update_account_email
 from src.utils.response import format_response
 
 bp = Blueprint('accounts', __name__)
@@ -107,6 +107,18 @@ def update_account_alias_route():
     if not account_id or new_alias is None:
         return {"error": "Missing account_id or new_alias"}, 400
     return update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
+
+@bp.route('/ibkr/account_email', methods=['POST'])
+@format_response
+def update_account_email_route():
+    payload = request.get_json(force=True)
+    reference_user_name = payload.get('reference_user_name')
+    new_email = payload.get('new_email')
+    access = payload.get('access', True)
+    master_account = payload.get('master_account', None)
+    if not reference_user_name or new_email is None:
+        return {"error": "Missing reference_user_name or new_email"}, 400
+    return update_account_email(reference_user_name=reference_user_name, new_email=new_email, access=access, master_account=master_account)
 
 @bp.route('/ibkr/security_questions', methods=['GET'])
 @format_response

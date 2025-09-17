@@ -507,6 +507,60 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @handle_exception
+    def update_account_email(self, reference_user_name: str, new_email: str, access: bool = True, master_account: str = None):
+        """Update the email associated with a given IBKR user name.
+
+        Args:
+            reference_user_name (str): The IBKR username whose email will be updated.
+            new_email (str): The new email address.
+            access (bool, optional): Email access flag required by IBKR. Defaults to True.
+            master_account (str, optional): Master account type ('ad' or 'br'). Defaults to None.
+
+        Returns:
+            dict: API response after updating the email.
+        """
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Updating email for user {reference_user_name} to {new_email}")
+
+            url = f"{self.BASE_URL}/gw/api/v1/accounts"
+
+            body = {
+                "accountManagementRequests": {
+                    "updateCredentials": [
+                        {
+                            "referenceUserName": reference_user_name,
+                            "updateEmail": {
+                                "email": new_email,
+                                "access": access
+                            }
+                        }
+                    ]
+                }
+            }
+
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            signed_jwt = self.sign_request(body)
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt"
+            }
+
+            response = requests.patch(url, headers=headers, data=signed_jwt)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Account email updated successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
     def get_bearer_token(self):
         current_time = int(time.time())
         
