@@ -2,7 +2,7 @@ name: Daily ETL Pipeline
 
 on:
   schedule:
-    - cron: '30 13 * * *'   # Every day at 1 PM UTC (7:00 AM CST)
+    - cron: '30 10 * * *'   # Every day at 10 AM UTC (4:00 AM CST)
   workflow_dispatch:
 
 jobs:
@@ -47,7 +47,7 @@ jobs:
               echo "Reporting run request failed with status $status"
               exit 1
             fi
-          attempt_limit: 12 # 1 original + 5 retries (1 hour)
+          attempt_limit: 24 # 1 original + 23 retries (4 hours)
           attempt_delay: 600000 # 10-minute pause (ms)
           
   notify-success:

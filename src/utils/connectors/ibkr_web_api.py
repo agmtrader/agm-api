@@ -533,12 +533,15 @@ class IBKRWebAPI:
                             "referenceUserName": reference_user_name,
                             "updateEmail": {
                                 "email": new_email,
-                                "access": access
+                                "token": "12345",                
+                                "access": True
                             }
                         }
                     ]
                 }
             }
+
+            print(body)
 
             token = self.get_bearer_token()
             if not token:
