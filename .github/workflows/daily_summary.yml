@@ -64,6 +64,8 @@ jobs:
             # ─────────────────────────────────────────────────────────────
             # 4. Pass plain text lists to next job via step outputs
             printf "pending_tasks<<EOF\n%s\nEOF\n" "$pending_tasks" >> "$GITHUB_OUTPUT"
+            # Provide single-line fallback for compatibility
+            echo "pending_tasks=$pending_tasks" >> "$GITHUB_OUTPUT"
             
           attempt_limit: 24     # Retry up to 24 times (10-min interval) like other jobs
           attempt_delay: 600000 # 10-minute pause (ms)
