@@ -10,10 +10,9 @@ jobs:
   fetch-summary:
     runs-on: ubuntu-latest
     outputs:
-      tasks: ${{ steps.fetch.outputs.pending_tasks_md }}
-      leads: ${{ steps.fetch.outputs.leads_md }}
+      tasks: ${{ steps.fetch.outputs.pending_tasks }}
     steps:
-      - name: Request token and fetch tasks/leads
+      - name: Request token and fetch tasks
         id: fetch
         uses: Wandalen/wretry.action@v2
         with:
@@ -52,26 +51,27 @@ jobs:
             fi
 
             # Extract plain list of pending task descriptions (one per line)
-            pending_tasks_md=$(echo "$tasks_body" | jq -r '.pending_tasks[] | .description')
+            pending_tasks=$(echo "$tasks_body" | jq -r '.pending_tasks[] | .description')
             # Debug: print raw JSON for inspection
             echo "==== Raw Pending Tasks JSON ===="
             echo "$tasks_body"
             echo "==============================="
-            if [ -z "$pending_tasks_md" ]; then
-              pending_tasks_md="No pending tasks found."
-            fi
+
+            echo "==== Pending Tasks (plain text) ===="
+            echo "$pending_tasks"
+            echo "==============================="
 
             # ─────────────────────────────────────────────────────────────
-            # 4. Pass markdown lists to next job via step outputs
-            printf "pending_tasks_md<<EOF\n%s\nEOF\n" "$pending_tasks_md" >> "$GITHUB_OUTPUT"
+            # 4. Pass plain text lists to next job via step outputs
+            printf "pending_tasks<<EOF\n%s\nEOF\n" "$pending_tasks" >> "$GITHUB_OUTPUT"
+            
           attempt_limit: 24     # Retry up to 24 times (10-min interval) like other jobs
           attempt_delay: 600000 # 10-minute pause (ms)
           
       - name: Log fetched results
         run: |
-          echo "=== Pending Tasks (raw markdown) ==="
-          echo "${{ steps.fetch.outputs.pending_tasks_md }}"
-          echo ""
+          echo "Pending Tasks (plain text):"
+          echo "${{ steps.fetch.outputs.pending_tasks }}"
 
   notify:
     needs: fetch-summary
@@ -85,7 +85,7 @@ jobs:
           printf "body<<EOF\n" >> "$GITHUB_OUTPUT"
           printf "Hello AGM team,\n\n" >> "$GITHUB_OUTPUT"
           printf "Here is the daily summary as of $SUMMARY_DATE:\n\n" >> "$GITHUB_OUTPUT"
-          printf "**Pending Tasks**\n\n" >> "$GITHUB_OUTPUT"
+          printf "Pending Tasks:\n\n" >> "$GITHUB_OUTPUT"
           printf "%s\n\n" "${{ needs.fetch-summary.outputs.tasks }}" >> "$GITHUB_OUTPUT"
           printf "Have a great day!\n" >> "$GITHUB_OUTPUT"
           printf "EOF\n" >> "$GITHUB_OUTPUT"
