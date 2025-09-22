@@ -86,6 +86,20 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ success() }}
     steps:
+      - name: Prepare email body
+        id: prep_email
+        run: |
+          SUMMARY_DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
+          printf "body<<EOF\n" >> "$GITHUB_OUTPUT"
+          printf "Hello AGM team,\n\n" >> "$GITHUB_OUTPUT"
+          printf "Here is the daily summary as of $SUMMARY_DATE:\n\n" >> "$GITHUB_OUTPUT"
+          printf "**Pending Tasks**\n\n" >> "$GITHUB_OUTPUT"
+          printf "%s\n\n" "${{ needs.fetch-summary.outputs.tasks }}" >> "$GITHUB_OUTPUT"
+          printf "**Leads**\n\n" >> "$GITHUB_OUTPUT"
+          printf "%s\n\n" "${{ needs.fetch-summary.outputs.leads }}" >> "$GITHUB_OUTPUT"
+          printf "Have a great day!\n" >> "$GITHUB_OUTPUT"
+          printf "EOF\n" >> "$GITHUB_OUTPUT"
+
       - name: Send daily summary email
         uses: dawidd6/action-send-mail@v3
         with:
@@ -96,20 +110,7 @@ jobs:
           subject: "📬 Daily Pending Tasks & Leads Summary"
           to: aa@agmtechnology.com,cr@agmtechnology.com
           from: aa@agmtechnology.com
-          body: |
-            Hello AGM team,
-
-            Here is the daily summary as of $(date -u +"%Y-%m-%d %H:%M UTC"):
-
-            **Pending Tasks**
-
-            ${{ needs.fetch-summary.outputs.tasks }}
-
-            **Leads**
-
-            ${{ needs.fetch-summary.outputs.leads }}
-
-            Have a great day!
+          body: ${{ steps.prep_email.outputs.body }}
 
   notify-failure:
     needs: fetch-summary
