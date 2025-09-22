@@ -63,9 +63,8 @@ jobs:
             fi
 
             # Pass list to next job via step output
-            echo "accounts_list<<EOF" >> "$GITHUB_OUTPUT"
-            echo "$accounts_md" >> "$GITHUB_OUTPUT"
-            echo "EOF" >> "$GITHUB_OUTPUT"
+            # Write multi-line output without leading spaces on delimiter lines
+            printf "accounts_list<<EOF\n%s\nEOF\n" "$accounts_md" >> "$GITHUB_OUTPUT"
           attempt_limit: 24  # Retry up to 24 times (10-min interval) like ETL
           attempt_delay: 600000  # 10-minute pause (ms)
 
