@@ -97,17 +97,6 @@ def apply_fee_template_route():
         return {"error": "Missing account_id or template_name"}, 400
     return apply_fee_template(account_id=account_id, template_name=template_name, master_account=master_account)
 
-@bp.route('/ibkr/account_alias', methods=['POST'])
-@format_response
-def update_account_alias_route():
-    payload = request.get_json(force=True)
-    account_id = payload.get('account_id')
-    new_alias = payload.get('new_alias')
-    master_account = payload.get('master_account', None)
-    if not account_id or new_alias is None:
-        return {"error": "Missing account_id or new_alias"}, 400
-    return update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
-
 @bp.route('/ibkr/account_email', methods=['POST'])
 @format_response
 def update_account_email_route():
