@@ -53,6 +53,10 @@ jobs:
 
             # Extract markdown list of pending tasks (id and title if present)
             pending_tasks_md=$(echo "$tasks_body" | jq -r '.pending_tasks[] | "- [" + (.id // "n/a") + "] " + (.title // .task // "Unnamed Task")')
+            # Debug: print raw JSON for inspection
+            echo "==== Raw Pending Tasks JSON ===="
+            echo "$tasks_body"
+            echo "==============================="
             if [ -z "$pending_tasks_md" ]; then
               pending_tasks_md="No pending tasks found."
             fi
