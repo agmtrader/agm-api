@@ -128,14 +128,6 @@ class Supabase:
             master_account = Column(Text, nullable=True)
             management_type = Column(Text, nullable=True)
 
-        class AccountDocument(self.Base):
-            __tablename__ = 'account_document'
-            id = Column(UUID(as_uuid=True), unique=True, primary_key=True, default=uuid.uuid4)
-            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
-            document_id = Column(UUID(as_uuid=True), ForeignKey('document.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
-
         class FeeTemplateRequest(self.Base):
             __tablename__ = 'fee_template_request'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -148,6 +140,24 @@ class Supabase:
             previous_template = Column(Text, nullable=False)
             new_template = Column(Text, nullable=False)
             approved = Column(Boolean, nullable=False, default=False)
+
+        class AdvisorChange(self.Base):
+            __tablename__ = 'advisor_change'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            requested_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            old_advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            new_advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+
+        class AccountDocument(self.Base):
+            __tablename__ = 'account_document'
+            id = Column(UUID(as_uuid=True), unique=True, primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            document_id = Column(UUID(as_uuid=True), ForeignKey('document.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
 
         class Document(self.Base):
             __tablename__ = 'document'
@@ -229,6 +239,7 @@ class Supabase:
         self.AccountDocument = AccountDocument
         self.Document = Document
         self.FeeTemplateRequest = FeeTemplateRequest
+        self.AdvisorChange = AdvisorChange
         
         # Risk Profiles
         self.RiskProfile = RiskProfile    
