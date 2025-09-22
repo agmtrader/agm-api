@@ -86,23 +86,27 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ success() }}
     steps:
-      - name: Prepare email body
-        id: prep_email
+      - name: Compose email body file
         run: |
           SUMMARY_DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
-          printf "body<<EOF\n" >> "$GITHUB_OUTPUT"
-          printf "Hello AGM team,\n\n" >> "$GITHUB_OUTPUT"
-          printf "Here is the daily summary as of $SUMMARY_DATE:\n\n" >> "$GITHUB_OUTPUT"
-          TASKS_RAW="${{ needs.fetch-summary.outputs.tasks }}"
-          TASKS_DEC=$(echo "$TASKS_RAW" | sed 's/%0A/\n/g')
-          printf "**Pending Tasks**\n\n" >> "$GITHUB_OUTPUT"
-          printf "%s\n\n" "$TASKS_DEC" >> "$GITHUB_OUTPUT"
-          LEADS_RAW="${{ needs.fetch-summary.outputs.leads }}"
-          LEADS_DEC=$(echo "$LEADS_RAW" | sed 's/%0A/\n/g')
-          printf "**Leads**\n\n" >> "$GITHUB_OUTPUT"
-          printf "%s\n\n" "$LEADS_DEC" >> "$GITHUB_OUTPUT"
-          printf "Have a great day!\n" >> "$GITHUB_OUTPUT"
-          printf "EOF\n" >> "$GITHUB_OUTPUT"
+          # Decode %0A into real newlines for tasks and leads
+          TASKS=$(echo "${{ needs.fetch-summary.outputs.tasks }}" | sed 's/%0A/\n/g')
+          LEADS=$(echo "${{ needs.fetch-summary.outputs.leads }}" | sed 's/%0A/\n/g')
+          {
+            echo "Hello AGM team,"
+            echo ""
+            echo "Here is the daily summary as of $SUMMARY_DATE:"
+            echo ""
+            echo "**Pending Tasks**"
+            echo ""
+            echo "$TASKS"
+            echo ""
+            echo "**Leads**"
+            echo ""
+            echo "$LEADS"
+            echo ""
+            echo "Have a great day!"
+          } > email_body.md
 
       - name: Send daily summary email
         uses: dawidd6/action-send-mail@v3
@@ -114,7 +118,8 @@ jobs:
           subject: "📬 Daily Pending Tasks & Leads Summary"
           to: aa@agmtechnology.com,cr@agmtechnology.com
           from: aa@agmtechnology.com
-          body: ${{ steps.prep_email.outputs.body }}
+          body: file://email_body.md
+          content_type: text/markdown
 
   notify-failure:
     needs: fetch-summary
