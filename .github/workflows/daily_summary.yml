@@ -1,0 +1,130 @@
+name: Daily Pending Tasks & Leads Summary
+
+on:
+  schedule:
+    # Every day at 3 PM UTC (9:00 AM CST)
+    - cron: '0 15 * * *'
+  workflow_dispatch:
+
+jobs:
+  fetch-summary:
+    runs-on: ubuntu-latest
+    outputs:
+      tasks: ${{ steps.fetch.outputs.pending_tasks_md }}
+      leads: ${{ steps.fetch.outputs.leads_md }}
+    steps:
+      - name: Request token and fetch tasks/leads
+        id: fetch
+        uses: Wandalen/wretry.action@v2
+        with:
+          command: |
+            # ─────────────────────────────────────────────────────────────
+            # 1. Fetch access token (same mechanism as ETL / other jobs)
+            response=$(curl -s -w "\n%{http_code}" -X POST \
+              -H "Content-Type: application/json" \
+              -d '{"token":"all"}' \
+              https://api.agmtechnology.com/token)
+
+            http_status=$(echo "$response" | tail -n1)
+            body=$(echo "$response" | sed '$d')
+
+            if [ "$http_status" != "200" ]; then
+              echo "Token request failed with status $http_status" >&2
+              exit 1
+            fi
+
+            access_token=$(echo "$body" | jq -r '.access_token')
+            if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
+              echo "access_token not found in response" >&2
+              exit 1
+            fi
+
+            # ─────────────────────────────────────────────────────────────
+            # 2. Fetch Pending Tasks
+            response=$(curl -s -w "\n%{http_code}" -X GET \
+              -H "Authorization: Bearer $access_token" \
+              https://api.agmtechnology.com/pending_tasks/read)
+            http_status=$(echo "$response" | tail -n1)
+            tasks_body=$(echo "$response" | sed '$d')
+            if [ "$http_status" != "200" ]; then
+              echo "Fetching pending tasks failed with status $http_status" >&2
+              exit 1
+            fi
+
+            # Extract markdown list of pending tasks (id and title if present)
+            pending_tasks_md=$(echo "$tasks_body" | jq -r '.pending_tasks[] | "- [" + (.id // "n/a") + "] " + (.title // .task // "Unnamed Task")')
+            if [ -z "$pending_tasks_md" ]; then
+              pending_tasks_md="No pending tasks found."
+            fi
+
+            # ─────────────────────────────────────────────────────────────
+            # 3. Fetch Leads
+            response=$(curl -s -w "\n%{http_code}" -X GET \
+              -H "Authorization: Bearer $access_token" \
+              https://api.agmtechnology.com/leads/read)
+            http_status=$(echo "$response" | tail -n1)
+            leads_body=$(echo "$response" | sed '$d')
+            if [ "$http_status" != "200" ]; then
+              echo "Fetching leads failed with status $http_status" >&2
+              exit 1
+            fi
+
+            leads_md=$(echo "$leads_body" | jq -r '.leads[] | "- [" + (.id // "n/a") + "] " + (.name // .email // "Unnamed Lead")')
+            if [ -z "$leads_md" ]; then
+              leads_md="No leads found."
+            fi
+
+            # ─────────────────────────────────────────────────────────────
+            # 4. Pass markdown lists to next job via step outputs
+            printf "pending_tasks_md<<EOF\n%s\nEOF\n" "$pending_tasks_md" >> "$GITHUB_OUTPUT"
+            printf "leads_md<<EOF\n%s\nEOF\n" "$leads_md" >> "$GITHUB_OUTPUT"
+          attempt_limit: 24     # Retry up to 24 times (10-min interval) like other jobs
+          attempt_delay: 600000 # 10-minute pause (ms)
+
+  notify:
+    needs: fetch-summary
+    runs-on: ubuntu-latest
+    if: ${{ success() }}
+    steps:
+      - name: Send daily summary email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "📬 Daily Pending Tasks & Leads Summary"
+          to: aa@agmtechnology.com,cr@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: |
+            Hello AGM team,
+
+            Here is the daily summary as of $(date -u +"%Y-%m-%d %H:%M UTC"):
+
+            **Pending Tasks**
+
+            ${{ needs.fetch-summary.outputs.tasks }}
+
+            **Leads**
+
+            ${{ needs.fetch-summary.outputs.leads }}
+
+            Have a great day!
+
+  notify-failure:
+    needs: fetch-summary
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send failure email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "🚨 Daily Summary Workflow FAILED"
+          to: aa@agmtechnology.com,cr@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: |
+            The daily pending tasks and leads summary workflow failed. Please review the workflow logs for details.
