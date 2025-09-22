@@ -93,10 +93,14 @@ jobs:
           printf "body<<EOF\n" >> "$GITHUB_OUTPUT"
           printf "Hello AGM team,\n\n" >> "$GITHUB_OUTPUT"
           printf "Here is the daily summary as of $SUMMARY_DATE:\n\n" >> "$GITHUB_OUTPUT"
+          TASKS_RAW="${{ needs.fetch-summary.outputs.tasks }}"
+          TASKS_DEC=$(echo "$TASKS_RAW" | sed 's/%0A/\n/g')
           printf "**Pending Tasks**\n\n" >> "$GITHUB_OUTPUT"
-          printf "%s\n\n" "${{ needs.fetch-summary.outputs.tasks }}" >> "$GITHUB_OUTPUT"
+          printf "%s\n\n" "$TASKS_DEC" >> "$GITHUB_OUTPUT"
+          LEADS_RAW="${{ needs.fetch-summary.outputs.leads }}"
+          LEADS_DEC=$(echo "$LEADS_RAW" | sed 's/%0A/\n/g')
           printf "**Leads**\n\n" >> "$GITHUB_OUTPUT"
-          printf "%s\n\n" "${{ needs.fetch-summary.outputs.leads }}" >> "$GITHUB_OUTPUT"
+          printf "%s\n\n" "$LEADS_DEC" >> "$GITHUB_OUTPUT"
           printf "Have a great day!\n" >> "$GITHUB_OUTPUT"
           printf "EOF\n" >> "$GITHUB_OUTPUT"
 
