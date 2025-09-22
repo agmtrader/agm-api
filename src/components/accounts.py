@@ -3,6 +3,7 @@ from src.utils.connectors.supabase import db
 from src.utils.logger import logger
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 from src.utils.managers.document_manager import DocumentManager
+from src.components.tools.reporting import get_clients_report
 
 logger.announcement('Initializing Accounts Service', type='info')
 ibkr_web_api = IBKRWebAPI()
@@ -95,3 +96,28 @@ def update_account_email(reference_user_name: str = None, new_email: str = None,
 @handle_exception
 def get_security_questions(master_account: str = None) -> dict:
     return ibkr_web_api.get_security_questions(master_account=master_account)
+
+@handle_exception
+def update_pending_aliases(master_account: str = None) -> dict:
+    """Fetch clients report, filter accounts without alias, update each alias, and return list."""
+    clients = get_clients_report()
+    pending_accounts = [c for c in clients if (c.get('Alias') in (None, '')) and c.get('Status') not in ('Rejected', 'Closed', 'Funded Pending')]
+    updated_accounts = []
+    for account in pending_accounts:
+        account_id = account.get('Account ID')
+        title = account.get('Title')
+        if account_id and title is not None:
+            new_alias = f"{account_id} {title}"
+            try:
+                # Reuse existing helper to update alias via IBKR API
+                update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
+                updated_accounts.append({
+                    'account_id': account_id,
+                    'new_alias': new_alias
+                })
+            except Exception as e:
+                logger.error(f"Failed to update alias for {account_id}: {e}")
+    return {
+        'updated': len(updated_accounts),
+        'accounts': updated_accounts
+    }

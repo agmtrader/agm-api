@@ -2,7 +2,7 @@ from flask import Blueprint, request
 from src.components.accounts import create_account, read_accounts, upload_document, read_documents_by_account_id
 from src.components.accounts import get_pending_tasks, get_registration_tasks
 from src.components.accounts import read_account_details, get_forms, submit_account_management_requests, update_account, get_security_questions
-from src.components.accounts import apply_fee_template, update_account_alias, update_account_email
+from src.components.accounts import apply_fee_template, update_account_alias, update_account_email, update_pending_aliases
 from src.utils.response import format_response
 
 bp = Blueprint('accounts', __name__)
@@ -133,3 +133,10 @@ def get_forms_route():
     forms_data = payload.get('forms', None)
     master_account = payload.get('master_account', None)
     return get_forms(forms=forms_data, master_account=master_account)
+
+@bp.route('/ibkr/update_pending_aliases', methods=['POST'])
+@format_response
+def update_pending_aliases_route():
+    payload = request.get_json(force=True)
+    master_account = payload.get('master_account', None)
+    return update_pending_aliases(master_account=master_account)

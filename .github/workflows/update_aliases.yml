@@ -1,0 +1,110 @@
+name: Update IBKR Account Aliases
+
+on:
+  schedule:
+    - cron: '0 10 * * *'   # Every day at 10 AM UTC (4:00 AM CST)
+  workflow_dispatch:
+
+jobs:
+  update-aliases:
+    runs-on: ubuntu-latest
+    outputs:
+      accounts: ${{ steps.update.outputs.accounts_list }}
+    steps:
+      - name: Request token and update aliases
+        id: update
+        uses: Wandalen/wretry.action@v2
+        with:
+          command: |
+            # ─────────────────────────────────────────────────────────────
+            # 1. Fetch access token (same as ETL)
+            response=$(curl -s -w "\n%{http_code}" -X POST \
+              -H "Content-Type: application/json" \
+              -d '{"token":"all"}' \
+              https://api.agmtechnology.com/token)
+
+            http_status=$(echo "$response" | tail -n1)
+            body=$(echo "$response" | sed '$d')
+
+            if [ "$http_status" != "200" ]; then
+              echo "Token request failed with status $http_status" >&2
+              exit 1
+            fi
+
+            access_token=$(echo "$body" | jq -r '.access_token')
+            if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
+              echo "access_token not found in response" >&2
+              exit 1
+            fi
+
+            # 2. Trigger bulk alias update endpoint
+            response=$(curl -s -w "\n%{http_code}" -X POST \
+              -H "Authorization: Bearer $access_token" \
+              -H "Content-Type: application/json" \
+              -d '{"master_account":"br"}' \
+              https://api.agmtechnology.com/accounts/ibkr/update_pending_aliases)
+
+            http_status=$(echo "$response" | tail -n1)
+            body=$(echo "$response" | sed '$d')
+
+            if [ "$http_status" != "200" ]; then
+              echo "Bulk alias update failed with status $http_status" >&2
+              exit 1
+            fi
+
+            updated=$(echo "$body" | jq -r '.updated')
+            echo "✅ Aliases updated: $updated"
+
+            # Build markdown list of updated accounts
+            if [ "$updated" -gt 0 ]; then
+              accounts_md=$(echo "$body" | jq -r '.accounts[] | "- [" + .account_id + "] " + .new_alias')
+            else
+              accounts_md="No aliases were updated."
+            fi
+
+            # Pass list to next job via step output
+            echo "accounts_list<<EOF" >> "$GITHUB_OUTPUT"
+            echo "$accounts_md" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+          attempt_limit: 24  # Retry up to 24 times (10-min interval) like ETL
+          attempt_delay: 600000  # 10-minute pause (ms)
+
+  notify-success:
+    needs: update-aliases
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send success email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "✅ Alias Update Workflow SUCCEEDED"
+          to: aa@agmtechnology.com,cr@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: |
+            The alias update completed successfully.
+
+            Below is the list of aliases updated:
+
+            ${{ needs.update-aliases.outputs.accounts }}
+
+  notify-failure:
+    needs: update-aliases
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send failure email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "🚨 Alias Update Workflow FAILED"
+          to: aa@agmtechnology.com,cr@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: |
+            Updating IBKR account aliases failed.  Review workflow logs for details.
