@@ -141,8 +141,8 @@ class Supabase:
             new_template = Column(Text, nullable=False)
             approved = Column(Boolean, nullable=False, default=False)
 
-        class AdvisorChange(self.Base):
-            __tablename__ = 'advisor_change'
+        class AdvisorChangeRequest(self.Base):
+            __tablename__ = 'advisor_change_request'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
@@ -239,7 +239,7 @@ class Supabase:
         self.AccountDocument = AccountDocument
         self.Document = Document
         self.FeeTemplateRequest = FeeTemplateRequest
-        self.AdvisorChange = AdvisorChange
+        self.AdvisorChangeRequest = AdvisorChangeRequest
         
         # Risk Profiles
         self.RiskProfile = RiskProfile    

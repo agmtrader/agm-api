@@ -19,7 +19,7 @@ def create_advisor_change(advisor_change: dict = None):
     dict
         Created record id.
     """
-    advisor_change_id = db.create(table='advisor_change', data=advisor_change)
+    advisor_change_id = db.create(table='advisor_change_request', data=advisor_change)
     return {'id': advisor_change_id}
 
 @handle_exception
@@ -36,5 +36,5 @@ def read_advisor_changes(query=None):
     list
         Advisor change records.
     """
-    advisor_changes = db.read(table='advisor_change', query=query)
+    advisor_changes = db.read(table='advisor_change_request', query=query)
     return advisor_changes
