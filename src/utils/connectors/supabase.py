@@ -250,6 +250,7 @@ class Supabase:
         self.Document = Document
         self.FeeTemplateRequest = FeeTemplateRequest
         self.AdvisorChangeRequest = AdvisorChangeRequest
+        self.ManagementTypeRequest = ManagementTypeRequest
         
         # Risk Profiles
         self.RiskProfile = RiskProfile    
