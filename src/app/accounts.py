@@ -134,7 +134,7 @@ def get_forms_route():
     master_account = payload.get('master_account', None)
     return get_forms(forms=forms_data, master_account=master_account)
 
-@bp.route('/ibkr/update_pending_aliases', methods=['POST'])
+@bp.route('/ibkr/pending_alias', methods=['PATCH'])
 @format_response
 def update_pending_aliases_route():
     payload = request.get_json(force=True)
