@@ -149,7 +149,7 @@ class Supabase:
             account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
             requested_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
             old_advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='CASCADE', onupdate='CASCADE'), nullable=True)
-            new_advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            new_advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='CASCADE', onupdate='CASCADE'), nullable=True)
 
         class AccountDocument(self.Base):
             __tablename__ = 'account_document'
