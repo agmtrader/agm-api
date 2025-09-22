@@ -151,6 +151,16 @@ class Supabase:
             old_advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='CASCADE', onupdate='CASCADE'), nullable=True)
             new_advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='CASCADE', onupdate='CASCADE'), nullable=True)
 
+        class ManagementTypeRequest(self.Base):
+            __tablename__ = 'management_type_request'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            requested_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            previous_type = Column(Text, nullable=True)
+            new_type = Column(Text, nullable=True)
+
         class AccountDocument(self.Base):
             __tablename__ = 'account_document'
             id = Column(UUID(as_uuid=True), unique=True, primary_key=True, default=uuid.uuid4)
