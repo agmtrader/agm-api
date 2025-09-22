@@ -135,6 +135,19 @@ class Supabase:
             account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
             document_id = Column(UUID(as_uuid=True), ForeignKey('document.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
 
+        class FeeTemplateRequest(self.Base):
+            __tablename__ = 'fee_template_request'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            requested_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            approved_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=True)
+            approved_time = Column(Text, nullable=True)
+            previous_template = Column(Text, nullable=False)
+            new_template = Column(Text, nullable=False)
+            status = Column(Text, nullable=False, default='Pending')
+
         class Document(self.Base):
             __tablename__ = 'document'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
