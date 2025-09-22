@@ -126,6 +126,7 @@ class Supabase:
             temporal_password = Column(Text, nullable=True)
             fee_template = Column(Text, nullable=True)
             master_account = Column(Text, nullable=True)
+            management_type = Column(Text, nullable=True)
 
         class AccountDocument(self.Base):
             __tablename__ = 'account_document'
