@@ -143,10 +143,10 @@ class Supabase:
             account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
             requested_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
             approved_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=True)
-            approved_time = Column(Text, nullable=True)
+            replied_time = Column(Text, nullable=True)
             previous_template = Column(Text, nullable=False)
             new_template = Column(Text, nullable=False)
-            status = Column(Text, nullable=False, default='Pending')
+            approved = Column(Boolean, nullable=False, default=False)
 
         class Document(self.Base):
             __tablename__ = 'document'
@@ -227,6 +227,7 @@ class Supabase:
         self.Account = Account
         self.AccountDocument = AccountDocument
         self.Document = Document
+        self.FeeTemplateRequest = FeeTemplateRequest
         
         # Risk Profiles
         self.RiskProfile = RiskProfile    
