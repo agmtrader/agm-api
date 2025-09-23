@@ -55,8 +55,9 @@ jobs:
             pending_tasks=$(echo "$tasks_body" | jq -r '.pending_tasks[] | .description')
 
             # ─────────────────────────────────────────────────────────────
-            # 3. Export raw JSON for downstream steps
-            echo "pending_tasks_raw=$tasks_body" >> "$GITHUB_OUTPUT"
+            # 3. Export outputs for downstream steps
+            printf "pending_tasks<<EOF\n%s\nEOF\n" "$pending_tasks" >> "$GITHUB_OUTPUT"
+            printf "pending_tasks_raw<<EOF\n%s\nEOF\n" "$tasks_body" >> "$GITHUB_OUTPUT"
             
           attempt_limit: 24     # Retry up to 24 times (10-min interval) like other jobs
           attempt_delay: 600000 # 10-minute pause (ms)
