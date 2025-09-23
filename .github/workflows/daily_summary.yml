@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tasks: ${{ steps.fetch.outputs.pending_tasks }}
+      tasks_raw: ${{ steps.fetch.outputs.pending_tasks_raw }}
     steps:
       - name: Request token and fetch tasks
         id: fetch
@@ -52,14 +53,10 @@ jobs:
 
             # Extract plain list of pending task descriptions (one per line)
             pending_tasks=$(echo "$tasks_body" | jq -r '.pending_tasks[] | .description')
-            # Debug: print raw JSON for inspection
-            echo "==== Raw Pending Tasks JSON ===="
-            echo "$tasks_body"
-            echo "==============================="
 
-            echo "==== Pending Tasks (plain text) ===="
-            echo "$pending_tasks"
-            echo "==============================="
+            # ─────────────────────────────────────────────────────────────
+            # 3. Export raw JSON for downstream steps
+            echo "pending_tasks_raw=$tasks_body" >> "$GITHUB_OUTPUT"
             
           attempt_limit: 24     # Retry up to 24 times (10-min interval) like other jobs
           attempt_delay: 600000 # 10-minute pause (ms)
@@ -71,11 +68,14 @@ jobs:
     steps:
       - name: Prepare email body
         id: prep_email
+        env:
+          TASKS_JSON: ${{ needs.fetch-summary.outputs.tasks_raw }}
         run: |
           SUMMARY_DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
           printf "body<<EOF\n" >> "$GITHUB_OUTPUT"
           printf "Hello AGM team,\n\n" >> "$GITHUB_OUTPUT"
           printf "Here is the daily summary as of $SUMMARY_DATE:\n\n" >> "$GITHUB_OUTPUT"
+          printf "Pending Tasks (raw JSON):\n$TASKS_JSON\n\n" >> "$GITHUB_OUTPUT"
           printf "Have a great day!\n" >> "$GITHUB_OUTPUT"
           printf "EOF\n" >> "$GITHUB_OUTPUT"
 
