@@ -70,6 +70,7 @@ jobs:
         env:
           TASKS_JSON: ${{ needs.fetch-summary.outputs.tasks }}
         run: |
+          echo "TASKS_JSON: $TASKS_JSON"
           SUMMARY_DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
           printf "body<<EOF\n" >> "$GITHUB_OUTPUT"
           printf "Hello AGM team,\n\n" >> "$GITHUB_OUTPUT"
