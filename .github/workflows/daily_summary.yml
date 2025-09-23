@@ -14,9 +14,8 @@ jobs:
     steps:
       - name: Request token and fetch tasks
         id: fetch
-        uses: Wandalen/wretry.action@v2
-        with:
-          command: |
+        shell: bash
+        run: |
             # ─────────────────────────────────────────────────────────────
             # 1. Fetch access token (same mechanism as ETL / other jobs)
             response=$(curl -s -w "\n%{http_code}" -X POST \
@@ -67,9 +66,6 @@ jobs:
             # ─────────────────────────────────────────────────────────────
             # 3. Export outputs for downstream steps
             printf "pending_tasks<<EOF\n%s\nEOF\n" "$pending_tasks" >> "$GITHUB_OUTPUT"
-            
-          attempt_limit: 24     # Retry up to 24 times (10-min interval) like other jobs
-          attempt_delay: 600000 # 10-minute pause (ms)
 
   notify:
     needs: fetch-summary
