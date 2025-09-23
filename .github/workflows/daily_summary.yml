@@ -56,8 +56,8 @@ jobs:
               echo "Warning: tasks_body is empty" >&2
             fi
 
-            # Extract plain list of pending task descriptions (one per line) up to 5 tasks
-            pending_tasks=$(echo "$tasks_body" | jq -r '.pending_tasks[] | .description' | head -n 5 2>&1)
+            # Extract plain list of pending ( task descriptions - account_id )  (one per line) up to 5 tasks
+            pending_tasks=$(echo "$tasks_body" | jq -r '.pending_tasks[] | .description + " for account " + .account_id' | head -n 5 2>&1)
 
             # Extract the total number of pending tasks
             total_pending_tasks=$(echo "$tasks_body" | jq -r '.pending_tasks | length')
@@ -84,14 +84,12 @@ jobs:
           TASKS_JSON: ${{ needs.fetch-summary.outputs.pending_tasks }}
           LEFTOVER_PENDING_TASKS: ${{ needs.fetch-summary.outputs.leftover_pending_tasks }}
         run: |
-          SUMMARY_DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
           printf "body<<EOF\n" >> "$GITHUB_OUTPUT"
           printf "Hello AGM team,\n\n" >> "$GITHUB_OUTPUT"
-          printf "Here is the daily summary as of $SUMMARY_DATE:\n\n" >> "$GITHUB_OUTPUT"
-          printf "Pending Tasks:\n" >> "$GITHUB_OUTPUT"
+          printf "We have the following pending tasks:\n" >> "$GITHUB_OUTPUT"
           printf "$TASKS_JSON\n" >> "$GITHUB_OUTPUT"
-          printf "\nand $LEFTOVER_PENDING_TASKS more pending tasks.\n" >> "$GITHUB_OUTPUT"
-          printf "\nPlease review the pending tasks and take action as needed.\n" >> "$GITHUB_OUTPUT"
+          printf "and $LEFTOVER_PENDING_TASKS more...\n" >> "$GITHUB_OUTPUT"
+          printf "\nPlease review them and take action as needed.\n" >> "$GITHUB_OUTPUT"
           printf "\nHave a great day!\n" >> "$GITHUB_OUTPUT"
           printf "EOF\n" >> "$GITHUB_OUTPUT"
 
