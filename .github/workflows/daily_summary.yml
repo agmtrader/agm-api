@@ -85,8 +85,6 @@ jobs:
           printf "$TASKS_JSON\n" >> "$GITHUB_OUTPUT"
           printf "\nHave a great day!\n" >> "$GITHUB_OUTPUT"
           printf "EOF\n" >> "$GITHUB_OUTPUT"
-        outputs:
-          body: ${{ steps.prep_email.outputs.body }}
 
       - name: Send daily summary email
         uses: dawidd6/action-send-mail@v3
