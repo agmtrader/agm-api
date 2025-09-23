@@ -494,10 +494,9 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def get_security_questions(self, master_account: str = None):
+    def get_security_questions(self):
         """Retrieve list of security questions from IBKR."""
         try:
-            original_creds = self._apply_credentials(master_account)
             logger.info("Fetching security questions")
 
             url = f"{self.BASE_URL}/api/v1/enumerations/security-questions"
@@ -516,7 +515,7 @@ class IBKRWebAPI:
             logger.success("Security questions fetched successfully")
             return response.json()
         finally:
-            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+            pass
 
     @handle_exception
     def update_account_email(self, reference_user_name: str, new_email: str, access: bool = True, master_account: str = None):
