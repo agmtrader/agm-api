@@ -1,0 +1,61 @@
+name: Daily Pending Tasks Summary
+
+on:
+  # Runs every day at 09:00 UTC (adjust as needed)
+  schedule:
+    - cron: "0 9 * * *"
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  pending-tasks:
+    runs-on: ubuntu-latest
+    env:
+      # Configure these secrets in your repository settings → Settings → Secrets and variables → Actions
+      API_BASE_URL: ${{ secrets.API_BASE_URL }}
+      API_USER: ${{ secrets.API_USER }}
+      API_PASSWORD: ${{ secrets.API_PASSWORD }}
+
+    steps:
+      - name: Fetch access token
+        id: get_token
+        run: |
+          # Request a token from the API
+          response=$(curl -s -X POST "$API_BASE_URL/auth/login" \
+            -H "Content-Type: application/json" \
+            -d "{\"email\":\"$API_USER\",\"password\":\"$API_PASSWORD\"}")
+
+          echo "Raw token response:" >&2
+          echo "$response" >&2
+
+          # Try a few common token field names; adapt if your API differs
+          token=$(echo "$response" | jq -r '.access_token // .token // .accessToken // empty')
+
+          if [ -z "$token" ]; then
+            echo "❌ Failed to extract token from response" >&2
+            exit 1
+          fi
+
+          # Export token for subsequent steps
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch pending tasks
+        id: pending_tasks
+        run: |
+          tasks=$(curl -s -H "Authorization: Bearer ${{ steps.get_token.outputs.token }}" \
+            "$API_BASE_URL/pending-tasks")
+
+          echo "Raw pending tasks JSON:" >&2
+          echo "$tasks" | jq . >&2
+
+          # Expose JSON for summary step
+          echo "json=$tasks" >> "$GITHUB_OUTPUT"
+
+      - name: Publish summary
+        if: always()
+        run: |
+          echo '### Pending Tasks (raw JSON)' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          # Print as-is to preserve raw formatting (avoid jq prettification here)
+          echo '${{ steps.pending_tasks.outputs.json }}' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
