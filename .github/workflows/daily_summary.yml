@@ -1,61 +1,110 @@
-name: Daily Pending Tasks Summary
+name: Daily Pending Tasks & Leads Summary
 
 on:
-  # Runs every day at 09:00 UTC (adjust as needed)
   schedule:
-    - cron: "0 9 * * *"
-  # Allow manual trigger
+    # Every day at 3 PM UTC (9:00 AM CST)
+    - cron: '0 15 * * *'
   workflow_dispatch:
 
 jobs:
-  pending-tasks:
+  fetch-summary:
     runs-on: ubuntu-latest
-    env:
-      # Configure these secrets in your repository settings → Settings → Secrets and variables → Actions
-      API_BASE_URL: ${{ secrets.API_BASE_URL }}
-      API_USER: ${{ secrets.API_USER }}
-      API_PASSWORD: ${{ secrets.API_PASSWORD }}
-
+    outputs:
+      tasks: ${{ steps.fetch.outputs.pending_tasks }}
     steps:
-      - name: Fetch access token
-        id: get_token
+      - name: Request token and fetch tasks
+        id: fetch
+        uses: Wandalen/wretry.action@v2
+        with:
+          command: |
+            # ─────────────────────────────────────────────────────────────
+            # 1. Fetch access token (same mechanism as ETL / other jobs)
+            response=$(curl -s -w "\n%{http_code}" -X POST \
+              -H "Content-Type: application/json" \
+              -d '{"token":"all"}' \
+              https://api.agmtechnology.com/token)
+
+            http_status=$(echo "$response" | tail -n1)
+            body=$(echo "$response" | sed '$d')
+
+            if [ "$http_status" != "200" ]; then
+              echo "Token request failed with status $http_status" >&2
+              exit 1
+            fi
+
+            access_token=$(echo "$body" | jq -r '.access_token')
+            if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
+              echo "access_token not found in response" >&2
+              exit 1
+            fi
+
+            # ─────────────────────────────────────────────────────────────
+            # 2. Fetch Pending Tasks
+            response=$(curl -s -w "\n%{http_code}" -X GET \
+              -H "Authorization: Bearer $access_token" \
+              https://api.agmtechnology.com/pending_tasks/read)
+            http_status=$(echo "$response" | tail -n1)
+            tasks_body=$(echo "$response" | sed '$d')
+            if [ "$http_status" != "200" ]; then
+              echo "Fetching pending tasks failed with status $http_status" >&2
+              exit 1
+            fi
+
+            # Extract plain list of pending task descriptions (one per line)
+            pending_tasks=$(echo "$tasks_body" | jq -r '.pending_tasks[] | .description')
+            # Debug: print raw JSON for inspection
+            echo "==== Raw Pending Tasks JSON ===="
+            echo "$tasks_body"
+            echo "==============================="
+
+            echo "==== Pending Tasks (plain text) ===="
+            echo "$pending_tasks"
+            echo "==============================="
+            
+          attempt_limit: 24     # Retry up to 24 times (10-min interval) like other jobs
+          attempt_delay: 600000 # 10-minute pause (ms)
+
+  notify:
+    needs: fetch-summary
+    runs-on: ubuntu-latest
+    if: ${{ success() }}
+    steps:
+      - name: Prepare email body
+        id: prep_email
         run: |
-          # Request a token from the API
-          response=$(curl -s -X POST "$API_BASE_URL/auth/login" \
-            -H "Content-Type: application/json" \
-            -d "{\"email\":\"$API_USER\",\"password\":\"$API_PASSWORD\"}")
+          SUMMARY_DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
+          printf "body<<EOF\n" >> "$GITHUB_OUTPUT"
+          printf "Hello AGM team,\n\n" >> "$GITHUB_OUTPUT"
+          printf "Here is the daily summary as of $SUMMARY_DATE:\n\n" >> "$GITHUB_OUTPUT"
+          printf "Have a great day!\n" >> "$GITHUB_OUTPUT"
+          printf "EOF\n" >> "$GITHUB_OUTPUT"
 
-          echo "Raw token response:" >&2
-          echo "$response" >&2
+      - name: Send daily summary email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "📬 Daily Pending Tasks Summary"
+          to: aa@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: ${{ steps.prep_email.outputs.body }}
 
-          # Try a few common token field names; adapt if your API differs
-          token=$(echo "$response" | jq -r '.access_token // .token // .accessToken // empty')
-
-          if [ -z "$token" ]; then
-            echo "❌ Failed to extract token from response" >&2
-            exit 1
-          fi
-
-          # Export token for subsequent steps
-          echo "token=$token" >> "$GITHUB_OUTPUT"
-
-      - name: Fetch pending tasks
-        id: pending_tasks
-        run: |
-          tasks=$(curl -s -H "Authorization: Bearer ${{ steps.get_token.outputs.token }}" \
-            "$API_BASE_URL/pending-tasks")
-
-          echo "Raw pending tasks JSON:" >&2
-          echo "$tasks" | jq . >&2
-
-          # Expose JSON for summary step
-          echo "json=$tasks" >> "$GITHUB_OUTPUT"
-
-      - name: Publish summary
-        if: always()
-        run: |
-          echo '### Pending Tasks (raw JSON)' >> "$GITHUB_STEP_SUMMARY"
-          echo '```json' >> "$GITHUB_STEP_SUMMARY"
-          # Print as-is to preserve raw formatting (avoid jq prettification here)
-          echo '${{ steps.pending_tasks.outputs.json }}' >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+  notify-failure:
+    needs: fetch-summary
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send failure email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "🚨 Daily Summary Workflow FAILED"
+          to: aa@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: |
+            The daily pending tasks summary workflow failed. Please review the workflow logs for details.
