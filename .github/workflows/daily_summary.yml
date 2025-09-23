@@ -50,8 +50,19 @@ jobs:
               exit 1
             fi
 
+            # Debug: log raw response
+            echo "Raw tasks_body: $tasks_body" >&2
+            if [ -z "$tasks_body" ]; then
+              echo "Warning: tasks_body is empty" >&2
+            fi
+
             # Extract plain list of pending task descriptions (one per line)
-            pending_tasks=$(echo "$tasks_body" | jq -r '.pending_tasks[] | .description')
+            pending_tasks=$(echo "$tasks_body" | jq -r '.pending_tasks[] | .description' 2>&1)
+            echo "Pending tasks extracted: $pending_tasks" >&2
+            if [ -z "$pending_tasks" ]; then
+              echo "Warning: No pending tasks extracted (possibly empty list or jq mismatch)" >&2
+              pending_tasks="No pending tasks found."
+            fi
 
             # ─────────────────────────────────────────────────────────────
             # 3. Export outputs for downstream steps
@@ -75,8 +86,15 @@ jobs:
           printf "body<<EOF\n" >> "$GITHUB_OUTPUT"
           printf "Hello AGM team,\n\n" >> "$GITHUB_OUTPUT"
           printf "Here is the daily summary as of $SUMMARY_DATE:\n\n" >> "$GITHUB_OUTPUT"
-          printf "Pending Tasks:\n$TASKS_JSON\n\n" >> "$GITHUB_OUTPUT"
-          printf "Have a great day!\n" >> "$GITHUB_OUTPUT"
+          printf "Pending Tasks:\n" >> "$GITHUB_OUTPUT"
+          if [ -z "$TASKS_JSON" ]; then
+            printf "No pending tasks.\n" >> "$GITHUB_OUTPUT"
+          else
+            while IFS= read -r task; do
+              printf "- %s\n" "$task" >> "$GITHUB_OUTPUT"
+            done <<< "$TASKS_JSON"
+          fi
+          printf "\nHave a great day!\n" >> "$GITHUB_OUTPUT"
           printf "EOF\n" >> "$GITHUB_OUTPUT"
 
       - name: Send daily summary email
