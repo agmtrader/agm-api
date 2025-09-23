@@ -23,7 +23,6 @@ def read_applications(query=None) -> list:
 def update_application(application: dict = None, query: dict = None) -> dict:
     return db.update(table='application', query=query, data=application)
 
-
 # IBKR Web API
 @handle_exception
 def send_to_ibkr(application: dict = None, master_account: str = None) -> dict:

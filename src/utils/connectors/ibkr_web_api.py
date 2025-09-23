@@ -2,7 +2,7 @@ import jwt
 import time
 import requests
 from src.utils.managers.secret_manager import get_secret
-from src.utils.exception import handle_exception
+from src.utils.exception import handle_exception, ServiceError
 from src.utils.logger import logger
 from datetime import datetime
 
@@ -405,7 +405,18 @@ class IBKRWebAPI:
             response = requests.post(url, headers=headers, data=signed_jwt)
             data = response.json()
             if response.status_code != 200:
-                raise Exception(data)
+                # Extract meaningful error message if available
+                error_message = None
+                if isinstance(data, dict):
+                    # IBKR API typically returns { "detail": "..." } on error
+                    error_message = data.get("detail") or data.get("message")
+
+                if not error_message:
+                    # Fallback to raw response text
+                    error_message = response.text
+                
+                logger.error(f"Error 505: {error_message}")
+                raise ServiceError(error_message[0:50] + '...', status_code=505)
 
             logger.success("Application sent to Interactive Brokers successfully")
             return data
