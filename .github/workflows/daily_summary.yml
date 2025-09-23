@@ -10,7 +10,7 @@ jobs:
   fetch-summary:
     runs-on: ubuntu-latest
     outputs:
-      tasks: ${{ steps.fetch.outputs.pending_tasks }}
+      pending_tasks: ${{ steps.fetch.outputs.pending_tasks }}
     steps:
       - name: Request token and fetch tasks
         id: fetch
@@ -75,23 +75,18 @@ jobs:
       - name: Prepare email body
         id: prep_email
         env:
-          TASKS_JSON: ${{ needs.fetch-summary.outputs.tasks }}
+          TASKS_JSON: ${{ needs.fetch-summary.outputs.pending_tasks }}
         run: |
-          echo "TASKS_JSON: $TASKS_JSON"
           SUMMARY_DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
           printf "body<<EOF\n" >> "$GITHUB_OUTPUT"
           printf "Hello AGM team,\n\n" >> "$GITHUB_OUTPUT"
           printf "Here is the daily summary as of $SUMMARY_DATE:\n\n" >> "$GITHUB_OUTPUT"
           printf "Pending Tasks:\n" >> "$GITHUB_OUTPUT"
-          if [ -z "$TASKS_JSON" ]; then
-            printf "No pending tasks.\n" >> "$GITHUB_OUTPUT"
-          else
-            while IFS= read -r task; do
-              printf "- %s\n" "$task" >> "$GITHUB_OUTPUT"
-            done <<< "$TASKS_JSON"
-          fi
+          printf "$TASKS_JSON\n" >> "$GITHUB_OUTPUT"
           printf "\nHave a great day!\n" >> "$GITHUB_OUTPUT"
           printf "EOF\n" >> "$GITHUB_OUTPUT"
+        outputs:
+          body: ${{ steps.prep_email.outputs.body }}
 
       - name: Send daily summary email
         uses: dawidd6/action-send-mail@v3
