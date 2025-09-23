@@ -56,8 +56,8 @@ jobs:
               echo "Warning: tasks_body is empty" >&2
             fi
 
-            # Extract plain list of pending ( task descriptions - account_id )  (one per line) up to 5 tasks
-            pending_tasks=$(echo "$tasks_body" | jq -r '.pending_tasks[] | .description + " for account " + .account_id' | head -n 5 2>&1)
+            # Extract plain list of pending task descriptions (one per line) up to 5 tasks
+            pending_tasks=$(echo "$tasks_body" | jq -r '.pending_tasks[] | .description' | head -n 5 2>&1)
 
             # Extract the total number of pending tasks
             total_pending_tasks=$(echo "$tasks_body" | jq -r '.pending_tasks | length')
