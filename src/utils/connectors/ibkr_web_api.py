@@ -83,7 +83,6 @@ class IBKRWebAPI:
             self.KEY_ID = "prodfd"
         else:
             raise Exception(f"Invalid master_account: {master_account}")
-        # Flush cached token whenever credentials change
         self._token = None
         self._token_expiry = 0
         return original
@@ -497,6 +496,7 @@ class IBKRWebAPI:
     def get_security_questions(self):
         """Retrieve list of security questions from IBKR."""
         try:
+            original_creds = self._apply_credentials('br')
             logger.info("Fetching security questions")
 
             url = f"{self.BASE_URL}/api/v1/enumerations/security-questions"
@@ -515,7 +515,7 @@ class IBKRWebAPI:
             logger.success("Security questions fetched successfully")
             return response.json()
         finally:
-            pass
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
     def update_account_email(self, reference_user_name: str, new_email: str, access: bool = True, master_account: str = None):
@@ -550,8 +550,6 @@ class IBKRWebAPI:
                     ]
                 }
             }
-
-            print(body)
 
             token = self.get_bearer_token()
             if not token:

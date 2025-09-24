@@ -110,6 +110,7 @@ class Supabase:
             date_sent_to_ibkr = Column(Text, nullable=True)
             application = Column(JSONB, nullable=True)
             status = Column(Text, nullable=False, default='Started')
+            security_questions = Column(JSONB, nullable=True)
         
         class Account(self.Base):
             __tablename__ = 'account'

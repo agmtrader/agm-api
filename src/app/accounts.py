@@ -112,8 +112,7 @@ def update_account_email_route():
 @bp.route('/ibkr/security_questions', methods=['GET'])
 @format_response
 def get_security_questions_route():
-    master_account = request.args.get('master_account', None)
-    return get_security_questions(master_account=master_account)
+    return get_security_questions()
 
 @bp.route('/ibkr/forms', methods=['POST'])
 @format_response

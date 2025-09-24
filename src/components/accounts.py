@@ -93,8 +93,8 @@ def update_account_email(reference_user_name: str = None, new_email: str = None,
     return ibkr_web_api.update_account_email(reference_user_name=reference_user_name, new_email=new_email, access=access, master_account=master_account)
 
 @handle_exception
-def get_security_questions(master_account: str = None) -> dict:
-    return ibkr_web_api.get_security_questions(master_account=master_account)
+def get_security_questions() -> dict:
+    return ibkr_web_api.get_security_questions()
 
 @handle_exception
 def update_pending_aliases(master_account: str = None) -> dict:
