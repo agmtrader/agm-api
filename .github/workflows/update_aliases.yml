@@ -38,7 +38,7 @@ jobs:
             fi
 
             # 2. Trigger bulk alias update endpoint
-            response=$(curl -s -w "\n%{http_code}" -X POST \
+            response=$(curl -s -w "\n%{http_code}" -X PATCH \
               -H "Authorization: Bearer $access_token" \
               -H "Content-Type: application/json" \
               -d '{"master_account":"br"}' \
