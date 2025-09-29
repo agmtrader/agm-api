@@ -499,7 +499,7 @@ class IBKRWebAPI:
             original_creds = self._apply_credentials('br')
             logger.info("Fetching security questions")
 
-            url = f"{self.BASE_URL}/api/v1/enumerations/security-questions"
+            url = f"{self.BASE_URL}/gw/api/v1/enumerations/security-questions"
 
             token = self.get_bearer_token()
             if not token:
