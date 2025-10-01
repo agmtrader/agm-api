@@ -121,3 +121,23 @@ def update_pending_aliases(master_account: str = None) -> dict:
         'updated': len(updated_accounts),
         'accounts': updated_accounts
     }
+
+@handle_exception
+def add_trading_permissions(
+    reference_account_id: str = None,
+    trading_permissions: list = None,
+    documents: list | None = None,
+    master_account: str = None,
+) -> dict:
+    """Add trading permissions to an account via IBKR API."""
+    return ibkr_web_api.add_trading_permissions(
+        reference_account_id=reference_account_id,
+        trading_permissions=trading_permissions or [],
+        documents=documents,
+        master_account=master_account,
+    )
+
+@handle_exception
+def get_exchange_bundles(master_account: str = None) -> dict:
+    """Get exchange bundles enumeration via IBKR API."""
+    return ibkr_web_api.get_exchange_bundles(master_account=master_account)

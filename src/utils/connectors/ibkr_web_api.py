@@ -572,6 +572,94 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @handle_exception
+    def add_trading_permissions(
+        self,
+        reference_account_id: str,
+        trading_permissions: list,
+        documents: list | None = None,
+        master_account: str | None = None,
+    ) -> dict:
+        """Add trading permissions to the given account.
+
+        Args:
+            reference_account_id (str): IBKR account id that will receive the permissions.
+            trading_permissions (list): List of trading permission dictionaries as required by IBKR.
+            documents (list | None): Optional list of DocumentSubmission items (already built). Defaults to empty list.
+            master_account (str | None): Credential set to use (``ad`` or ``br``). Defaults to ``None`` to use current creds.
+
+        Returns:
+            dict: API response from IBKR.
+        """
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Adding trading permissions for account {reference_account_id}")
+
+            url = f"{self.BASE_URL}/gw/api/v1/accounts"
+
+            body = {
+                "accountManagementRequests": {
+                    "addTradingPermissions": [
+                        {
+                            "tradingPermissions": trading_permissions,
+                            "documentSubmission": {
+                                "documents": documents or [],
+                                "referenceAccountId": reference_account_id,
+                                "inputLanguage": "en",
+                                "translation": False,
+                            },
+                            "referenceAccountId": reference_account_id,
+                        }
+                    ]
+                }
+            }
+
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            signed_jwt = self.sign_request(body)
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt",
+            }
+
+            response = requests.patch(url, headers=headers, data=signed_jwt)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Trading permissions added successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def get_exchange_bundles(self, master_account: str | None = None):
+        """Retrieve enumeration list for exchange bundles from IBKR."""
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info("Fetching exchange bundles enumerations")
+
+            url = f"{self.BASE_URL}/gw/api/v1/enumerations/exchange-bundles"
+
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            headers = {"Authorization": f"Bearer {token}"}
+
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Exchange bundles fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
     def get_bearer_token(self):
         current_time = int(time.time())
         
