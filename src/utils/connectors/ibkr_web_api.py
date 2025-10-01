@@ -577,8 +577,8 @@ class IBKRWebAPI:
         self,
         reference_account_id: str,
         trading_permissions: list,
-        documents: list | None = None,
-        master_account: str | None = None,
+        documents: list = None,
+        master_account: str = None,
     ) -> dict:
         """Add trading permissions to the given account.
 
