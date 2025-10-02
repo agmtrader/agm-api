@@ -126,7 +126,7 @@ def update_pending_aliases(master_account: str = None) -> dict:
 def add_trading_permissions(
     reference_account_id: str = None,
     trading_permissions: list = None,
-    documents: list | None = None,
+    documents: list  = None,
     master_account: str = None,
 ) -> dict:
     """Add trading permissions to an account via IBKR API."""

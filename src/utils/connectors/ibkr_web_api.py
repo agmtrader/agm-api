@@ -636,7 +636,7 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def get_exchange_bundles(self, master_account: str | None = None):
+    def get_exchange_bundles(self, master_account: str = None):
         """Retrieve enumeration list for exchange bundles from IBKR."""
         try:
             original_creds = self._apply_credentials(master_account)
