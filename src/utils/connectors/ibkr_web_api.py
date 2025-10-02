@@ -1,6 +1,7 @@
 import jwt
 import time
 import requests
+import json
 from src.utils.managers.secret_manager import get_secret
 from src.utils.exception import handle_exception, ServiceError
 from src.utils.logger import logger
@@ -11,52 +12,13 @@ logger.announcement('Initialized Interactive Brokers Web API Service', type='suc
 
 class IBKRWebAPI:
 
-    def create_sso_browser_session(self, credential: str, ip: str) -> str:
-        """
-        Create an SSO browser session for IBKR Client Portal.
-        Args:
-            credential (str): IBKR username associated with the user.
-            ip (str): The user's actual IP address (REMOTE_ADDR).
-        Returns:
-            str: The SSO URL to be opened in the browser.
-        """
-        logger.info(f"Creating SSO browser session for credential: {credential}, ip: {ip}")
-        url = f"{self.BASE_URL}/gw/api/v1/sso-browser-sessions"
-        token = self.get_bearer_token()
-        if not token:
-            logger.error("No token found for SSO session creation")
-            return None
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/jwt"
-        }
-        payload = {
-            "credential": credential,
-            "ip": ip
-        }
-
-        signed_jwt = self.sign_request(payload)
-        try:
-            response = requests.post(url, data=signed_jwt, headers=headers)
-            if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                return None
-            data = response.json()
-            sso_url = data.get("url") or data.get("redirectUrl") or next((v for v in data.values() if isinstance(v, str) and v.startswith("http")), None)
-            if not sso_url:
-                logger.error(f"No SSO URL found in response: {data}")
-                return None
-            logger.success(f"SSO URL created: {sso_url}")
-            return sso_url
-        except Exception as e:
-            logger.error(f"Exception during SSO session creation: {e}")
-            return None
-
     def __init__(self):
         self.BASE_URL = "https://api.ibkr.com"
         self.CLIENT_ID = "AGMTechnology-FD2"
         self.KEY_ID = "prodfd"
         self.CLIENT_PRIVATE_KEY = get_secret("IBKR_ACCOUNT_MANAGEMENT_PRIVATE_KEY")
+
+        self.sso_token = None
 
         # Initialize token cache
         self._token = None
@@ -573,13 +535,7 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def add_trading_permissions(
-        self,
-        reference_account_id: str,
-        trading_permissions: list,
-        documents: list = None,
-        master_account: str = None,
-    ) -> dict:
+    def add_trading_permissions(self, reference_account_id: str, trading_permissions: list, documents: list = None, master_account: str = None) -> dict:
         """Add trading permissions to the given account.
 
         Args:
@@ -657,6 +613,108 @@ class IBKRWebAPI:
 
             logger.success("Exchange bundles fetched successfully")
             return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+
+    def logout_of_brokerage_session(self):
+        """
+        Logout of the brokerage session.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/v1/api/logout"
+            if not self.sso_token:
+                logger.error("No SSO token found for brokerage session logout")
+                raise Exception("No SSO token found for brokerage session logout")
+            headers = {
+                "Authorization": f"Bearer {self.sso_token}",
+                "Content-Type": "application/json"
+            }
+            response = requests.post(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success("Logged out of brokerage session successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    def create_sso_session(self, credential: str, ip: str) -> str:
+        """
+        Create an SSO browser session for IBKR Client Portal.
+        Args:
+            credential (str): IBKR username associated with the user.
+            ip (str): The user's actual IP address (REMOTE_ADDR).
+        Returns:
+            str: The SSO URL to be opened in the browser.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            logger.info(f"Creating SSO browser session for credential: {credential}, ip: {ip}")
+            url = f"{self.BASE_URL}/gw/api/v1/sso-sessions"
+            token = self.get_bearer_token()
+            if not token:
+                logger.error("No token found for SSO session creation")
+                return None
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt"
+            }
+            payload = {
+                "credential": credential,
+                "ip": ip
+            }
+
+            signed_jwt = self.sign_request(payload)
+            response = requests.post(url, data=signed_jwt, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            data = response.json()
+            if 'access_token' in data:
+                self.sso_token = data['access_token']
+            else:
+                raise Exception(f"No access token found in response: {data}")
+            return data
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    def initialize_brokerage_session(self) -> str:
+        """
+        Initialize a brokerage session for IBKR Client Portal.
+        Args:
+            credential (str): IBKR username associated with the user.
+            ip (str): The user's actual IP address (REMOTE_ADDR).
+        Returns:
+            str: The brokerage session URL to be opened in the browser.
+        """
+        original_creds = self._apply_credentials('br')
+        logger.info(f"Initializing Brokerage session")
+        url = f"{self.BASE_URL}/v1/api/iserver/auth/ssodh/init"
+        #token = self.get_bearer_token()
+        if not self.sso_token:
+            logger.error("No SSO token found for Brokerage session initialization")
+            raise Exception("No SSO token found for Brokerage session initialization")
+            
+        headers = {
+            "Authorization": f"Bearer {self.sso_token}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "publish": True,
+            "compete": True
+        }
+
+        #signed_jwt = self.sign_request(payload)
+        try:
+            response = requests.post(url, data=json.dumps(payload), headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            data = response.json()
+            return data
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
