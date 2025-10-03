@@ -2,7 +2,8 @@ from flask import Blueprint, request
 from src.components.accounts import create_account, read_accounts, upload_document, read_documents_by_account_id
 from src.components.accounts import get_pending_tasks, get_registration_tasks
 from src.components.accounts import read_account_details, get_forms, submit_account_management_requests, update_account, get_security_questions
-from src.components.accounts import apply_fee_template, update_account_alias, update_account_email, update_pending_aliases
+from src.components.accounts import apply_fee_template, update_account_email, update_pending_aliases
+from src.components.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session
 from src.utils.response import format_response
 
 bp = Blueprint('accounts', __name__)
@@ -153,3 +154,18 @@ def get_exchange_bundles_route():
     master_account = request.args.get('master_account', None)
     from src.components.accounts import get_exchange_bundles
     return get_exchange_bundles(master_account=master_account)
+
+@bp.route('/sso/create', methods=['POST'])
+@format_response
+def create_sso_session_route():
+    return create_sso_session()
+
+@bp.route('/sso/initialize', methods=['POST'])
+@format_response
+def initialize_brokerage_session_route():
+    return initialize_brokerage_session()
+
+@bp.route('/sso/logout', methods=['POST'])
+@format_response
+def logout_of_brokerage_session_route():
+    return logout_of_brokerage_session()

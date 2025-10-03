@@ -617,29 +617,6 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
 
-    def logout_of_brokerage_session(self):
-        """
-        Logout of the brokerage session.
-        """
-        try:
-            original_creds = self._apply_credentials('br')
-            url = f"{self.BASE_URL}/v1/api/logout"
-            if not self.sso_token:
-                logger.error("No SSO token found for brokerage session logout")
-                raise Exception("No SSO token found for brokerage session logout")
-            headers = {
-                "Authorization": f"Bearer {self.sso_token}",
-                "Content-Type": "application/json"
-            }
-            response = requests.post(url, headers=headers)
-            if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
-            logger.success("Logged out of brokerage session successfully")
-            return response.json()
-        finally:
-            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
-
     def create_sso_session(self, credential: str, ip: str) -> str:
         """
         Create an SSO browser session for IBKR Client Portal.
@@ -715,6 +692,29 @@ class IBKRWebAPI:
                 raise Exception(f"Error {response.status_code}: {response.text}")
             data = response.json()
             return data
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    def logout_of_brokerage_session(self):
+        """
+        Logout of the brokerage session.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/v1/api/logout"
+            if not self.sso_token:
+                logger.error("No SSO token found for brokerage session logout")
+                raise Exception("No SSO token found for brokerage session logout")
+            headers = {
+                "Authorization": f"Bearer {self.sso_token}",
+                "Content-Type": "application/json"
+            }
+            response = requests.post(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success("Logged out of brokerage session successfully")
+            return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 

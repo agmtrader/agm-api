@@ -141,3 +141,15 @@ def add_trading_permissions(
 def get_exchange_bundles(master_account: str = None) -> dict:
     """Get exchange bundles enumeration via IBKR API."""
     return ibkr_web_api.get_exchange_bundles(master_account=master_account)
+
+@handle_exception
+def create_sso_session() -> dict:
+    return ibkr_web_api.create_sso_session()
+
+@handle_exception
+def initialize_brokerage_session() -> dict:
+    return ibkr_web_api.initialize_brokerage_session()
+
+@handle_exception
+def logout_of_brokerage_session() -> dict:
+    return ibkr_web_api.logout_of_brokerage_session()
