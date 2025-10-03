@@ -182,6 +182,16 @@ class Gmail:
     cc = "jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com"
     return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)
 
+  # New: Transfer instructions email
+  @handle_exception
+  def send_transfer_instructions_email(self, content, client_email, lang='es'):
+    """Send transfer instructions email in Spanish to the client."""
+    subject = 'Instrucciones de transferencia' if lang == 'es' else 'Transfer Instructions'
+    email_template = f'transfer_instructions_{lang}'
+    bcc = ""
+    cc = "jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com"
+    return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)
+
   # Reading
   @handle_exception
   def get_inbox_emails_from_sender(self, sender: str, include_body: bool = False):

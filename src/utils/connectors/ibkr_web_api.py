@@ -616,7 +616,6 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
-
     def create_sso_session(self, credential: str, ip: str) -> str:
         """
         Create an SSO browser session for IBKR Client Portal.

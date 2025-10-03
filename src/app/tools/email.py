@@ -41,3 +41,11 @@ def send_lead_reminder_email_route():
 def send_credentials_email_route():
   payload = request.get_json(force=True)
   return Email.send_credentials_email(payload['content'], payload['client_email'], payload['lang'])
+
+# New: transfer instructions email route
+@bp.route('/send_email/transfer_instructions', methods=['POST'])
+@format_response
+def send_transfer_instructions_email_route():
+  """Endpoint to send transfer instructions email in Spanish."""
+  payload = request.get_json(force=True)
+  return Email.send_transfer_instructions_email(payload['content'], payload['client_email'])

@@ -143,8 +143,8 @@ def get_exchange_bundles(master_account: str = None) -> dict:
     return ibkr_web_api.get_exchange_bundles(master_account=master_account)
 
 @handle_exception
-def create_sso_session() -> dict:
-    return ibkr_web_api.create_sso_session()
+def create_sso_session(credential: str = None, ip: str = None) -> dict:
+    return ibkr_web_api.create_sso_session(credential=credential, ip=ip)
 
 @handle_exception
 def initialize_brokerage_session() -> dict:

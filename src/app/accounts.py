@@ -158,7 +158,10 @@ def get_exchange_bundles_route():
 @bp.route('/sso/create', methods=['POST'])
 @format_response
 def create_sso_session_route():
-    return create_sso_session()
+    payload = request.get_json(force=True)
+    credential = payload.get('credential', None)
+    ip = payload.get('ip', None)
+    return create_sso_session(credential=credential, ip=ip)
 
 @bp.route('/sso/initialize', methods=['POST'])
 @format_response
