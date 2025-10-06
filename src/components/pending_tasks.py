@@ -25,17 +25,25 @@ def create_pending_task_follow_up(pending_task_id: str = None, follow_up: dict =
 @handle_exception
 def read_pending_tasks(query: dict = None):
     pending_tasks = db.read(table='pending_task', query=query)
-    pending_task_follow_ups = db.read(table='pending_task_follow_up', query=query)
+    if 'id' in query:
+        pending_task_follow_ups_query = {'pending_task_id': query['id']}
+    else:
+        pending_task_follow_ups_query = {}
+    pending_task_follow_ups = db.read(table='pending_task_follow_up', query=pending_task_follow_ups_query)
 
-    filtered_pending_task_follow_ups = []
-    for pending_task in pending_tasks:
-        for pending_task_follow_up in pending_task_follow_ups:
-            if pending_task_follow_up['pending_task_id'] == pending_task['id']:
-                filtered_pending_task_follow_ups.append(pending_task_follow_up)
-
-    return {'pending_tasks': pending_tasks, 'follow_ups': filtered_pending_task_follow_ups}
+    return {'pending_tasks': pending_tasks, 'follow_ups': pending_task_follow_ups}
 
 @handle_exception
 def update_pending_task(query: dict = None, task: dict = None):
     db.update(table='pending_task', query=query, data=task)
+    return {'id': query['id']}
+
+@handle_exception
+def update_pending_task_follow_up(query: dict = None, follow_up: dict = None):
+    db.update(table='pending_task_follow_up', query=query, data=follow_up)
+    return {'id': query['id']}
+
+@handle_exception
+def delete_pending_task_follow_up(query: dict = None):
+    db.delete(table='pending_task_follow_up', query=query)
     return {'id': query['id']}
