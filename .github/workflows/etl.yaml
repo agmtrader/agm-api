@@ -47,7 +47,7 @@ jobs:
               echo "Reporting run request failed with status $status"
               exit 1
             fi
-          attempt_limit: 50 # 1 original + 49 retries (8 hours)
+          attempt_limit: 25 # 1 original + 24 retries (4 hours)
           attempt_delay: 600000 # 10-minute pause (ms)
           
   notify-success:

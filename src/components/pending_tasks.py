@@ -17,8 +17,8 @@ def create_pending_task(task: dict = None, follow_ups: list = None):
     return {'id': pending_task_id}
 
 @handle_exception
-def create_pending_task_follow_up(pending_task_id: str = None, follow_up: dict = None):
-    follow_up['pending_task_id'] = pending_task_id
+def create_follow_up(task_id: str = None, follow_up: dict = None):
+    follow_up['pending_task_id'] = task_id
     follow_up_id = db.create(table='pending_task_follow_up', data=follow_up)
     return {'id': follow_up_id}
 
@@ -39,11 +39,13 @@ def update_pending_task(query: dict = None, task: dict = None):
     return {'id': query['id']}
 
 @handle_exception
-def update_pending_task_follow_up(query: dict = None, follow_up: dict = None):
+def update_follow_up(task_id: str = None, follow_up_id: str = None, follow_up: dict = None):
+    query = {'pending_task_id': task_id, 'id': follow_up_id}
     db.update(table='pending_task_follow_up', query=query, data=follow_up)
     return {'id': query['id']}
 
 @handle_exception
-def delete_pending_task_follow_up(query: dict = None):
+def delete_follow_up(task_id: str = None, follow_up_id: str = None):
+    query = {'pending_task_id': task_id, 'id': follow_up_id}
     db.delete(table='pending_task_follow_up', query=query)
     return {'id': query['id']}
