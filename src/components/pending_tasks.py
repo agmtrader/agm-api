@@ -49,3 +49,8 @@ def delete_follow_up(task_id: str = None, follow_up_id: str = None):
     query = {'pending_task_id': task_id, 'id': follow_up_id}
     db.delete(table='pending_task_follow_up', query=query)
     return {'id': query['id']}
+
+@handle_exception
+def delete_pending_task(task_id: str = None):
+    db.delete(table='pending_task', query={'id': task_id})
+    return {'id': task_id}
