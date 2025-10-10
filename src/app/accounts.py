@@ -3,7 +3,7 @@ from src.components.accounts import create_account, read_accounts, upload_docume
 from src.components.accounts import get_pending_tasks, get_registration_tasks
 from src.components.accounts import read_account_details, get_forms, submit_account_management_requests, update_account, get_security_questions
 from src.components.accounts import apply_fee_template, update_account_email, update_pending_aliases
-from src.components.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session
+from src.components.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts
 from src.utils.response import format_response
 
 bp = Blueprint('accounts', __name__)
@@ -155,7 +155,8 @@ def get_exchange_bundles_route():
     from src.components.accounts import get_exchange_bundles
     return get_exchange_bundles(master_account=master_account)
 
-@bp.route('/sso/create', methods=['POST'])
+# Trading API
+@bp.route('/ibkr/sso/create', methods=['POST'])
 @format_response
 def create_sso_session_route():
     payload = request.get_json(force=True)
@@ -163,12 +164,17 @@ def create_sso_session_route():
     ip = payload.get('ip', None)
     return create_sso_session(credential=credential, ip=ip)
 
-@bp.route('/sso/initialize', methods=['POST'])
+@bp.route('/ibkr/sso/initialize', methods=['POST'])
 @format_response
 def initialize_brokerage_session_route():
     return initialize_brokerage_session()
 
-@bp.route('/sso/logout', methods=['POST'])
+@bp.route('/ibkr/sso/logout', methods=['POST'])
 @format_response
 def logout_of_brokerage_session_route():
     return logout_of_brokerage_session()
+
+@bp.route('/ibkr/sso/accounts', methods=['GET'])
+@format_response
+def get_brokerage_accounts_route():
+    return get_brokerage_accounts()
