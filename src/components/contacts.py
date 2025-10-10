@@ -14,3 +14,8 @@ def create_contact(contact: dict = None):
 def read_contacts(query=None):
     contacts = db.read(table='contact', query=query)
     return contacts
+
+@handle_exception
+def update_contact(query: dict = None, contact: dict = None):
+    contact_id = db.update(table='contact', query=query, data=contact)
+    return {'id': contact_id}

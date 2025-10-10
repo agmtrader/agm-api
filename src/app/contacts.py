@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.contacts import read_contacts, create_contact
+from src.components.contacts import read_contacts, create_contact, update_contact
 from src.utils.response import format_response
 
 bp = Blueprint('contacts', __name__)
@@ -22,3 +22,11 @@ def contacts_route():
     if email:
         query['email'] = email
     return read_contacts(query=query)
+
+@bp.route('/update', methods=['POST'])
+@format_response
+def update_contact_route():
+    payload = request.get_json(force=True)  
+    contact = payload.get('contact', None)
+    query = payload.get('query', None)
+    return update_contact(query=query, contact=contact)
