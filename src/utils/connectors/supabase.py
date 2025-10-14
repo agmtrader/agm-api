@@ -87,6 +87,7 @@ class Supabase:
             closed = Column(Text, nullable=True, default=None)
             sent = Column(Text, nullable=True, default=None)
             emails_to_notify = Column(ARRAY(Text), nullable=True)
+            filled = Column(Text, nullable=True)
 
         class FollowUp(self.Base):
             __tablename__ = 'follow_up'

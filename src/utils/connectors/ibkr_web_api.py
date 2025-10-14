@@ -235,25 +235,31 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def submit_account_management_requests(self, account_management_requests, master_account: str = None):
+    def submit_documents(self, document_submission, master_account: str = None):
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Updating account.")
             url = f"{self.BASE_URL}/gw/api/v1/accounts"
+
+            body = {
+                "accountManagementRequests": {
+                    "documentSubmission": document_submission
+                }
+            }
             token = self.get_bearer_token()
             if not token:
                 raise Exception("No token found")
 
-            account_management_requests = self.sign_request(account_management_requests)
+            document_submission = self.sign_request(body)
             
             headers = {
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/jwt"
             }
-            response = requests.patch(url, headers=headers, data=account_management_requests)
+            response = requests.patch(url, headers=headers, data=document_submission)
             if response.status_code != 200:
                 raise Exception(f"Error {response.status_code}: {response.text}")
-            logger.success(f"Account updated successfully")
+            logger.success(f"Documents submitted successfully")
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds

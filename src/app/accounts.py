@@ -1,7 +1,7 @@
 from flask import Blueprint, request
-from src.components.accounts import create_account, read_accounts, upload_document, read_documents_by_account_id
+from src.components.accounts import create_account, read_accounts, submit_documents, upload_document, read_documents_by_account_id
 from src.components.accounts import get_pending_tasks, get_registration_tasks
-from src.components.accounts import read_account_details, get_forms, submit_account_management_requests, update_account, get_security_questions
+from src.components.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions
 from src.components.accounts import apply_fee_template, update_account_email, update_pending_aliases
 from src.components.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts
 from src.utils.response import format_response
@@ -61,13 +61,13 @@ def read_accounts_details_route():
     master_account = request.args.get('master_account', None)
     return read_account_details(account_id=account_id, master_account=master_account)
 
-@bp.route('/ibkr/update', methods=['POST'])
+@bp.route('/ibkr/documents', methods=['POST'])
 @format_response
-def submit_account_management_requests_route():
+def submit_documents_route():
     payload = request.get_json(force=True)
-    account_management_requests_data = payload.get('account_management_requests', None)
+    document_submission_data = payload.get('document_submission', None)
     master_account = payload.get('master_account', None)
-    return submit_account_management_requests(account_management_requests=account_management_requests_data, master_account=master_account)
+    return submit_documents(document_submission=document_submission_data, master_account=master_account)
 
 @bp.route('/ibkr/registration_tasks', methods=['GET'])
 @format_response

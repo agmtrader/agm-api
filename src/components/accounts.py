@@ -66,8 +66,8 @@ def get_registration_tasks(account_id: str = None, master_account: str = None) -
     return ibkr_web_api.get_registration_tasks(account_id=account_id, master_account=master_account)
 
 @handle_exception
-def submit_account_management_requests(account_management_requests: dict = None, master_account: str = None) -> dict:
-    return ibkr_web_api.submit_account_management_requests(account_management_requests=account_management_requests, master_account=master_account)
+def submit_documents(document_submission: dict = None, master_account: str = None) -> dict:
+    return ibkr_web_api.submit_documents(document_submission=document_submission, master_account=master_account)
 
 @handle_exception
 def get_forms(forms: list = None, master_account: str = None) -> dict:
