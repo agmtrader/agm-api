@@ -16,7 +16,7 @@ def create_application(application: dict = None) -> dict:
 
 @handle_exception
 def read_applications(query=None) -> list:
-    applications = db.read(table='application', query=query)
+    applications = db.read(table='application', query=query, exclude_columns=['application'])
     return applications
 
 @handle_exception

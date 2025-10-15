@@ -235,9 +235,9 @@ class DatabaseManager:
 
         return _create(table, data)
 
-    def read(self, table: str, query: dict = None) -> list:
+    def read(self, table: str, query: dict = None, exclude_columns: list = None) -> list:
         @self.with_session
-        def _read(session, table: str, query: dict = None):
+        def _read(session, table: str, query: dict = None, exclude_columns: list = None):
 
             logger.info(f'Attempting to read entry from table: {table} with query: {query}')
 
@@ -246,6 +246,14 @@ class DatabaseManager:
             
             tbl = Table(table, self.metadata, autoload_with=self.engine)
             sql_query = session.query(tbl)
+
+            if exclude_columns:
+                selected_columns = [col for col in tbl.c if col.name not in exclude_columns]
+                if not selected_columns:
+                    raise Exception("All columns excluded; at least one column must be selected")
+                sql_query = session.query(*selected_columns)
+            else:
+                sql_query = session.query(tbl)
 
             if query:
                 for key, value in query.items():
@@ -268,7 +276,7 @@ class DatabaseManager:
             logger.success(f'Successfully read {len(serialized_results)} entries from table: {table}')
             return serialized_results
 
-        return _read(table, query)
+        return _read(table, query, exclude_columns)
 
     def update(self, table: str, query: dict = None, data: dict = None) -> str:
         @self.with_session
