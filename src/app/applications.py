@@ -22,13 +22,10 @@ def read_route():
     user_id = request.args.get('user_id', None)
 
     strip_application_param = request.args.get('strip_application', '0')
-    if strip_application_param == '0':
-        strip_application = False
-    elif strip_application_param == '1':
-        strip_application = True
-    else:
+    if strip_application_param not in ['0', '1']:
         logger.error(f'Invalid strip_application parameter: {strip_application_param}')
         raise Exception('Invalid strip_application parameter')
+    strip_application = strip_application_param == '1'
 
     if id:
         query['id'] = id
@@ -36,13 +33,8 @@ def read_route():
         query['lead_id'] = lead_id
     if user_id: 
         query['user_id'] = user_id
-    applications = read_applications(query=query)
+    applications = read_applications(query=query, strip_application=strip_application)
 
-    if strip_application == True and isinstance(applications, list):
-        for application in applications:
-            if isinstance(application, dict):
-                application.pop('application', None)
-    
     return applications
 
 @bp.route('/update', methods=['POST'])

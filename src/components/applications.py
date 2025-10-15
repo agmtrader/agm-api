@@ -15,8 +15,9 @@ def create_application(application: dict = None) -> dict:
     return {'id': application_id}
 
 @handle_exception
-def read_applications(query=None) -> list:
-    applications = db.read(table='application', query=query, exclude_columns=['application'])
+def read_applications(query=None, strip_application: bool = False) -> list:
+    exclude = ['application'] if strip_application else None
+    applications = db.read(table='application', query=query, exclude_columns=exclude)
     return applications
 
 @handle_exception
