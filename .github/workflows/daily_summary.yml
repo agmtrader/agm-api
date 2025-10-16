@@ -74,11 +74,11 @@ jobs:
             total_pending_tasks=$(echo "$tasks_body" | jq -r '.pending_tasks | length')
             leftover_pending_tasks=$((total_pending_tasks - 5))
 
-            # Extract plain list of lead descriptions (one per line) up to 5 leads
-            leads=$(echo "$leads_body" | jq -r '.leads[] | .description' | head -n 5 2>&1)
+            # Extract plain list of open lead descriptions (one per line) up to 5 leads
+            leads=$(echo "$leads_body" | jq -r '.leads[] | select(.closed|not) | .description' | head -n 5 2>&1)
 
-            # Extract the total number of leads
-            total_leads=$(echo "$leads_body" | jq -r '.leads | length')
+            # Compute total number of open leads (ignore closed leads)
+            total_leads=$(echo "$leads_body" | jq -r '[.leads[] | select(.closed|not)] | length')
             leftover_leads=$((total_leads - 5))
 
             echo "Pending tasks extracted: $pending_tasks" >&2
