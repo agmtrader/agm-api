@@ -115,12 +115,16 @@ jobs:
         run: |
           printf "body<<EOF\n" >> "$GITHUB_OUTPUT"
           printf "Hello AGM team,\n\n" >> "$GITHUB_OUTPUT"
+          if [ $LEFTOVER_PENDING_TASKS -gt 0 ]; then
           printf "We have the following pending tasks:\n" >> "$GITHUB_OUTPUT"
-          printf "$TASKS_JSON\n" >> "$GITHUB_OUTPUT"
-          printf "and $LEFTOVER_PENDING_TASKS more...\n" >> "$GITHUB_OUTPUT"
-          printf "\nWe also have the following leads:\n" >> "$GITHUB_OUTPUT"
-          printf "$LEADS_JSON\n" >> "$GITHUB_OUTPUT"
-          printf "and $LEFTOVER_LEADS more...\n" >> "$GITHUB_OUTPUT"
+            printf "$TASKS_JSON\n" >> "$GITHUB_OUTPUT"
+            printf "and $LEFTOVER_PENDING_TASKS more...\n" >> "$GITHUB_OUTPUT"
+          fi
+          if [ $LEFTOVER_LEADS -gt 0 ]; then
+            printf "\nWe also have the following leads:\n" >> "$GITHUB_OUTPUT"
+            printf "$LEADS_JSON\n" >> "$GITHUB_OUTPUT"
+            printf "and $LEFTOVER_LEADS more...\n" >> "$GITHUB_OUTPUT"
+          fi
           printf "\nPlease review them and take action as needed.\n" >> "$GITHUB_OUTPUT"
           printf "\nHave a great day!\n" >> "$GITHUB_OUTPUT"
           printf "EOF\n" >> "$GITHUB_OUTPUT"
