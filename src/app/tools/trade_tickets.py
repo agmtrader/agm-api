@@ -1,6 +1,5 @@
 from flask import request, Blueprint
 from src.components.tools.trade_tickets import list_trade_tickets, read, generate_trade_confirmation_message
-from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
 
 bp = Blueprint('trade_tickets', __name__)

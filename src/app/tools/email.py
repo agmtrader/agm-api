@@ -1,6 +1,5 @@
 from flask import Blueprint, request
 from src.components.tools.email import Gmail
-from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
 
 bp = Blueprint('email', __name__)

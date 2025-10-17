@@ -1,6 +1,5 @@
 from flask import Blueprint, request
 from src.components.tools.investment_proposals import create_investment_proposal, read_investment_proposals
-from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
 
 bp = Blueprint('investment_proposals', __name__)

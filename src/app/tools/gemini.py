@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from src.components.ada.gemini import Gemini
+from src.components.tools.gemini import Gemini
 from src.utils.logger import logger
 from src.utils.response import format_response
 

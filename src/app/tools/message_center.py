@@ -1,6 +1,5 @@
-from flask import Blueprint, request
+from flask import Blueprint
 from src.components.tools.message_center import get_message_center_emails
-from src.utils.managers.scope_manager import verify_scope
 from src.utils.response import format_response
 
 bp = Blueprint('message_center', __name__)

@@ -1,6 +1,5 @@
 from flask import Blueprint, request
-from src.components.leads import read_leads, update_lead, create_lead, read_follow_ups, update_follow_up, delete_follow_up, create_follow_up
-from src.utils.managers.scope_manager import verify_scope
+from src.components.entities.leads import read_leads, update_lead, create_lead, read_follow_ups, update_follow_up, delete_follow_up, create_follow_up
 from src.utils.response import format_response
 
 bp = Blueprint('leads', __name__)

@@ -1,9 +1,7 @@
 from flask import Blueprint, request
-from src.components.accounts import create_account, read_accounts, submit_documents, upload_document, read_documents_by_account_id
-from src.components.accounts import get_pending_tasks, get_registration_tasks
-from src.components.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions
-from src.components.accounts import apply_fee_template, update_account_email, update_pending_aliases
-from src.components.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts
+from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_documents_by_account_id
+from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_exchange_bundles
+from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts
 from src.utils.response import format_response
 
 bp = Blueprint('accounts', __name__)
@@ -140,7 +138,6 @@ def add_trading_permissions_route():
     master_account = payload.get('master_account', None)
     if not reference_account_id or not trading_permissions:
         return {"error": "Missing reference_account_id or trading_permissions"}, 400
-    from src.components.accounts import add_trading_permissions  # local import to avoid circular
     return add_trading_permissions(
         reference_account_id=reference_account_id,
         trading_permissions=trading_permissions,
@@ -152,7 +149,6 @@ def add_trading_permissions_route():
 @format_response
 def get_exchange_bundles_route():
     master_account = request.args.get('master_account', None)
-    from src.components.accounts import get_exchange_bundles
     return get_exchange_bundles(master_account=master_account)
 
 # Trading API

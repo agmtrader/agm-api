@@ -1,6 +1,5 @@
 from flask import Blueprint, request
-from src.components.pending_tasks import create_pending_task, read_pending_tasks, update_pending_task, create_follow_up, update_follow_up, delete_follow_up
-from src.utils.managers.scope_manager import verify_scope
+from src.components.entities.pending_tasks import create_pending_task, read_pending_tasks, update_pending_task, create_follow_up, update_follow_up, delete_follow_up
 from src.utils.response import format_response
 
 bp = Blueprint('pending_tasks', __name__)

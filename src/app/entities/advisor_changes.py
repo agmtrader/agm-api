@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.advisor_changes import create_advisor_change, read_advisor_changes
+from src.components.entities.advisor_changes import create_advisor_change, read_advisor_changes
 from src.utils.response import format_response
 
 bp = Blueprint('advisor_changes', __name__)

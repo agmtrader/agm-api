@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.users import read_users, update_user, create_user
+from src.components.entities.users import read_users, update_user, create_user
 from src.utils.response import format_response
 from src.utils.logger import logger
 from src.utils.exception import ServiceError

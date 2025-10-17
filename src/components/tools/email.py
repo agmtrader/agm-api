@@ -7,7 +7,6 @@ from email.mime.image import MIMEImage
 from email.utils import formataddr, parsedate_to_datetime
 from jinja2 import Environment, FileSystemLoader
 from premailer import transform
-from bs4 import BeautifulSoup
 
 from src.utils.logger import logger
 from src.utils.exception import handle_exception
@@ -15,7 +14,6 @@ from src.utils.managers.secret_manager import get_secret
 
 import os
 import base64
-import re
 from datetime import datetime, timezone, timedelta
 
 class Gmail:

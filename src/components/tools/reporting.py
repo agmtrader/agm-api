@@ -6,7 +6,7 @@ from io import BytesIO
 import base64
 import yfinance as yf
 import time
-from src.components.accounts import read_accounts
+from src.components.entities.accounts import read_accounts
 from src.utils.connectors.drive import GoogleDrive
 import pytz
 from src.utils.connectors.flex_query_api import getFlexQuery

@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.contacts import read_contacts, create_contact, update_contact
+from src.components.entities.contacts import read_contacts, create_contact, update_contact
 from src.utils.response import format_response
 
 bp = Blueprint('contacts', __name__)

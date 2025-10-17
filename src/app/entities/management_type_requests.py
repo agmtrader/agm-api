@@ -1,8 +1,5 @@
 from flask import Blueprint, request
-from src.components.management_type_requests import (
-    create_management_type_request,
-    read_management_type_requests,
-)
+from src.components.entities.management_type_requests import create_management_type_request, read_management_type_requests
 from src.utils.response import format_response
 
 bp = Blueprint('management_type_requests', __name__)

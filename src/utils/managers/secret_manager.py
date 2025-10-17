@@ -1,7 +1,6 @@
 from google.cloud import secretmanager
 import json
 import time
-from src.utils.exception import handle_exception
 from src.utils.logger import logger
 from threading import Lock
 from typing import Dict, Tuple, Union

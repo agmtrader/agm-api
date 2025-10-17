@@ -721,6 +721,7 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     # Trading API
+    @handle_exception
     def create_sso_session(self, credential: str, ip: str) -> str:
         """
         Create an SSO browser session for IBKR Client Portal.
@@ -761,6 +762,7 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @handle_exception
     def initialize_brokerage_session(self) -> str:
         """
         Initialize a brokerage session for IBKR Client Portal.
@@ -799,6 +801,7 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @handle_exception
     def logout_of_brokerage_session(self):
         """
         Logout of the brokerage session.
@@ -822,6 +825,7 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @handle_exception
     def get_brokerage_accounts(self):
         """
         Get the brokerage accounts.
@@ -841,3 +845,24 @@ class IBKRWebAPI:
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds   
+
+    @handle_exception
+    def get_watchlist_information(self):
+        """
+        Get the watchlist information.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/v1/api/iserver/watchlist?id=100"
+            if not self.sso_token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {self.sso_token}",
+                "Content-Type": "application/json" 
+            }
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds

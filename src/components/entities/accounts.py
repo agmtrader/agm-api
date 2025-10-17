@@ -4,6 +4,8 @@ from src.utils.logger import logger
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 from src.utils.managers.document_manager import DocumentManager
 
+from src.components.tools.reporting import get_clients_report
+
 logger.announcement('Initializing Accounts Service', type='info')
 ibkr_web_api = IBKRWebAPI()
 document_manager = DocumentManager()
@@ -94,12 +96,12 @@ def update_account_email(reference_user_name: str = None, new_email: str = None,
 
 @handle_exception
 def get_security_questions() -> dict:
+    """Get security questions via IBKR API."""
     return ibkr_web_api.get_security_questions()
 
 @handle_exception
 def update_pending_aliases(master_account: str = None) -> dict:
     """Fetch clients report, filter accounts without alias, update each alias, and return list."""
-    from src.components.tools.reporting import get_clients_report  # local import to avoid circular dependency
     clients = get_clients_report()
     pending_accounts = [c for c in clients if (c.get('Alias') in (None, '')) and c.get('Status') not in ('Rejected', 'Closed', 'Funded Pending')]
     updated_accounts = []
@@ -123,19 +125,9 @@ def update_pending_aliases(master_account: str = None) -> dict:
     }
 
 @handle_exception
-def add_trading_permissions(
-    reference_account_id: str = None,
-    trading_permissions: list = None,
-    documents: list  = None,
-    master_account: str = None,
-) -> dict:
+def add_trading_permissions(reference_account_id: str = None, trading_permissions: list = None, documents: list  = None, master_account: str = None) -> dict:
     """Add trading permissions to an account via IBKR API."""
-    return ibkr_web_api.add_trading_permissions(
-        reference_account_id=reference_account_id,
-        trading_permissions=trading_permissions or [],
-        documents=documents,
-        master_account=master_account,
-    )
+    return ibkr_web_api.add_trading_permissions(reference_account_id=reference_account_id, trading_permissions=trading_permissions or [], documents=documents, master_account=master_account)
 
 @handle_exception
 def get_exchange_bundles(master_account: str = None) -> dict:
@@ -145,16 +137,20 @@ def get_exchange_bundles(master_account: str = None) -> dict:
 # Trading API
 @handle_exception
 def create_sso_session(credential: str = None, ip: str = None) -> dict:
+    """Create an SSO session via IBKR API."""
     return ibkr_web_api.create_sso_session(credential=credential, ip=ip)
 
 @handle_exception
 def initialize_brokerage_session() -> dict:
+    """Initialize a brokerage session via IBKR API."""
     return ibkr_web_api.initialize_brokerage_session()
 
 @handle_exception
 def logout_of_brokerage_session() -> dict:
+    """Logout of a brokerage session via IBKR API."""
     return ibkr_web_api.logout_of_brokerage_session()
 
 @handle_exception
 def get_brokerage_accounts() -> dict:
+    """Get brokerage accounts via IBKR API."""
     return ibkr_web_api.get_brokerage_accounts()

@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.fee_template_requests import read_fee_template_requests, create_fee_template_request, update_fee_template_request
+from src.components.entities.fee_template_requests import read_fee_template_requests, create_fee_template_request, update_fee_template_request
 from src.utils.response import format_response
 
 bp = Blueprint('fee_template_requests', __name__)

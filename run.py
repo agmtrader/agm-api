@@ -89,7 +89,6 @@ def start_api():
         return jsonify({"error": "Forbidden", "message": "You don't have permission to access this resource"}), 403
 
     # JWT Token
-    from src.components.users import read_user_by_id
     @app.route('/token', methods=['POST'])
     @format_response
     def token():
@@ -118,14 +117,11 @@ def start_api():
 
         logger.error(f'Failed to authenticate user.')
         raise ServiceError("Unauthorized", status_code=401)
-    
-    # Ada
-    from src.app.ada import gemini
-    app.register_blueprint(gemini.bp, url_prefix='/ada')
 
     # Tools
-    from src.app.tools import email, investment_proposals, message_center, reporting, risk_profiles, trade_tickets
+    from src.app.tools import email, gemini, investment_proposals, message_center, reporting, risk_profiles, trade_tickets
     app.register_blueprint(email.bp, url_prefix='/email')
+    app.register_blueprint(gemini.bp, url_prefix='/ada')
     app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')
     app.register_blueprint(message_center.bp, url_prefix='/message_center')
     app.register_blueprint(reporting.bp, url_prefix='/reporting')
@@ -133,7 +129,7 @@ def start_api():
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
 
     # Entities
-    from src.app import accounts, advisors, applications, contacts, fee_template_requests, leads, pending_tasks, users, advisor_changes, management_type_requests
+    from src.app.entities import accounts, advisors, applications, contacts, fee_template_requests, leads, pending_tasks, users, advisor_changes, management_type_requests
     app.register_blueprint(accounts.bp, url_prefix='/accounts')
     app.register_blueprint(advisors.bp, url_prefix='/advisors')
     app.register_blueprint(applications.bp, url_prefix='/applications')
