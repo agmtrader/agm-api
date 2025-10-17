@@ -847,13 +847,17 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds   
 
     @handle_exception
-    def get_watchlist_information(self):
+    def get_watchlist_information(self, watchlist_id: str):
         """
         Get the watchlist information.
+        Args:
+            watchlist_id (str): The ID of the watchlist to get information for.
+        Returns:
+            dict: The watchlist information.
         """
         try:
             original_creds = self._apply_credentials('br')
-            url = f"{self.BASE_URL}/v1/api/iserver/watchlist?id=100"
+            url = f"{self.BASE_URL}/v1/api/iserver/watchlist?id={watchlist_id}"
             if not self.sso_token:
                 raise Exception("No token found")
             headers = {
@@ -862,7 +866,44 @@ class IBKRWebAPI:
             }
             response = requests.get(url, headers=headers)
             if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
                 raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success("Watchlist information fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    def get_market_data_snapshot(self, conids: str):
+        """
+        Get the market data snapshot for the given conid.
+        Args:
+            conid (str): The conid of the instrument to get the market data snapshot for.
+        Returns:
+            dict: The market data snapshot.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/v1/api/iserver/marketdata/snapshot?conids={conids}"
+            url_with_fields = f"{url}&fields=31,6070,55,84,86,58,7219,7220"
+            if not self.sso_token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {self.sso_token}",
+                "Content-Type": "application/json"
+            }
+            response = requests.get(url_with_fields, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            
+            logger.info(f"Waiting for market data snapshot to be ready")
+            time.sleep(2)
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            
+            logger.success("Market data snapshot fetched successfully")
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds

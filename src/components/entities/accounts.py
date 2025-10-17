@@ -4,8 +4,6 @@ from src.utils.logger import logger
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 from src.utils.managers.document_manager import DocumentManager
 
-from src.components.tools.reporting import get_clients_report
-
 logger.announcement('Initializing Accounts Service', type='info')
 ibkr_web_api = IBKRWebAPI()
 document_manager = DocumentManager()
@@ -102,6 +100,7 @@ def get_security_questions() -> dict:
 @handle_exception
 def update_pending_aliases(master_account: str = None) -> dict:
     """Fetch clients report, filter accounts without alias, update each alias, and return list."""
+    from src.components.tools.reporting import get_clients_report
     clients = get_clients_report()
     pending_accounts = [c for c in clients if (c.get('Alias') in (None, '')) and c.get('Status') not in ('Rejected', 'Closed', 'Funded Pending')]
     updated_accounts = []
