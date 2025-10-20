@@ -71,7 +71,7 @@ class Supabase:
             contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            code = Column(Integer, nullable=True, unique=True, autoincrement=True)
+            code = Column(Integer, nullable=False, unique=True, autoincrement=True)
             agency = Column(Text, nullable=False)
             hierarchy1 = Column(Text, nullable=False)
             hierarchy2 = Column(Text, nullable=False)
