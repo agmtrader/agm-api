@@ -639,11 +639,11 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def add_trading_permissions(self, reference_account_id: str, trading_permissions: list, documents: list = None, master_account: str = None) -> dict:
+    def add_trading_permissions(self, account_id: str, trading_permissions: list = None, master_account: str = None) -> dict:
         """Add trading permissions to the given account.
 
         Args:
-            reference_account_id (str): IBKR account id that will receive the permissions.
+            account_id (str): IBKR account id that will receive the permissions.
             trading_permissions (list): List of trading permission dictionaries as required by IBKR.
             documents (list | None): Optional list of DocumentSubmission items (already built). Defaults to empty list.
             master_account (str | None): Credential set to use (``ad`` or ``br``). Defaults to ``None`` to use current creds.
@@ -653,7 +653,10 @@ class IBKRWebAPI:
         """
         try:
             original_creds = self._apply_credentials(master_account)
-            logger.info(f"Adding trading permissions for account {reference_account_id}")
+            logger.info(f"Adding trading permissions for account {account_id}")
+
+            if not trading_permissions:
+                raise Exception("Trading permissions are required")
 
             url = f"{self.BASE_URL}/gw/api/v1/accounts"
 
@@ -663,12 +666,12 @@ class IBKRWebAPI:
                         {
                             "tradingPermissions": trading_permissions,
                             "documentSubmission": {
-                                "documents": documents or [],
-                                "referenceAccountId": reference_account_id,
+                                "documents": [],
+                                "referenceAccountId": account_id,
                                 "inputLanguage": "en",
                                 "translation": False,
                             },
-                            "referenceAccountId": reference_account_id,
+                            "referenceAccountId": account_id,
                         }
                     ]
                 }

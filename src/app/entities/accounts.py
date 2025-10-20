@@ -132,18 +132,10 @@ def update_pending_aliases_route():
 @format_response
 def add_trading_permissions_route():
     payload = request.get_json(force=True)
-    reference_account_id = payload.get('reference_account_id')
+    account_id = payload.get('account_id')
     trading_permissions = payload.get('trading_permissions', [])
-    documents = payload.get('documents', None)
-    master_account = payload.get('master_account', None)
-    if not reference_account_id or not trading_permissions:
-        return {"error": "Missing reference_account_id or trading_permissions"}, 400
-    return add_trading_permissions(
-        reference_account_id=reference_account_id,
-        trading_permissions=trading_permissions,
-        documents=documents,
-        master_account=master_account,
-    )
+    master_account = payload.get('master_account', None)    
+    return add_trading_permissions(account_id=account_id, trading_permissions=trading_permissions, master_account=master_account)
 
 @bp.route('/ibkr/exchange_bundles', methods=['GET'])
 @format_response
