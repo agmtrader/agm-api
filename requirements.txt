@@ -50,3 +50,9 @@ ib_insync==0.9.86
 yfinance==0.2.37
 
 dnspython==2.7.0
+
+langchain==1.0.2
+langchain-text-splitters==1.0.0.
+langchain-community ==0.4
+bs4==0.0.2
+langchain_google_genai==3.0.0

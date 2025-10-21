@@ -1,39 +1,66 @@
-import google.generativeai as genai
 from src.utils.logger import logger
 from src.utils.managers.secret_manager import get_secret
+
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_community.document_loaders import WebBaseLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain.agents import create_agent
+from langchain.tools import tool
+
+import os
+
+api_key = get_secret("GOOGLE_GENAI_API_KEY")
+os.environ["GOOGLE_API_KEY"] = api_key
+
+embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
+vector_store = InMemoryVectorStore(embeddings)
+
+@tool(response_format="content_and_artifact")
+def retrieve_context(query: str):
+    """Retrieve information to help answer a query."""
+    retrieved_docs = vector_store.similarity_search(query, k=2)
+    serialized = "\n\n".join(
+        (f"Source: {doc.metadata}\nContent: {doc.page_content}")
+        for doc in retrieved_docs
+    )
+    return serialized, retrieved_docs
 
 class Gemini:
     def __init__(self):
         logger.announcement("Initializing Gemini Client...", 'info')
         try:
-            genai.configure(api_key=get_secret("GOOGLE_GENAI_API_KEY"))
-            self.model = genai.GenerativeModel(
-                model_name='gemini-1.5-flash',
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.75
-                ),
-                safety_settings=[],
-                system_instruction="""
-                You are AGM's AI assistant called Ada. Here's important context about AGM:
 
-                AGM is a leading International Securities Broker/Dealer since 1995, providing direct access to over 150 financial markets across the USA, Europe, Asia, and Latin America. We specialize in making previously inaccessible markets accessible to traders and investors.
-
-                Key Services:
-                - AGM Trader: For individual traders
-                - AGM Advisor: For managed investment solutions
-                - AGM Institutional: For institutional clients
-
-                We offer:
-                - Global trading platform for stocks, ETFs, options, futures, bonds, and cryptocurrencies
-                - 24/7 market access
-                - Professional trading tools and dashboard
-                - Dedicated customer support
-
-                Please provide accurate, professional, and helpful responses related to AGM's services, trading capabilities, and financial markets. Always maintain a professional tone and prioritize accuracy in financial information.
-
-                YOU DO NOT OFFER INVESTMENT ADVICE, YOU ARE NOT A FINANCIAL ADVISOR.
-                """
+            loader = WebBaseLoader(
+                web_paths=("https://www.interactivebrokers.com/campus/trading-lessons/open-an-account-deposit-and-withdraw/",)
             )
+            docs = loader.load()
+            logger.info(f"Total docs: {len(docs)}")
+            
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=1000,  # chunk size (characters)
+                chunk_overlap=200,  # chunk overlap (characters)
+                add_start_index=True,  # track index in original document
+            )
+            all_splits = text_splitter.split_documents(docs)
+            logger.info(f"Total splits: {len(all_splits)}")
+            vector_store.add_documents(documents=all_splits)
+
+            tools = [retrieve_context]
+
+            model = ChatGoogleGenerativeAI(
+                model="gemini-2.5-flash",
+                temperature=0,
+                max_tokens=None,
+                timeout=None,
+                max_retries=2
+            )
+
+            self.agent = create_agent(
+                model,
+                tools=tools
+            )
+
             logger.announcement("Gemini Client initialized", 'success')
         except Exception as e:
             logger.error(f"Failed to initialize Gemini Client: {str(e)}")
@@ -42,28 +69,16 @@ class Gemini:
     def chat(self, messages):
         try:
             logger.info(f"User is sending messages to Gemini: {messages}")
-            
-            # Create a chat session
-            chat = self.model.start_chat()
-            
-            # Send all messages in sequence
-            for message in messages:
-                response = chat.send_message(message["content"])
-            
-            # Extract the response text
-            response_text = response.text
-
-            logger.info(f"Gemini responded with: {response_text}")
-            
-            # Format the response to match our expected structure
+            response = self.agent.invoke({"messages": messages})
+            logger.info(f"Gemini responded with: {response}")
             return {
-                "model": "gemini-1.5-flash",
+                "model": "gemini-2.5-flash",
                 "message": {
                     "role": "assistant",
-                    "content": response_text
+                    "content": response['messages'][-1].content
                 }
             }
-            
-        except:
-            logger.error(f"Error in Gemini chat")
-            raise Exception(f"Error in Gemini chat.")
+
+        except Exception as e:
+            logger.error(f"Error in Gemini chat, {e}")
+            raise Exception(f"Error in Gemini chat, {e}")
