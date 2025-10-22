@@ -662,20 +662,14 @@ class IBKRWebAPI:
 
             body = {
                 "accountManagementRequests": {
-                    "addTradingPermissions": [
-                        {
-                            "tradingPermissions": trading_permissions,
-                            "documentSubmission": {
-                                "documents": [],
-                                "referenceAccountId": account_id,
-                                "inputLanguage": "en",
-                                "translation": False,
-                            },
-                            "referenceAccountId": account_id,
-                        }
-                    ]
+                    "addTradingPermissions": {
+                        "tradingPermissions": trading_permissions,
+                        "accountId": account_id,
+                    }
                 }
             }
+
+            logger.info(f"Body: {body}")
 
             token = self.get_bearer_token()
             if not token:
