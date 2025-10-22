@@ -30,7 +30,7 @@ class Gemini:
     def __init__(self):
         logger.announcement("Initializing Gemini Client...", 'info')
         try:
-
+            """
             loader = WebBaseLoader(
                 web_paths=("https://www.interactivebrokers.com/campus/trading-lessons/open-an-account-deposit-and-withdraw/",)
             )
@@ -47,6 +47,9 @@ class Gemini:
             vector_store.add_documents(documents=all_splits)
 
             tools = [retrieve_context]
+            """
+
+            tools = []
 
             model = ChatGoogleGenerativeAI(
                 model="gemini-2.5-flash",
@@ -55,6 +58,7 @@ class Gemini:
                 timeout=None,
                 max_retries=2
             )
+
 
             self.agent = create_agent(
                 model,
