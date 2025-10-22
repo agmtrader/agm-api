@@ -78,7 +78,7 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: "✅ Alias Update Workflow SUCCEEDED"
-          to: aa@agmtechnology.com,cr@agmtechnology.com
+          to: cr@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
             The alias update completed successfully.
@@ -100,7 +100,7 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: "🚨 Alias Update Workflow FAILED"
-          to: aa@agmtechnology.com,cr@agmtechnology.com
+          to: cr@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
             Updating IBKR account aliases failed.  Review workflow logs for details.
