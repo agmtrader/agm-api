@@ -1,6 +1,7 @@
 from flask import Blueprint, request
+from requests import get
 from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_documents_by_account_id
-from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_exchange_bundles
+from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles
 from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts
 from src.utils.response import format_response
 
@@ -137,11 +138,10 @@ def add_trading_permissions_route():
     master_account = payload.get('master_account', None)    
     return add_trading_permissions(account_id=account_id, trading_permissions=trading_permissions, master_account=master_account)
 
-@bp.route('/ibkr/exchange_bundles', methods=['GET'])
+@bp.route('/ibkr/product_country_bundles', methods=['GET'])
 @format_response
-def get_exchange_bundles_route():
-    master_account = request.args.get('master_account', None)
-    return get_exchange_bundles(master_account=master_account)
+def get_product_country_bundles_route():
+    return get_product_country_bundles()
 
 # Trading API
 @bp.route('/ibkr/sso/create', methods=['POST'])

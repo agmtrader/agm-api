@@ -6,9 +6,48 @@ from src.utils.managers.secret_manager import get_secret
 from src.utils.exception import handle_exception, ServiceError
 from src.utils.logger import logger
 from datetime import datetime
+from functools import wraps
 
 logger.announcement('Initializing Interactive Brokers Web API Service', type='info')
 logger.announcement('Initialized Interactive Brokers Web API Service', type='success')
+
+def retry_on_connection_error(max_retries=3, delay=1):
+    """Retry decorator to gracefully handle transient connection errors such as broken pipes.
+
+    If a connection-related error is detected, the wrapped function will be re-executed
+    up to *max_retries* times with exponential back-off. Between retries the cached
+    OAuth token is cleared so that a fresh connection is established on the next
+    attempt.
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            last_exception = None
+            for attempt in range(max_retries):
+                try:
+                    return func(self, *args, **kwargs)
+                except Exception as e:
+                    last_exception = e
+                    error_msg = str(e).lower()
+                    if any(err in error_msg for err in [
+                        'broken pipe', 'connection reset', 'connection aborted',
+                        'connection timeout', 'socket.error', 'httplib.badstatusline',
+                        'ssl.sslerror', 'connectionerror', 'timeout'
+                    ]):
+                        logger.warning(
+                            f"Connection error on attempt {attempt + 1}/{max_retries}: {e}"
+                        )
+                        if attempt < max_retries - 1:
+                            # Force token refresh and wait before retry (exponential back-off)
+                            self._token = None
+                            time.sleep(delay * (attempt + 1))
+                            continue
+                    # Not a retriable error or retries exhausted – re-raise
+                    raise
+            # All retries exhausted – raise the last captured exception
+            raise last_exception
+        return wrapper
+    return decorator
 
 class IBKRWebAPI:
 
@@ -693,13 +732,13 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def get_exchange_bundles(self, master_account: str = None):
-        """Retrieve enumeration list for exchange bundles from IBKR."""
+    def get_product_country_bundles(self):
+        """Retrieve enumeration list for product country bundles from IBKR."""
         try:
-            original_creds = self._apply_credentials(master_account)
-            logger.info("Fetching exchange bundles enumerations")
+            original_creds = self._apply_credentials('br')
+            logger.info("Fetching product country bundles enumerations")
 
-            url = f"{self.BASE_URL}/gw/api/v1/enumerations/exchange-bundles"
+            url = f"{self.BASE_URL}/gw/api/v1/enumerations/product-country-bundles"
 
             token = self.get_bearer_token()
             if not token:
@@ -712,8 +751,10 @@ class IBKRWebAPI:
                 logger.error(f"Error {response.status_code}: {response.text}")
                 raise Exception(f"Error {response.status_code}: {response.text}")
 
-            logger.success("Exchange bundles fetched successfully")
+            logger.success("Product country bundles fetched successfully")
             return response.json()
+        except Exception as e:
+            logger.error(f"Error fetching product country bundles: {response.text}")
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
@@ -904,3 +945,34 @@ class IBKRWebAPI:
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+# Apply the retry decorator to all public methods that make HTTP requests
+for _method_name in [
+    'get_bearer_token',
+    'list_accounts',
+    'get_account_details',
+    'get_registration_tasks',
+    'get_pending_tasks',
+    'submit_documents',
+    'apply_fee_template',
+    'update_account_alias',
+    'process_documents',
+    'send_to_ibkr',
+    'get_forms',
+    'get_security_questions',
+    'update_account_email',
+    'add_trading_permissions',
+    'get_exchange_bundles',
+    'create_sso_session',
+    'initialize_brokerage_session',
+    'logout_of_brokerage_session',
+    'get_brokerage_accounts',
+    'get_watchlist_information',
+    'get_market_data_snapshot',
+]:
+    if 'IBKRWebAPI' in globals() and hasattr(IBKRWebAPI, _method_name):
+        setattr(
+            IBKRWebAPI,
+            _method_name,
+            retry_on_connection_error()(getattr(IBKRWebAPI, _method_name))
+        )

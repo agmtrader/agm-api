@@ -129,9 +129,9 @@ def add_trading_permissions(account_id: str = None, trading_permissions: list = 
     return ibkr_web_api.add_trading_permissions(account_id=account_id, trading_permissions=trading_permissions, master_account=master_account)
 
 @handle_exception
-def get_exchange_bundles(master_account: str = None) -> dict:
-    """Get exchange bundles enumeration via IBKR API."""
-    return ibkr_web_api.get_exchange_bundles(master_account=master_account)
+def get_product_country_bundles() -> dict:
+    """Get product country bundles enumeration via IBKR API."""
+    return ibkr_web_api.get_product_country_bundles()
 
 # Trading API
 @handle_exception
