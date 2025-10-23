@@ -1,9 +1,9 @@
 from flask import Blueprint, request, jsonify
-from src.components.tools.gemini import Gemini
+from src.components.tools.ada import Gemini
 from src.utils.logger import logger
 from src.utils.response import format_response
 
-bp = Blueprint('gemini', __name__)
+bp = Blueprint('ada', __name__)
 gemini = Gemini()
 
 @bp.route('/chat', methods=['POST'])

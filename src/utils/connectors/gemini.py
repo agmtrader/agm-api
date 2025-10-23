@@ -5,34 +5,51 @@ from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmb
 from langchain_core.vectorstores import InMemoryVectorStore
 from langchain.agents import create_agent
 from langchain.tools import tool
-from langchain_community.document_loaders import WebBaseLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+#from langchain_community.document_loaders import WebBaseLoader
+#from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 import os
 
+# Retrieve and set the Google GenAI API key
 api_key = get_secret("GOOGLE_GENAI_API_KEY")
 os.environ["GOOGLE_API_KEY"] = api_key
 
+# ------- Optional Retrieval Helpers (Embeddings & VectorStore) -------
 embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
 vector_store = InMemoryVectorStore(embeddings)
 
 @tool(response_format="content_and_artifact")
 def retrieve_context(query: str):
-    """Retrieve information to help answer a query."""
+    """Retrieve relevant context chunks from the in-memory vector store."""
     retrieved_docs = vector_store.similarity_search(query, k=2)
     serialized = "\n\n".join(
-        (f"Source: {doc.metadata}\nContent: {doc.page_content}")
-        for doc in retrieved_docs
+        (f"Source: {doc.metadata}\nContent: {doc.page_content}") for doc in retrieved_docs
     )
     return serialized, retrieved_docs
 
+# --------------------------------------------------------------------
+
 class Gemini:
+    """Singleton wrapper around a LangChain Gemini agent."""
+
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
     def __init__(self):
-        logger.announcement("Initializing Gemini Client...", 'info')
+        # Prevent re-initialization in the singleton pattern
+        if getattr(self, "_initialized", False):
+            return
+
+        logger.announcement("Initializing Gemini Client...", "info")
         try:
             """
             loader = WebBaseLoader(
-                web_paths=("https://www.interactivebrokers.com/campus/trading-lessons/open-an-account-deposit-and-withdraw/",)
+                web_paths=("https://www.interactivebrokers.com/campus/ibkr-api-page/web-api-account-management",)
             )
             docs = loader.load()
             logger.info(f"Total docs: {len(docs)}")
@@ -48,7 +65,6 @@ class Gemini:
 
             tools = [retrieve_context]
             """
-
             tools = []
 
             model = ChatGoogleGenerativeAI(
@@ -56,21 +72,22 @@ class Gemini:
                 temperature=0,
                 max_tokens=None,
                 timeout=None,
-                max_retries=2
+                max_retries=2,
             )
 
-
-            self.agent = create_agent(
-                model,
-                tools=tools
-            )
-
-            logger.announcement("Gemini Client initialized", 'success')
+            self.agent = create_agent(model, tools=tools)
+            self._initialized = True
+            logger.announcement("Gemini Client initialized", "success")
         except Exception as e:
-            logger.error(f"Failed to initialize Gemini Client: {str(e)}")
+            logger.error(f"Failed to initialize Gemini Client: {e}")
             raise Exception("Failed to initialize Gemini Client")
 
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
     def chat(self, messages):
+        """Send a list of chat messages to Gemini and return the assistant response."""
         try:
             logger.info(f"User is sending messages to Gemini: {messages}")
             response = self.agent.invoke({"messages": messages})
@@ -79,10 +96,9 @@ class Gemini:
                 "model": "gemini-2.5-flash",
                 "message": {
                     "role": "assistant",
-                    "content": response['messages'][-1].content
-                }
+                    "content": response["messages"][-1].content,
+                },
             }
-
         except Exception as e:
-            logger.error(f"Error in Gemini chat, {e}")
-            raise Exception(f"Error in Gemini chat, {e}")
+            logger.error(f"Error in Gemini chat: {e}")
+            raise Exception(f"Error in Gemini chat: {e}")

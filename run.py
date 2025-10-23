@@ -119,9 +119,9 @@ def start_api():
         raise ServiceError("Unauthorized", status_code=401)
 
     # Tools
-    from src.app.tools import email, gemini, investment_proposals, message_center, reporting, risk_profiles, trade_tickets
+    from src.app.tools import ada, email, investment_proposals, message_center, reporting, risk_profiles, trade_tickets
     app.register_blueprint(email.bp, url_prefix='/email')
-    app.register_blueprint(gemini.bp, url_prefix='/ada')
+    app.register_blueprint(ada.bp, url_prefix='/ada')
     app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')
     app.register_blueprint(message_center.bp, url_prefix='/message_center')
     app.register_blueprint(reporting.bp, url_prefix='/reporting')
