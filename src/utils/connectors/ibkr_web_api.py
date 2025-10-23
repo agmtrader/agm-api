@@ -7,6 +7,7 @@ from src.utils.exception import handle_exception, ServiceError
 from src.utils.logger import logger
 from datetime import datetime
 from functools import wraps
+from src.lib.market_data_fields import MarketDataField
 
 logger.announcement('Initializing Interactive Brokers Web API Service', type='info')
 logger.announcement('Initialized Interactive Brokers Web API Service', type='success')
@@ -922,7 +923,41 @@ class IBKRWebAPI:
         try:
             original_creds = self._apply_credentials('br')
             url = f"{self.BASE_URL}/v1/api/iserver/marketdata/snapshot?conids={conids}"
-            url_with_fields = f"{url}&fields=31,6070,55,84,86,58,7219,7220"
+
+            # Build a comprehensive field list to match sandbox column requirements
+            desired_fields = [
+                # Basic quote data
+                MarketDataField.SYMBOL,
+                MarketDataField.COMPANY_NAME,
+                MarketDataField.SECTYPE,
+                MarketDataField.LAST_PRICE,
+                MarketDataField.ASK_PRICE,
+                MarketDataField.ASK_YIELD,
+                MarketDataField.BID_PRICE,
+                MarketDataField.BID_SIZE,
+                MarketDataField.ASK_SIZE,
+                MarketDataField.CHANGE,
+                MarketDataField.CHANGE_PERCENT,
+                MarketDataField.DAILY_PNL,
+                MarketDataField.AVG_PRICE,
+                # Position & PnL
+                MarketDataField.FORMATTED_POSITION,
+                # Industry & sector
+                MarketDataField.INDUSTRY,
+                MarketDataField.CATEGORY,
+                # Yields & bond metrics
+                MarketDataField.BID_YIELD,
+                MarketDataField.LAST_YIELD,
+                # Dates & descriptive metadata
+                MarketDataField.ISSUE_DATE,
+                MarketDataField.LAST_TRADING_DATE,
+                MarketDataField.RATINGS,
+                MarketDataField.REGULAR_EXPIRY,
+            ]
+            # Convert enum members to their raw integer values and stringify for API
+            fields_str = ','.join(str(f.value) for f in desired_fields)
+            
+            url_with_fields = f"{url}&fields={fields_str}"
             if not self.sso_token:
                 raise Exception("No token found")
             headers = {

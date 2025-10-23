@@ -72,15 +72,6 @@ backups_folder_id = '1d9RShyGidP04XdnH87pUHsADghgOiWj3'
 resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
 logger.announcement('Initialized Reporting Service', type='success')
 
-"""
-TODO:
-- Fetch and upload the other four sources:
-    - Clients List
-    - Contact List Summary
-    - RTD
-    - Tasks for Subaccounts
-"""
-
 def get_clients_report():
     """
     Get the clients list.
