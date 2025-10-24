@@ -6,8 +6,8 @@ from langchain_core.vectorstores import InMemoryVectorStore
 from langchain.agents import create_agent
 from langchain.tools import tool
 
-#from langchain_community.document_loaders import WebBaseLoader
-#from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import WebBaseLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 import os
 
@@ -47,17 +47,20 @@ class Gemini:
 
         logger.announcement("Initializing Gemini Client...", "info")
         try:
+            tools = []
+
             """
+
             loader = WebBaseLoader(
-                web_paths=("https://www.interactivebrokers.com/campus/ibkr-api-page/web-api-account-management",)
+                web_paths=("https://www.interactivebrokers.com/",)
             )
             docs = loader.load()
             logger.info(f"Total docs: {len(docs)}")
             
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000,  # chunk size (characters)
-                chunk_overlap=200,  # chunk overlap (characters)
-                add_start_index=True,  # track index in original document
+                chunk_size=1000,
+                chunk_overlap=200,
+                add_start_index=True,
             )
             all_splits = text_splitter.split_documents(docs)
             logger.info(f"Total splits: {len(all_splits)}")
@@ -65,11 +68,10 @@ class Gemini:
 
             tools = [retrieve_context]
             """
-            tools = []
 
             model = ChatGoogleGenerativeAI(
                 model="gemini-2.5-flash",
-                temperature=0,
+                temperature=1.0,
                 max_tokens=None,
                 timeout=None,
                 max_retries=2,
@@ -92,12 +94,16 @@ class Gemini:
             logger.info(f"User is sending messages to Gemini: {messages}")
             response = self.agent.invoke({"messages": messages})
             logger.info(f"Gemini responded with: {response}")
+            m = []
+            messages = response['messages']
+            for message in messages:
+                m.append({
+                    "message": message.text,
+                    "role": type(message).__name__,
+                })
             return {
-                "model": "gemini-2.5-flash",
-                "message": {
-                    "role": "assistant",
-                    "content": response["messages"][-1].content,
-                },
+                "model": 'gemini-2.5-flash',
+                "messages": m
             }
         except Exception as e:
             logger.error(f"Error in Gemini chat: {e}")
