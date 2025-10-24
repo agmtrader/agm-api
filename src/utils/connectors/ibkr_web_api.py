@@ -926,33 +926,47 @@ class IBKRWebAPI:
 
             # Build a comprehensive field list to match sandbox column requirements
             desired_fields = [
-                # Basic quote data
-                MarketDataField.SYMBOL,
-                MarketDataField.COMPANY_NAME,
-                MarketDataField.SECTYPE,
-                MarketDataField.LAST_PRICE,
-                MarketDataField.ASK_PRICE,
-                MarketDataField.ASK_YIELD,
+                # Identification & Instrument
+                MarketDataField.SYMBOL,              # Symbol (Ticker)
+                MarketDataField.COMPANY_NAME,        # Company Name
+                MarketDataField.CONID_EXCHANGE,      # Conid + Exchange (proxy for CUSIP/ISIN uniqueness)
+                MarketDataField.SECTYPE,             # Financial Instrument / Asset Class
+
+                # Quote & Size
                 MarketDataField.BID_PRICE,
                 MarketDataField.BID_SIZE,
+                MarketDataField.ASK_PRICE,
                 MarketDataField.ASK_SIZE,
+                MarketDataField.LAST_PRICE,
                 MarketDataField.CHANGE,
                 MarketDataField.CHANGE_PERCENT,
-                MarketDataField.DAILY_PNL,
-                MarketDataField.AVG_PRICE,
-                # Position & PnL
-                MarketDataField.FORMATTED_POSITION,
-                # Industry & sector
-                MarketDataField.INDUSTRY,
-                MarketDataField.CATEGORY,
-                # Yields & bond metrics
+
+                # Yield metrics
                 MarketDataField.BID_YIELD,
+                MarketDataField.ASK_YIELD,
                 MarketDataField.LAST_YIELD,
-                # Dates & descriptive metadata
-                MarketDataField.ISSUE_DATE,
-                MarketDataField.LAST_TRADING_DATE,
+
+                # PnL & Position
+                MarketDataField.AVG_PRICE,
+                MarketDataField.DAILY_PNL,
+                MarketDataField.FORMATTED_POSITION,
+
+                # Sector / Industry / Ratings
+                MarketDataField.CATEGORY,            # Sector
+                MarketDataField.INDUSTRY,            # Industry
                 MarketDataField.RATINGS,
-                MarketDataField.REGULAR_EXPIRY,
+
+                # Dates & Maturity
+                MarketDataField.ISSUE_DATE,          # Issue Date
+                MarketDataField.REGULAR_EXPIRY,      # Maturity
+                MarketDataField.LAST_TRADING_DATE,
+
+                # Listing venue
+                MarketDataField.LISTING_EXCHANGE,
+
+                # Bond descriptors
+                MarketDataField.BOND_TYPE,
+                MarketDataField.BOND_STATE_CODE,
             ]
             # Convert enum members to their raw integer values and stringify for API
             fields_str = ','.join(str(f.value) for f in desired_fields)
