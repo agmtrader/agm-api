@@ -793,6 +793,7 @@ class IBKRWebAPI:
                 logger.error(f"Error {response.status_code}: {response.text}")
                 raise Exception(f"Error {response.status_code}: {response.text}")
             data = response.json()
+            print(data)
             if 'access_token' in data:
                 self.sso_token = data['access_token']
             else:
