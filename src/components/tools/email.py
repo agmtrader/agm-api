@@ -1,322 +1,85 @@
-from googleapiclient.discovery import build
-from google.oauth2.credentials import Credentials
-
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.mime.image import MIMEImage
-from email.utils import formataddr, parsedate_to_datetime
-from jinja2 import Environment, FileSystemLoader
-from premailer import transform
-
-from src.utils.logger import logger
+from src.utils.connectors.gmail import GmailConnector
 from src.utils.exception import handle_exception
-from src.utils.managers.secret_manager import get_secret
 
-import os
-import base64
-from datetime import datetime, timezone, timedelta
-
-class Gmail:
-
-  def __init__(self):
-    logger.announcement('Initializing Gmail connection.', type='info')
-    SCOPES = ["https://mail.google.com/"]
-    creds = get_secret('OAUTH_PYTHON_CREDENTIALS_INFO')
-    try:
-      creds = Credentials(
-        token=creds['token'],
-        refresh_token=creds['refresh_token'],
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=creds['client_id'],
-        client_secret=creds['client_secret'],
-        scopes=SCOPES
-      )
-      self.service = build("gmail", "v1", credentials=creds)
-      logger.announcement('Initialized Gmail connection.', type='success')
-    except Exception as e:
-      logger.error(f"Error initializing Gmail: {str(e)}")
-      raise Exception(f"Error initializing Gmail: {str(e)}")
-    
-  # Sending
-  @handle_exception
-  def send_email(self, content, client_email, subject, email_template, bcc="aa@agmtechnology.com,cr@agmtechnology.com,jc@agmtechnology.com,hc@agmtechnology.com,rc@agmtechnology.com", cc=""):
+# Remove low-level Gmail implementation details; delegate to connector
+class Gmail(GmailConnector):
+    """High-level email service containing business-specific helper methods.
+    Inherits low-level send_email / create_html_email from GmailConnector.
     """
-    Send an email using either plain text or dictionary content.
-    
-    Args:
-        content: Can be either a string (plain text) or a dictionary (structured data)
-        client_email: Recipient email address
-        subject: Email subject
-        email_template: Name of the template file to use
-        bcc: Bcc email address
-        cc: Cc email address
-    """
-    logger.announcement(f'Sending {email_template} email to: {client_email}', type='info')
-    raw_message = self.create_html_email(content, subject, client_email, email_template, bcc, cc)
 
-    sent_message = (
-        self.service.users()
-        .messages()
-        .send(userId="me", body=raw_message)
-        .execute()
-    )
-    logger.announcement(f'Successfully sent {email_template} email to: {client_email}', type='success')
-    return sent_message['id']
-  
-  def create_html_email(self, content, subject, client_email, email_template, bcc, cc):
-    """
-    Create an HTML email that can handle both plain text and dictionary content.
-    
-    Args:
-        content: Can be either a string (plain text) or a dictionary (structured data)
-        subject: Email subject
-        client_email: Recipient email address
-        email_template: Name of the template file to use
-    """
-    logger.info(f'Creating {email_template} email with subject: {subject}')
+    # ------------------------------------------------------------------
+    # Business convenience wrappers
+    # ------------------------------------------------------------------
 
-    # Get the template html file
-    try:
-      current_dir = os.path.dirname(os.path.abspath(__file__))
-      env = Environment(loader=FileSystemLoader(os.path.join(current_dir, '../../lib/email_templates')))
-      template = env.get_template(f'{email_template}.html')
-    except:
-      logger.error(f'Template {email_template}.html not found')
-      raise Exception(f'Template {email_template}.html not found')
+    @handle_exception
+    def send_email_confirmation(self, content, client_email, lang="es"):
+        subject = (
+            "Confirmación de Correo Electrónico" if lang == "es" else "Email Confirmation"
+        )
+        email_template = f"application_email_confirmation_{lang}"
+        return self.send_email(content, client_email, subject, email_template, bcc="", cc="")
 
-    # Prepare the content based on its type
-    template_data = {
-        'subject': subject,
-        'content': content
-    }
+    @handle_exception
+    def send_trade_ticket_email(self, content, client_email):
+        subject = "Confirmación de Transacción"
+        email_template = "trade_ticket"
+        return self.send_email(content, client_email, subject, email_template)
 
-    # Render the template with the content
-    html_content = template.render(**template_data)
+    @handle_exception
+    def send_application_link_email(self, content, client_email, lang="es"):
+        subject = (
+            "Link de formulario para apertura de cuenta"
+            if lang == "es"
+            else "Application Link"
+        )
+        email_template = f"application_link_{lang}"
+        return self.send_email(
+            content,
+            client_email,
+            subject,
+            email_template,
+            bcc="",
+            cc="jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com",
+        )
 
-    # Inline the CSS
-    html_content_inlined = transform(html_content)
+    @handle_exception
+    def send_task_reminder_email(self, content, agm_user_email):
+        subject = "Task Reminder"
+        email_template = "task_reminder"
+        return self.send_email(content, agm_user_email, subject, email_template, bcc="", cc="")
 
-    # Create a multipart message
-    message = MIMEMultipart('alternative')
-    message['Subject'] = subject
-    display_name = "AGM Technology"
-    email_address = "info@agmtechnology.com"
-    formatted_from = formataddr((display_name, email_address))
-    message['From'] = formatted_from
+    @handle_exception
+    def send_lead_reminder_email(self, content, agm_user_email):
+        subject = "Lead Reminder"
+        email_template = "lead_reminder"
+        return self.send_email(content, agm_user_email, subject, email_template, bcc="", cc="")
 
-    # Convert dictionary to readable plain text format
-    if isinstance(content, dict):
-        text_content = "\n".join(f"{key}: {value}" for key, value in content.items())
-        text_part = MIMEText(text_content.encode('utf-8'), 'plain', 'utf-8')
-        message.attach(text_part)
+    @handle_exception
+    def send_credentials_email(self, content, client_email, lang="es"):
+        subject = (
+            "Credenciales de acceso para cuenta AGM"
+            if lang == "es"
+            else "Access Credentials for AGM Account"
+        )
+        email_template = f"credentials_{lang}"
+        return self.send_email(
+            content,
+            client_email,
+            subject,
+            email_template,
+            bcc="",
+            cc="jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com",
+        )
 
-    html_part = MIMEText(html_content_inlined.encode('utf-8'), 'html', 'utf-8')
-    message.attach(html_part)
-
-    # Create the final multipart message
-    final_message = MIMEMultipart('related')
-    final_message['Subject'] = subject
-    final_message['To'] = client_email
-    final_message['From'] = formatted_from
-    final_message['Bcc'] = bcc
-    final_message['Cc'] = cc
-
-    final_message.attach(message)
-
-    # Attach the logo image
-    logo_path = 'public/assets/brand/agm-logo.png'
-    with open(logo_path, 'rb') as logo_file:
-        logo_mime = MIMEImage(logo_file.read())
-        logo_mime.add_header('Content-ID', '<logo>')
-        final_message.attach(logo_mime)
-
-    logger.success(f'Successfully created {email_template} email with subject: {subject}')
-    raw_message = base64.urlsafe_b64encode(final_message.as_bytes()).decode()
-    return {'raw': raw_message}
-
-  @handle_exception
-  def send_email_confirmation(self, content, client_email, lang='es'):
-    subject = 'Confirmación de Correo Electrónico' if lang == 'es' else 'Email Confirmation'
-    email_template = f'application_email_confirmation_{lang}'
-    bcc = ""
-    cc = ""
-    return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)
-  
-  @handle_exception
-  def send_trade_ticket_email(self, content, client_email):
-    subject = 'Confirmación de Transacción'
-    email_template = 'trade_ticket'
-    return self.send_email(content, client_email, subject, email_template)
-
-  @handle_exception
-  def send_application_link_email(self, content, client_email, lang='es'):
-    subject = 'Link de formulario para apertura de cuenta' if lang == 'es' else 'Application Link'
-    email_template = f'application_link_{lang}'
-    bcc = ""
-    cc = "jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com"
-    return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)
-
-  @handle_exception
-  def send_task_reminder_email(self, content, agm_user_email):
-    subject = 'Task Reminder'
-    email_template = 'task_reminder'
-    bcc = ""
-    cc = ""
-    return self.send_email(content, agm_user_email, subject, email_template, bcc=bcc, cc=cc)
-  
-  @handle_exception
-  def send_lead_reminder_email(self, content, agm_user_email):
-    subject = 'Lead Reminder'
-    email_template = 'lead_reminder'
-    bcc = ""
-    cc = ""
-    return self.send_email(content, agm_user_email, subject, email_template, bcc=bcc, cc=cc)
-
-  @handle_exception
-  def send_credentials_email(self, content, client_email, lang='es'):
-    subject = 'Credenciales de acceso para cuenta AGM' if lang == 'es' else 'Access Credentials for AGM Account'
-    email_template = f'credentials_{lang}'
-    bcc = ""
-    cc = "jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com"
-    return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)
-
-  # New: Transfer instructions email
-  @handle_exception
-  def send_transfer_instructions_email(self, content, client_email, lang='es'):
-    """Send transfer instructions email in Spanish to the client."""
-    subject = 'Instrucciones de transferencia' if lang == 'es' else 'Transfer Instructions'
-    email_template = f'transfer_instructions_{lang}'
-    bcc = ""
-    cc = "jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com"
-    return self.send_email(content, client_email, subject, email_template, bcc=bcc, cc=cc)
-
-  # Reading
-  @handle_exception
-  def get_inbox_emails_from_sender(self, sender: str, include_body: bool = False):
-    """
-    Read all emails in the inbox that match the provided sender.
-
-    Args:
-      sender: Email address (or partial) of the sender to search for, e.g. "noreply@example.com".
-      include_body: If True, returns decoded text/html bodies when available.
-
-    Returns:
-      List of dictionaries with message metadata (and body if requested).
-    """
-    logger.announcement(f'Fetching inbox emails from sender: {sender}', type='info')
-
-    cutoff_ts = int((datetime.now(timezone.utc) - timedelta(days=30)).timestamp())
-    query = f'from:{sender} in:inbox after:{cutoff_ts}'
-    user_id = 'me'
-    messages = []
-
-    page_token = None
-    while True:
-      request = self.service.users().messages().list(userId=user_id, q=query, pageToken=page_token)
-      response = request.execute()
-
-      for item in response.get('messages', []):
-        msg = self.service.users().messages().get(
-          userId=user_id,
-          id=item['id'],
-          format='full' if include_body else 'metadata',
-          metadataHeaders=['Subject', 'From', 'To', 'Date']
-        ).execute()
-
-        headers = msg.get('payload', {}).get('headers', []) if msg.get('payload') else []
-        subject = self._get_header(headers, 'Subject')
-        from_header = self._get_header(headers, 'From')
-        to_header = self._get_header(headers, 'To')
-        date_header = self._get_header(headers, 'Date')
-
-        # Base message fields
-        message_entry = {
-          'id': msg.get('id'),
-          'threadId': msg.get('threadId'),
-          'snippet': msg.get('snippet'),
-          'subject': subject,
-          'from': from_header,
-          'to': to_header,
-          'date': date_header,
-        }
-
-        if include_body:
-          body = self._extract_message_body(msg.get('payload', {}))
-          message_entry['body'] = body
-
-        # Enrichment: parsed date (tz-aware), epoch seconds and ISO
-        try:
-          parsed_dt = parsedate_to_datetime(date_header) if date_header else None
-          if parsed_dt and parsed_dt.tzinfo is None:
-            parsed_dt = parsed_dt.replace(tzinfo=timezone.utc)
-          if parsed_dt:
-            message_entry['date_iso'] = parsed_dt.astimezone(timezone.utc).isoformat()
-            message_entry['date_ts'] = int(parsed_dt.timestamp())
-        except Exception:
-          pass
-
-        # No category-specific parsing here; keep parser generic.
-
-        messages.append(message_entry)
-
-      page_token = response.get('nextPageToken')
-      if not page_token:
-        break
-
-    logger.success(f'Fetched {len(messages)} emails from sender: {sender}')
-    return messages
-
-  def _extract_message_body(self, payload):
-    """
-    Extract text and html bodies from a Gmail message payload.
-
-    Returns a dict: { 'text': str, 'html': str }
-    """
-    result = {'text': '', 'html': ''}
-
-    if not payload:
-      return result
-
-    # Handle single-part messages
-    body = payload.get('body', {})
-    data = body.get('data')
-    mime_type = payload.get('mimeType', '')
-    if data:
-      try:
-        decoded = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
-      except Exception:
-        decoded = ''
-      if mime_type == 'text/plain':
-        result['text'] += decoded
-      elif mime_type == 'text/html':
-        result['html'] += decoded
-
-    # Handle multi-part messages recursively
-    def walk(parts):
-      for part in parts or []:
-        part_mime = part.get('mimeType', '')
-        part_body = part.get('body', {})
-        part_data = part_body.get('data')
-        if part_data:
-          try:
-            part_decoded = base64.urlsafe_b64decode(part_data).decode('utf-8', errors='ignore')
-          except Exception:
-            part_decoded = ''
-          if part_mime == 'text/plain':
-            result['text'] += part_decoded
-          elif part_mime == 'text/html':
-            result['html'] += part_decoded
-        # Nested parts
-        if part.get('parts'):
-          walk(part.get('parts'))
-
-    if payload.get('parts'):
-      walk(payload.get('parts'))
-
-    return result
-
-  def _get_header(self, headers, name):
-    for header in headers or []:
-      if header.get('name', '').lower() == name.lower():
-        return header.get('value')
-    return None
+    @handle_exception
+    def send_transfer_instructions_email(self, content, client_email, lang="es"):
+        subject = "Instrucciones de transferencia" if lang == "es" else "Transfer Instructions"
+        email_template = f"transfer_instructions_{lang}"
+        return self.send_email(
+            content,
+            client_email,
+            subject,
+            email_template,
+            bcc="",
+            cc="jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com",
+        )
