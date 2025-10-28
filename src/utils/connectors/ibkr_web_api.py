@@ -778,6 +778,7 @@ class IBKRWebAPI:
             if not token:
                 logger.error("No token found for SSO session creation")
                 return None
+            
             headers = {
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/jwt"
@@ -911,7 +912,8 @@ class IBKRWebAPI:
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
-
+    
+    @handle_exception
     def get_market_data_snapshot(self, conids: str):
         """
         Get the market data snapshot for the given conid.
@@ -991,6 +993,66 @@ class IBKRWebAPI:
                 raise Exception(f"Error {response.status_code}: {response.text}")
             
             logger.success("Market data snapshot fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def get_securities_by_symbol(self, symbol: str, sec_type: str):
+        """
+        Get the securities by symbol.
+        Args:
+            symbol (str): The symbol to get the securities for.
+            sec_type (str): The security type to get the securities for.
+        Returns:
+            dict: The securities.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/v1/api/iserver/secdef/search"
+            if not self.sso_token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {self.sso_token}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "symbol": symbol,
+                "secType": sec_type
+            }
+            response = requests.post(url, headers=headers, data=json.dumps(payload))
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success("Bonds searched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def get_security_info(self, issuer_id: str, sec_type: str):
+        """
+        Get the security info.
+        Args:
+            conid (str): The conid to get the security info for.
+            sec_type (str): The security type to get the security info for.
+        Returns:
+            dict: The security info.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/v1/api/iserver/secdef/info?issuerId={issuer_id}&secType={sec_type}"
+            if not self.sso_token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {self.sso_token}",
+                "Content-Type": "application/json"
+            }
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success("Security info fetched successfully")
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
