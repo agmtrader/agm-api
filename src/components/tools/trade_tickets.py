@@ -11,6 +11,7 @@ logger.announcement('Initializing Trade Tickets Service', type='info')
 agmToken = "t=419584539155539272816800"
 logger.announcement('Initialized Trade Tickets Service', type='success')
 
+
 @handle_exception
 def list_trade_tickets(query: dict):
     logger.info(f"Listing trade tickets")
@@ -139,7 +140,7 @@ def generate_trade_confirmation_message(flex_query_dict, indices):
             message += '\n'
 
     logger.success(f'Client confirmation message generated.')
-    return {'message': message}
+    return {'data': message}
 
 def extract_bond_details(description):
     
@@ -171,3 +172,20 @@ def extract_bond_details(description):
     
     logger.success(f'Extracted bond details: symbol={symbol}, coupon={coupon}, maturity={maturity}')
     return symbol, coupon, maturity
+
+@handle_exception
+def generate_excel_file(flex_query_dict, indices):
+    df = pd.DataFrame(flex_query_dict)
+    df = df.iloc[indices]
+    file_data = df.to_dict(orient='records')
+    return {'data': file_data}
+
+query_function_map = {
+    '986431': generate_trade_confirmation_message,
+    '999999': generate_excel_file,
+}
+
+@handle_exception
+def generate(query_id, flex_query_dict, indices):
+    generated = query_function_map[query_id](flex_query_dict=flex_query_dict, indices=indices)
+    return generated

@@ -1,5 +1,5 @@
 from flask import request, Blueprint
-from src.components.tools.trade_tickets import list_trade_tickets, read, generate_trade_confirmation_message
+from src.components.tools.trade_tickets import list_trade_tickets, read, generate
 from src.utils.response import format_response
 
 bp = Blueprint('trade_tickets', __name__)
@@ -22,11 +22,12 @@ def read_route():
     query_id = request.args.get('query_id', None)
     return read(query_id)
 
-@bp.route('/confirmation_message', methods=['POST'])
+@bp.route('/generate', methods=['POST'])
 @format_response
-def confirmation_message_route():
+def generate_route():
     payload = request.get_json(force=True)
+    query_id = payload['query_id']
     indices = payload['indices'].split(',')
     indices = [int(index) for index in indices]
     flex_query_dict = payload['flex_query_dict']
-    return generate_trade_confirmation_message(flex_query_dict=flex_query_dict, indices=indices)
+    return generate(query_id=query_id, flex_query_dict=flex_query_dict, indices=indices)
