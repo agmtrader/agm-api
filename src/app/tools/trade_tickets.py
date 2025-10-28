@@ -7,7 +7,14 @@ bp = Blueprint('trade_tickets', __name__)
 @bp.route('/list', methods=['GET'])
 @format_response
 def list_route():
-    return list_trade_tickets()
+    query = {}
+    id = request.args.get('id', None)
+    user_id = request.args.get('user_id', None)
+    if id:
+        query['id'] = id
+    if user_id:
+        query['user_id'] = user_id
+    return list_trade_tickets(query=query)
 
 @bp.route('/read', methods=['GET'])
 @format_response

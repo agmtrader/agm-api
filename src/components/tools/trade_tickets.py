@@ -12,9 +12,9 @@ agmToken = "t=419584539155539272816800"
 logger.announcement('Initialized Trade Tickets Service', type='success')
 
 @handle_exception
-def list_trade_tickets():
+def list_trade_tickets(query: dict):
     logger.info(f"Listing trade tickets")
-    trade_tickets = db.read('trade_ticket', query={})
+    trade_tickets = db.read('trade_ticket', query=query)
     return trade_tickets
 
 @handle_exception

@@ -215,6 +215,7 @@ class Supabase:
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             name = Column(Text, nullable=False)
+            query_id = Column(Text, nullable=False)
 
         class PendingTask(self.Base):
             __tablename__ = 'pending_task'
