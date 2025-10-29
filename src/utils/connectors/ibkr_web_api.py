@@ -760,6 +760,28 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
+    def get_status_of_banking_instruction(self, client_instruction_id: str):
+        """Get the status of a banking instruction via IBKR API."""
+        try:
+            original_creds = self._apply_credentials('br')
+            logger.info(f"Getting status of banking instruction for client instruction {client_instruction_id}")
+            url = f"{self.BASE_URL}/gw/api/v1/client-instructions/{client_instruction_id}"
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {token}"
+            }
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success(f"Status of banking instruction fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
     def view_withdrawable_cash(self, master_account: str, account_id: str, client_instruction_id: str):
         """View the withdrawable cash for the given account.
 
@@ -810,7 +832,7 @@ class IBKRWebAPI:
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Viewing active bank instructions for account {account_id}")
-            url = f"{self.BASE_URL}/gw/api/v1/external-cash-transfers/query"
+            url = f"{self.BASE_URL}/gw/api/v1/bank-instructions/query"
             token = self.get_bearer_token()
             if not token:
                 raise Exception("No token found")

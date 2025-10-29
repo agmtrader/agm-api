@@ -138,6 +138,11 @@ def get_product_country_bundles() -> dict:
     return ibkr_web_api.get_product_country_bundles()
 
 @handle_exception
+def get_status_of_banking_instruction(client_instruction_id: str = None) -> dict:
+    """Get the status of a banking instruction via IBKR API."""
+    return ibkr_web_api.get_status_of_banking_instruction(client_instruction_id=client_instruction_id)
+    
+@handle_exception
 def view_withdrawable_cash(master_account: str = None, account_id: str = None, client_instruction_id: str = None) -> dict:
     """View the withdrawable cash for the given account via IBKR API."""
     return ibkr_web_api.view_withdrawable_cash(master_account=master_account, account_id=account_id, client_instruction_id=client_instruction_id)

@@ -1,7 +1,7 @@
 from flask import Blueprint, request
 from requests import get
 from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_documents_by_account_id, create_bank_instruction
-from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, view_withdrawable_cash, view_active_bank_instructions
+from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, view_withdrawable_cash, view_active_bank_instructions, get_status_of_banking_instruction
 from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts
 from src.utils.response import format_response
 
@@ -116,19 +116,6 @@ def update_account_email_route():
         return {"error": "Missing reference_user_name or new_email"}, 400
     return update_account_email(reference_user_name=reference_user_name, new_email=new_email, access=access, master_account=master_account)
 
-@bp.route('/ibkr/security_questions', methods=['GET'])
-@format_response
-def get_security_questions_route():
-    return get_security_questions()
-
-@bp.route('/ibkr/forms', methods=['POST'])
-@format_response
-def get_forms_route():
-    payload = request.get_json(force=True)
-    forms_data = payload.get('forms', None)
-    master_account = payload.get('master_account', None)
-    return get_forms(forms=forms_data, master_account=master_account)
-
 @bp.route('/ibkr/pending_alias', methods=['PATCH'])
 @format_response
 def update_pending_aliases_route():
@@ -145,29 +132,53 @@ def add_trading_permissions_route():
     master_account = payload.get('master_account', None)    
     return add_trading_permissions(account_id=account_id, trading_permissions=trading_permissions, master_account=master_account)
 
+@bp.route('/ibkr/instruction', methods=['GET'])
+@format_response
+def get_status_of_banking_instruction_route():
+    client_instruction_id = request.args.get('client_instruction_id', None)
+    if not client_instruction_id:
+        return {"error": "Missing client_instruction_id"}, 400
+    return get_status_of_banking_instruction(client_instruction_id=client_instruction_id)
+
+@bp.route('/ibkr/bank_instructions', methods=['GET'])
+@format_response
+def view_active_bank_instructions_route():
+    master_account = request.args.get('master_account', None)
+    account_id = request.args.get('account_id', None)
+    client_instruction_id = request.args.get('client_instruction_id', None)
+    bank_instruction_method = request.args.get('bank_instruction_method', None)
+    if not master_account or not account_id or not client_instruction_id or not bank_instruction_method:
+        return {"error": "Missing master_account, account_id, client_instruction_id, or bank_instruction_method"}, 400
+    return view_active_bank_instructions(master_account=master_account, account_id=account_id, client_instruction_id=client_instruction_id, bank_instruction_method=bank_instruction_method)
+
+@bp.route('/ibkr/withdrawable_cash', methods=['GET'])
+@format_response
+def view_withdrawable_cash_route():
+    master_account = request.args.get('master_account', None)
+    account_id = request.args.get('account_id', None)
+    client_instruction_id = request.args.get('client_instruction_id', None)
+    if not master_account or not account_id or not client_instruction_id:
+        return {"error": "Missing master_account, account_id, or client_instruction_id"}, 400
+    return view_withdrawable_cash(master_account=master_account, account_id=account_id, client_instruction_id=client_instruction_id)
+
+# Enums
+@bp.route('/ibkr/security_questions', methods=['GET'])
+@format_response
+def get_security_questions_route():
+    return get_security_questions()
+
+@bp.route('/ibkr/forms', methods=['POST'])
+@format_response
+def get_forms_route():
+    payload = request.get_json(force=True)
+    forms_data = payload.get('forms', None)
+    master_account = payload.get('master_account', None)
+    return get_forms(forms=forms_data, master_account=master_account)
+
 @bp.route('/ibkr/product_country_bundles', methods=['GET'])
 @format_response
 def get_product_country_bundles_route():
     return get_product_country_bundles()
-
-@bp.route('/ibkr/withdrawable_cash', methods=['POST'])
-@format_response
-def view_withdrawable_cash_route():
-    payload = request.get_json(force=True)
-    master_account = payload.get('master_account')
-    account_id = payload.get('account_id')
-    client_instruction_id = payload.get('client_instruction_id')
-    return view_withdrawable_cash(master_account=master_account, account_id=account_id, client_instruction_id=client_instruction_id)
-
-@bp.route('/ibkr/active_bank_instructions', methods=['POST'])
-@format_response
-def view_active_bank_instructions_route():
-    payload = request.get_json(force=True)
-    master_account = payload.get('master_account')
-    account_id = payload.get('account_id')
-    client_instruction_id = payload.get('client_instruction_id')
-    bank_instruction_method = payload.get('bank_instruction_method')
-    return view_active_bank_instructions(master_account=master_account, account_id=account_id, client_instruction_id=client_instruction_id, bank_instruction_method=bank_instruction_method)
 
 # Trading API
 @bp.route('/ibkr/sso/create', methods=['POST'])
