@@ -1,7 +1,7 @@
 from flask import Blueprint, request
 from requests import get
-from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_documents_by_account_id, create_bank_instruction
-from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, view_withdrawable_cash, view_active_bank_instructions, get_status_of_banking_instruction
+from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_documents_by_account_id, create_instruction, read_instructions
+from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, view_withdrawable_cash, view_active_bank_instructions, get_status_of_instruction
 from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts
 from src.utils.response import format_response
 
@@ -14,13 +14,6 @@ def create_route():
     account_data = payload.get('account', None)
     return create_account(account=account_data)
 
-@bp.route('/bank_instruction', methods=['POST'])
-@format_response
-def create_bank_instruction_route():
-    payload = request.get_json(force=True)
-    account_id = payload.get('account_id', None)
-    return create_bank_instruction(account_id=account_id)
- 
 @bp.route('/read', methods=['GET'])
 @format_response        
 def read_route():
@@ -40,6 +33,22 @@ def update_account_route():
     query = payload.get('query', None)
     account = payload.get('account', None)
     return update_account(query=query, account=account)
+
+@bp.route('/instructions', methods=['POST'])
+@format_response
+def create_instruction_route():
+    payload = request.get_json(force=True)
+    account_id = payload.get('account_id', None)
+    return create_instruction(account_id=account_id)
+ 
+@bp.route('/instructions', methods=['GET'])
+@format_response
+def read_instruction_route():
+    query = {}  
+    account_id = request.args.get('account_id', None)
+    if account_id:  
+        query['account_id'] = account_id
+    return read_instructions(query=query)
 
 @bp.route('/documents', methods=['GET'])
 @format_response
@@ -132,14 +141,6 @@ def add_trading_permissions_route():
     master_account = payload.get('master_account', None)    
     return add_trading_permissions(account_id=account_id, trading_permissions=trading_permissions, master_account=master_account)
 
-@bp.route('/ibkr/instruction', methods=['GET'])
-@format_response
-def get_status_of_banking_instruction_route():
-    client_instruction_id = request.args.get('client_instruction_id', None)
-    if not client_instruction_id:
-        return {"error": "Missing client_instruction_id"}, 400
-    return get_status_of_banking_instruction(client_instruction_id=client_instruction_id)
-
 @bp.route('/ibkr/bank_instructions', methods=['GET'])
 @format_response
 def view_active_bank_instructions_route():
@@ -161,24 +162,13 @@ def view_withdrawable_cash_route():
         return {"error": "Missing master_account, account_id, or client_instruction_id"}, 400
     return view_withdrawable_cash(master_account=master_account, account_id=account_id, client_instruction_id=client_instruction_id)
 
-# Enums
-@bp.route('/ibkr/security_questions', methods=['GET'])
+@bp.route('/ibkr/instructions', methods=['GET'])
 @format_response
-def get_security_questions_route():
-    return get_security_questions()
-
-@bp.route('/ibkr/forms', methods=['POST'])
-@format_response
-def get_forms_route():
-    payload = request.get_json(force=True)
-    forms_data = payload.get('forms', None)
-    master_account = payload.get('master_account', None)
-    return get_forms(forms=forms_data, master_account=master_account)
-
-@bp.route('/ibkr/product_country_bundles', methods=['GET'])
-@format_response
-def get_product_country_bundles_route():
-    return get_product_country_bundles()
+def get_status_of_instruction_route():
+    client_instruction_id = request.args.get('client_instruction_id', None)
+    if not client_instruction_id:
+        return {"error": "Missing client_instruction_id"}, 400
+    return get_status_of_instruction(client_instruction_id=client_instruction_id)
 
 # Trading API
 @bp.route('/ibkr/sso/create', methods=['POST'])
@@ -203,3 +193,22 @@ def logout_of_brokerage_session_route():
 @format_response
 def get_brokerage_accounts_route():
     return get_brokerage_accounts()
+
+# Enums
+@bp.route('/ibkr/security_questions', methods=['GET'])
+@format_response
+def get_security_questions_route():
+    return get_security_questions()
+
+@bp.route('/ibkr/forms', methods=['POST'])
+@format_response
+def get_forms_route():
+    payload = request.get_json(force=True)
+    forms_data = payload.get('forms', None)
+    master_account = payload.get('master_account', None)
+    return get_forms(forms=forms_data, master_account=master_account)
+
+@bp.route('/ibkr/product_country_bundles', methods=['GET'])
+@format_response
+def get_product_country_bundles_route():
+    return get_product_country_bundles()

@@ -530,100 +530,6 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def get_forms(self, forms: list = None, master_account: str = None):
-        try:
-            original_creds = self._apply_credentials(master_account)
-            logger.info("Getting forms")
-            url = f"{self.BASE_URL}/gw/api/v1/forms?fromDate=2016-10-20&toDate=&getDocs=T"
-            if forms:
-                forms = ",".join(str(f) for f in forms)
-                url += f"&formNo={forms}"
-            
-            token = self.get_bearer_token()
-            if not token:
-                raise Exception("No token found")
-            headers = {
-                "Authorization": f"Bearer {token}"
-            }
-            import base64
-            import io
-            import zipfile
-
-            response = requests.get(url, headers=headers)
-            if response.status_code != 200:
-                raise Exception(f"Error {response.status_code}: {response.text}")
-            logger.success(f"Form fetched successfully")
-            result = response.json()
-
-            # Filter formDetails to only English forms
-            form_details = result.get('formDetails')
-            if form_details and isinstance(form_details, list):
-                en_forms = [f for f in form_details if f.get('language') == 'en']
-                result['formDetails'] = en_forms
-            else:
-                en_forms = []
-
-            file_data = result.get('fileData')
-            if file_data and 'data' in file_data:
-                file_name = file_data.get('name')
-                data_b64 = file_data['data']
-                if file_name and file_name.endswith('.zip') and en_forms:
-                    # Extract the PDF matching the English form fileName
-                    pdf_file_name = en_forms[0].get('fileName')
-                    zip_bytes = base64.b64decode(data_b64)
-                    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-                        if pdf_file_name and pdf_file_name in zf.namelist():
-                            with zf.open(pdf_file_name) as pdf_file:
-                                pdf_bytes = pdf_file.read()
-                                pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
-                                file_data['data'] = pdf_b64
-                                file_data['name'] = pdf_file_name
-                        else:
-                            logger.error(f'English PDF file {pdf_file_name} not found in ZIP archive')
-                            # fallback: first PDF in zip
-                            for name in zf.namelist():
-                                if name.lower().endswith('.pdf'):
-                                    with zf.open(name) as pdf_file:
-                                        pdf_bytes = pdf_file.read()
-                                        pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
-                                        file_data['data'] = pdf_b64
-                                        file_data['name'] = name
-                                        break
-                elif file_name and file_name.endswith('.pdf') and en_forms:
-                    # Only keep fileData if it matches an English form
-                    if file_name != en_forms[0].get('fileName'):
-                        logger.info(f'PDF file {file_name} does not match English form {en_forms[0].get("fileName")}')
-                        file_data['data'] = ''
-            return result
-        finally:
-            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
-
-    @handle_exception
-    def get_security_questions(self):
-        """Retrieve list of security questions from IBKR."""
-        try:
-            original_creds = self._apply_credentials('br')
-            logger.info("Fetching security questions")
-
-            url = f"{self.BASE_URL}/gw/api/v1/enumerations/security-questions"
-
-            token = self.get_bearer_token()
-            if not token:
-                raise Exception("No token found")
-
-            headers = {"Authorization": f"Bearer {token}"}
-
-            response = requests.get(url, headers=headers)
-            if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
-
-            logger.success("Security questions fetched successfully")
-            return response.json()
-        finally:
-            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
-
-    @handle_exception
     def update_account_email(self, reference_user_name: str, new_email: str, access: bool = True, master_account: str = None):
         """Update the email associated with a given IBKR user name.
 
@@ -733,55 +639,6 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def get_product_country_bundles(self):
-        """Retrieve enumeration list for product country bundles from IBKR."""
-        try:
-            original_creds = self._apply_credentials('br')
-            logger.info("Fetching product country bundles enumerations")
-
-            url = f"{self.BASE_URL}/gw/api/v1/enumerations/product-country-bundles"
-
-            token = self.get_bearer_token()
-            if not token:
-                raise Exception("No token found")
-
-            headers = {"Authorization": f"Bearer {token}"}
-
-            response = requests.get(url, headers=headers)
-            if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
-
-            logger.success("Product country bundles fetched successfully")
-            return response.json()
-        except Exception as e:
-            logger.error(f"Error fetching product country bundles: {response.text}")
-        finally:
-            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
-
-    @handle_exception
-    def get_status_of_banking_instruction(self, client_instruction_id: str):
-        """Get the status of a banking instruction via IBKR API."""
-        try:
-            original_creds = self._apply_credentials('br')
-            logger.info(f"Getting status of banking instruction for client instruction {client_instruction_id}")
-            url = f"{self.BASE_URL}/gw/api/v1/client-instructions/{client_instruction_id}"
-            token = self.get_bearer_token()
-            if not token:
-                raise Exception("No token found")
-            headers = {
-                "Authorization": f"Bearer {token}"
-            }
-            response = requests.get(url, headers=headers)
-            if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
-            logger.success(f"Status of banking instruction fetched successfully")
-            return response.json()
-        finally:
-            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
-
-    @handle_exception
     def view_withdrawable_cash(self, master_account: str, account_id: str, client_instruction_id: str):
         """View the withdrawable cash for the given account.
 
@@ -818,6 +675,7 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @handle_exception
     def view_active_bank_instructions(self, master_account: str, account_id: str, client_instruction_id: str, bank_instruction_method: str):
         """View the active bank instructions for the given account.
 
@@ -851,6 +709,28 @@ class IBKRWebAPI:
             response = requests.post(url, headers=headers, data=signed_jwt)
             if response.status_code != 200:
                 raise Exception(f"Error {response.status_code}: {response.text}")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def get_status_of_instruction(self, client_instruction_id: str):
+        """Get the status of an instruction via IBKR API."""
+        try:
+            original_creds = self._apply_credentials('br')
+            logger.info(f"Getting status of instruction for client instruction {client_instruction_id}")
+            url = f"{self.BASE_URL}/gw/api/v1/client-instructions/{client_instruction_id}"
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {token}"
+            }
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success(f"Status of instruction fetched successfully")
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
@@ -1174,6 +1054,153 @@ class IBKRWebAPI:
                 raise Exception(f"Error {response.status_code}: {response.text}")
             logger.success("Security info fetched successfully")
             return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    def get_all_conids_from_exchange(self, exchange: str):
+        """
+        Get all conids from an exchange.
+        Args:
+            exchange (str): The exchange to get the conids for.
+        Returns:
+            dict: The conids.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/v1/api/trsrv/all-conids?exchange={exchange}"
+            if not self.sso_token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {self.sso_token}"
+            }
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success("Conids fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    # Enums
+    @handle_exception
+    def get_forms(self, forms: list = None, master_account: str = None):
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info("Getting forms")
+            url = f"{self.BASE_URL}/gw/api/v1/forms?fromDate=2016-10-20&toDate=&getDocs=T"
+            if forms:
+                forms = ",".join(str(f) for f in forms)
+                url += f"&formNo={forms}"
+            
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {token}"
+            }
+            import base64
+            import io
+            import zipfile
+
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success(f"Form fetched successfully")
+            result = response.json()
+
+            # Filter formDetails to only English forms
+            form_details = result.get('formDetails')
+            if form_details and isinstance(form_details, list):
+                en_forms = [f for f in form_details if f.get('language') == 'en']
+                result['formDetails'] = en_forms
+            else:
+                en_forms = []
+
+            file_data = result.get('fileData')
+            if file_data and 'data' in file_data:
+                file_name = file_data.get('name')
+                data_b64 = file_data['data']
+                if file_name and file_name.endswith('.zip') and en_forms:
+                    # Extract the PDF matching the English form fileName
+                    pdf_file_name = en_forms[0].get('fileName')
+                    zip_bytes = base64.b64decode(data_b64)
+                    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+                        if pdf_file_name and pdf_file_name in zf.namelist():
+                            with zf.open(pdf_file_name) as pdf_file:
+                                pdf_bytes = pdf_file.read()
+                                pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
+                                file_data['data'] = pdf_b64
+                                file_data['name'] = pdf_file_name
+                        else:
+                            logger.error(f'English PDF file {pdf_file_name} not found in ZIP archive')
+                            # fallback: first PDF in zip
+                            for name in zf.namelist():
+                                if name.lower().endswith('.pdf'):
+                                    with zf.open(name) as pdf_file:
+                                        pdf_bytes = pdf_file.read()
+                                        pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
+                                        file_data['data'] = pdf_b64
+                                        file_data['name'] = name
+                                        break
+                elif file_name and file_name.endswith('.pdf') and en_forms:
+                    # Only keep fileData if it matches an English form
+                    if file_name != en_forms[0].get('fileName'):
+                        logger.info(f'PDF file {file_name} does not match English form {en_forms[0].get("fileName")}')
+                        file_data['data'] = ''
+            return result
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def get_security_questions(self):
+        """Retrieve list of security questions from IBKR."""
+        try:
+            original_creds = self._apply_credentials('br')
+            logger.info("Fetching security questions")
+
+            url = f"{self.BASE_URL}/gw/api/v1/enumerations/security-questions"
+
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            headers = {"Authorization": f"Bearer {token}"}
+
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Security questions fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def get_product_country_bundles(self):
+        """Retrieve enumeration list for product country bundles from IBKR."""
+        try:
+            original_creds = self._apply_credentials('br')
+            logger.info("Fetching product country bundles enumerations")
+
+            url = f"{self.BASE_URL}/gw/api/v1/enumerations/product-country-bundles"
+
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            headers = {"Authorization": f"Bearer {token}"}
+
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Product country bundles fetched successfully")
+            return response.json()
+        except Exception as e:
+            logger.error(f"Error fetching product country bundles: {response.text}")
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 

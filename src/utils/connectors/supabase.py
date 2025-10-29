@@ -166,8 +166,8 @@ class Supabase:
             previous_type = Column(Text, nullable=True)
             new_type = Column(Text, nullable=True)
 
-        class AccountBankInstruction(self.Base):
-            __tablename__ = 'account_bank_instruction'
+        class AccountInstruction(self.Base):
+            __tablename__ = 'account_instruction'
             id = Column(BigInteger, primary_key=True, autoincrement=True)
             account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
@@ -265,7 +265,7 @@ class Supabase:
         self.FeeTemplateRequest = FeeTemplateRequest
         self.AdvisorChangeRequest = AdvisorChangeRequest
         self.ManagementTypeRequest = ManagementTypeRequest
-        self.AccountBankInstruction = AccountBankInstruction
+        self.AccountInstruction = AccountInstruction
         
         # Risk Profiles
         self.RiskProfile = RiskProfile    

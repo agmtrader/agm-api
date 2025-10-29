@@ -16,13 +16,18 @@ def create_account(account: dict = None) -> dict:
     return {'id': account_id}
 
 @handle_exception
-def create_bank_instruction(account_id: str = None) -> dict:
-    return db.create(table='account_bank_instruction', data={'account_id': account_id})
+def create_instruction(account_id: str = None) -> dict:
+    return db.create(table='account_instruction', data={'account_id': account_id})
 
 @handle_exception
 def read_accounts(query: dict = None) -> list:
     accounts = db.read(table='account', query=query)
     return accounts
+
+@handle_exception
+def read_instructions(query: dict = None) -> list:
+    instructions = db.read(table='account_instruction', query=query)
+    return instructions
 
 @handle_exception
 def update_account(query: dict = None, account: dict = None) -> dict:
@@ -52,7 +57,9 @@ def read_documents_by_account_id(account_id: str = None) -> list:
             documents.append(d)
     return documents
 
-# IBKR Web API
+"""
+Account Management API
+"""
 @handle_exception
 def list_accounts(master_account: str = None) -> dict:
     return ibkr_web_api.list_accounts(master_account=master_account)
@@ -70,18 +77,6 @@ def get_registration_tasks(account_id: str = None, master_account: str = None) -
     return ibkr_web_api.get_registration_tasks(account_id=account_id, master_account=master_account)
 
 @handle_exception
-def submit_documents(document_submission: dict = None, master_account: str = None) -> dict:
-    return ibkr_web_api.submit_documents(document_submission=document_submission, master_account=master_account)
-
-@handle_exception
-def get_forms(forms: list = None, master_account: str = None) -> dict:
-    return ibkr_web_api.get_forms(forms=forms, master_account=master_account)
-
-@handle_exception
-def process_documents(documents: list = None, master_account: str = None) -> dict:
-    return ibkr_web_api.process_documents(documents=documents, master_account=master_account)
-
-@handle_exception
 def apply_fee_template(account_id: str = None, template_name: str = None, master_account: str = None) -> dict:
     """Apply a fee template to an account via IBKR API."""
     return ibkr_web_api.apply_fee_template(account_id=account_id, template_name=template_name, master_account=master_account)
@@ -92,14 +87,13 @@ def update_account_alias(account_id: str = None, new_alias: str = None, master_a
     return ibkr_web_api.update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
 
 @handle_exception
+def submit_documents(document_submission: dict = None, master_account: str = None) -> dict:
+    return ibkr_web_api.submit_documents(document_submission=document_submission, master_account=master_account)
+
+@handle_exception
 def update_account_email(reference_user_name: str = None, new_email: str = None, access: bool = True, master_account: str = None) -> dict:
     """Update account email via IBKR API."""
     return ibkr_web_api.update_account_email(reference_user_name=reference_user_name, new_email=new_email, access=access, master_account=master_account)
-
-@handle_exception
-def get_security_questions() -> dict:
-    """Get security questions via IBKR API."""
-    return ibkr_web_api.get_security_questions()
 
 @handle_exception
 def update_pending_aliases(master_account: str = None) -> dict:
@@ -133,14 +127,9 @@ def add_trading_permissions(account_id: str = None, trading_permissions: list = 
     return ibkr_web_api.add_trading_permissions(account_id=account_id, trading_permissions=trading_permissions, master_account=master_account)
 
 @handle_exception
-def get_product_country_bundles() -> dict:
-    """Get product country bundles enumeration via IBKR API."""
-    return ibkr_web_api.get_product_country_bundles()
-
-@handle_exception
-def get_status_of_banking_instruction(client_instruction_id: str = None) -> dict:
+def get_status_of_instruction(client_instruction_id: str = None) -> dict:
     """Get the status of a banking instruction via IBKR API."""
-    return ibkr_web_api.get_status_of_banking_instruction(client_instruction_id=client_instruction_id)
+    return ibkr_web_api.get_status_of_instruction(client_instruction_id=client_instruction_id)
     
 @handle_exception
 def view_withdrawable_cash(master_account: str = None, account_id: str = None, client_instruction_id: str = None) -> dict:
@@ -172,3 +161,18 @@ def logout_of_brokerage_session() -> dict:
 def get_brokerage_accounts() -> dict:
     """Get brokerage accounts via IBKR API."""
     return ibkr_web_api.get_brokerage_accounts()
+
+# Enums
+@handle_exception
+def get_security_questions() -> dict:
+    """Get security questions via IBKR API."""
+    return ibkr_web_api.get_security_questions()
+
+@handle_exception
+def get_product_country_bundles() -> dict:
+    """Get product country bundles enumeration via IBKR API."""
+    return ibkr_web_api.get_product_country_bundles()
+
+@handle_exception
+def get_forms(forms: list = None, master_account: str = None) -> dict:
+    return ibkr_web_api.get_forms(forms=forms, master_account=master_account)
