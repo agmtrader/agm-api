@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, ForeignKey, Text, create_engine, Column, Integer
+from sqlalchemy import BigInteger, Boolean, ForeignKey, Text, create_engine, Column, Integer
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 import uuid
 from sqlalchemy.ext.declarative import declarative_base
@@ -166,6 +166,14 @@ class Supabase:
             previous_type = Column(Text, nullable=True)
             new_type = Column(Text, nullable=True)
 
+        class AccountBankInstruction(self.Base):
+            __tablename__ = 'account_bank_instruction'
+            id = Column(BigInteger, primary_key=True, autoincrement=True)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+
+
         class AccountDocument(self.Base):
             __tablename__ = 'account_document'
             id = Column(UUID(as_uuid=True), unique=True, primary_key=True, default=uuid.uuid4)
@@ -210,7 +218,7 @@ class Supabase:
 
         class TradeTicket(self.Base):
             __tablename__ = 'trade_ticket'
-            id = Column(Text, primary_key=True)
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
@@ -239,7 +247,7 @@ class Supabase:
             description = Column(Text, nullable=False)
             completed = Column(Boolean, nullable=False, default=False)
             date = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-
+        
         # Contacts
         self.User = User
         self.Contact = Contact
@@ -257,6 +265,7 @@ class Supabase:
         self.FeeTemplateRequest = FeeTemplateRequest
         self.AdvisorChangeRequest = AdvisorChangeRequest
         self.ManagementTypeRequest = ManagementTypeRequest
+        self.AccountBankInstruction = AccountBankInstruction
         
         # Risk Profiles
         self.RiskProfile = RiskProfile    

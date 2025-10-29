@@ -16,6 +16,10 @@ def create_account(account: dict = None) -> dict:
     return {'id': account_id}
 
 @handle_exception
+def create_bank_instruction(account_id: str = None) -> dict:
+    return db.create(table='account_bank_instruction', data={'account_id': account_id})
+
+@handle_exception
 def read_accounts(query: dict = None) -> list:
     accounts = db.read(table='account', query=query)
     return accounts
@@ -132,6 +136,16 @@ def add_trading_permissions(account_id: str = None, trading_permissions: list = 
 def get_product_country_bundles() -> dict:
     """Get product country bundles enumeration via IBKR API."""
     return ibkr_web_api.get_product_country_bundles()
+
+@handle_exception
+def view_withdrawable_cash(master_account: str = None, account_id: str = None, client_instruction_id: str = None) -> dict:
+    """View the withdrawable cash for the given account via IBKR API."""
+    return ibkr_web_api.view_withdrawable_cash(master_account=master_account, account_id=account_id, client_instruction_id=client_instruction_id)
+
+@handle_exception
+def view_active_bank_instructions(master_account: str = None, account_id: str = None, client_instruction_id: str = None, bank_instruction_method: str = None) -> dict:
+    """View the active bank instructions for the given account via IBKR API."""
+    return ibkr_web_api.view_active_bank_instructions(master_account=master_account, account_id=account_id, client_instruction_id=client_instruction_id, bank_instruction_method=bank_instruction_method)
 
 # Trading API
 @handle_exception

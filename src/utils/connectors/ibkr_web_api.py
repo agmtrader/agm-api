@@ -759,6 +759,80 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @handle_exception
+    def view_withdrawable_cash(self, master_account: str, account_id: str, client_instruction_id: str):
+        """View the withdrawable cash for the given account.
+
+        Args:
+            master_account (str): The master account type ('ad' or 'br').
+            account_id (str): The IBKR account ID.
+            client_instruction_id (str): The client instruction ID.
+        Returns:
+            dict: The withdrawable cash.
+        """
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Viewing withdrawable cash for account {account_id}")
+            url = f"{self.BASE_URL}/gw/api/v1/external-cash-transfers/query"
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {token}"
+            }
+            body = {
+                "instructionType": "QUERY_WITHDRAWABLE_FUNDS",
+                "instruction": {
+                    "clientInstructionId": client_instruction_id,
+                    "accountId": account_id,
+                    "currency": "USD"
+                }
+            }
+            signed_jwt = self.sign_request(body)
+            response = requests.post(url, headers=headers, data=signed_jwt)
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    def view_active_bank_instructions(self, master_account: str, account_id: str, client_instruction_id: str, bank_instruction_method: str):
+        """View the active bank instructions for the given account.
+
+        Args:
+            master_account (str): The master account type ('ad' or 'br').
+            account_id (str): The IBKR account ID.
+            client_instruction_id (str): The client instruction ID.
+            bank_instruction_method (str): The bank instruction method.
+        Returns:    
+            dict: The active bank instructions.
+        """
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Viewing active bank instructions for account {account_id}")
+            url = f"{self.BASE_URL}/gw/api/v1/external-cash-transfers/query"
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {token}"
+            }
+            body = {
+                "instructionType": "QUERY_BANK_INSTRUCTION",
+                "instruction": {
+                    "clientInstructionId": client_instruction_id,
+                    "accountId": account_id,
+                    "bankInstructionMethod": bank_instruction_method
+                }
+            }
+            signed_jwt = self.sign_request(body)
+            response = requests.post(url, headers=headers, data=signed_jwt)
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
     # Trading API
     @handle_exception
     def create_sso_session(self, credential: str, ip: str) -> str:
@@ -992,8 +1066,32 @@ class IBKRWebAPI:
                 logger.error(f"Error {response.status_code}: {response.text}")
                 raise Exception(f"Error {response.status_code}: {response.text}")
             
+            # Translate numeric field identifiers to their semantic names for easier consumption
+            raw_data = response.json()
+
+            def _translate_fields(item: dict):
+                """Replace numeric field codes with MarketDataField names in a single snapshot item."""
+                mapped = {}
+                for key, value in item.items():
+                    if isinstance(key, str) and key.isdigit():
+                        try:
+                            mapped[MarketDataField(int(key)).name] = value
+                        except ValueError:
+                            # Unknown field code – keep original key
+                            mapped[key] = value
+                    else:
+                        mapped[key] = value
+                return mapped
+
+            if isinstance(raw_data, list):
+                mapped_data = [_translate_fields(entry) for entry in raw_data]
+            elif isinstance(raw_data, dict):
+                mapped_data = _translate_fields(raw_data)
+            else:
+                mapped_data = raw_data
+            
             logger.success("Market data snapshot fetched successfully")
-            return response.json()
+            return mapped_data
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 

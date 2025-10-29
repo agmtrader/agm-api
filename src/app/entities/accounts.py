@@ -1,7 +1,7 @@
 from flask import Blueprint, request
 from requests import get
-from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_documents_by_account_id
-from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles
+from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_documents_by_account_id, create_bank_instruction
+from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, view_withdrawable_cash, view_active_bank_instructions
 from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts
 from src.utils.response import format_response
 
@@ -13,6 +13,13 @@ def create_route():
     payload = request.get_json(force=True)
     account_data = payload.get('account', None)
     return create_account(account=account_data)
+
+@bp.route('/bank_instruction', methods=['POST'])
+@format_response
+def create_bank_instruction_route():
+    payload = request.get_json(force=True)
+    account_id = payload.get('account_id', None)
+    return create_bank_instruction(account_id=account_id)
  
 @bp.route('/read', methods=['GET'])
 @format_response        
@@ -142,6 +149,25 @@ def add_trading_permissions_route():
 @format_response
 def get_product_country_bundles_route():
     return get_product_country_bundles()
+
+@bp.route('/ibkr/withdrawable_cash', methods=['POST'])
+@format_response
+def view_withdrawable_cash_route():
+    payload = request.get_json(force=True)
+    master_account = payload.get('master_account')
+    account_id = payload.get('account_id')
+    client_instruction_id = payload.get('client_instruction_id')
+    return view_withdrawable_cash(master_account=master_account, account_id=account_id, client_instruction_id=client_instruction_id)
+
+@bp.route('/ibkr/active_bank_instructions', methods=['POST'])
+@format_response
+def view_active_bank_instructions_route():
+    payload = request.get_json(force=True)
+    master_account = payload.get('master_account')
+    account_id = payload.get('account_id')
+    client_instruction_id = payload.get('client_instruction_id')
+    bank_instruction_method = payload.get('bank_instruction_method')
+    return view_active_bank_instructions(master_account=master_account, account_id=account_id, client_instruction_id=client_instruction_id, bank_instruction_method=bank_instruction_method)
 
 # Trading API
 @bp.route('/ibkr/sso/create', methods=['POST'])
