@@ -99,10 +99,18 @@ def binaryXMLtoDF(binaryXMLData):
     reader = csv.reader(xml_data.splitlines(), skipinitialspace=True)
 
     rows = []
+    header_row = None
 
     for row in reader:
         if ('BOA' not in row) and ('BOF' not in row) and ('BOS' not in row) and ('EOS' not in row) and ('EOA' not in row) and ('EOF' not in row) and ('MSG' not in row):
-            rows.append(row)
+            # Capture the header row once and ignore subsequent duplicates
+            if header_row is None:
+                header_row = row
+                rows.append(row)
+            elif row == header_row:
+                continue  # Skip duplicated header rows
+            else:
+                rows.append(row)
     
     df = pd.DataFrame(rows[1:], columns=rows[0])
     return df

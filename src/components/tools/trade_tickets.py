@@ -175,10 +175,73 @@ def extract_bond_details(description):
 
 @handle_exception
 def generate_excel_file(flex_query_dict, indices):
-    df = pd.DataFrame(flex_query_dict)
-    df = df.iloc[indices]
-    file_data = df.to_dict(orient='records')
-    return {'data': file_data}
+    logger.info('Generating trade ticket. Processing data...')
+
+    # Create dataframe with indexed rows only
+    flex_query_df = pd.DataFrame(flex_query_dict)
+    df_indexed = flex_query_df.iloc[indices].copy()
+
+    symbol, coupon, maturity = extract_bond_details(df_indexed['Description'].iloc[0])
+
+    if (df_indexed.loc[:,'AccruedInterest'] == 0).any():
+        logger.error('At least one row has AccruedInterest value of 0.')
+        raise Exception('At least one row has AccruedInterest value of 0.')
+
+    df_indexed['Coupon'] = coupon
+    df_indexed['Maturity'] = maturity
+
+    df_indexed.loc[:,'Quantity'] = df_indexed['Quantity'].astype(float).abs()
+    df_indexed.loc[:,'AccruedInterest'] = df_indexed['AccruedInterest'].astype(float).abs()
+    df_indexed.loc[:,'NetCash'] = df_indexed['NetCash'].astype(float).abs()
+    df_indexed.loc[:,'Amount'] = df_indexed['NetCash'].astype(float).abs()
+
+    try:
+        df_indexed.loc[:,'Accrued (Days)'] = round((df_indexed['AccruedInterest'].astype(float)) / (df_indexed['Coupon'].astype(float)/100 * df_indexed['Quantity'].astype(float)) * 360).astype(float)
+    except:
+        df_indexed.loc[:,'Accrued (Days)'] = 0
+
+    df_indexed.loc[:,'TotalAmount'] = round(df_indexed['AccruedInterest'] + df_indexed['NetCash'], 2).astype(float)
+
+    # TODO fix this
+    df_indexed.loc[:,'Price (including Commissions)'] = round((df_indexed['NetCash']/df_indexed['Quantity']) * 100, 4).astype(float)
+    
+    df_indexed['Price'] = df_indexed['Price'].astype(float)
+    df_indexed = df_indexed.fillna('')
+
+    # Generate email message
+    trade_confirmation_columns = [
+        "ClientAccountID",
+        "AccountAlias",
+        "CurrencyPrimary",
+
+        "AssetClass",
+        "Symbol",
+        "Description",
+        "Conid",
+        "SecurityID",
+        "SecurityIDType",
+        "CUSIP",
+        "ISIN",
+        "FIGI",
+        "Issuer",
+        "Maturity",
+
+        "Buy/Sell",
+        "SettleDate",
+        "TradeDate",
+        "Exchange",
+        "Quantity",
+        "AccruedInterest",
+        "Accrued (Days)",
+        "Price",
+        "Price (including Commissions)",
+        "Amount",
+        "TotalAmount"
+    ]
+
+    df_indexed = df_indexed[trade_confirmation_columns]
+    indexed_dict = df_indexed.to_dict(orient='records')
+    return {'data': indexed_dict}
 
 query_function_map = {
     '986431': generate_trade_confirmation_message,
