@@ -127,6 +127,11 @@ def add_trading_permissions(account_id: str = None, trading_permissions: list = 
     return ibkr_web_api.add_trading_permissions(account_id=account_id, trading_permissions=trading_permissions, master_account=master_account)
 
 @handle_exception
+def add_clp_capability(account_id: str = None, document_submission: dict = None, master_account: str = None) -> dict:
+    """Add CLP capability to an account via IBKR API."""
+    return ibkr_web_api.add_clp_capability(account_id=account_id, document_submission=document_submission, master_account=master_account)
+
+@handle_exception
 def get_status_of_instruction(client_instruction_id: str = None) -> dict:
     """Get the status of a banking instruction via IBKR API."""
     return ibkr_web_api.get_status_of_instruction(client_instruction_id=client_instruction_id)

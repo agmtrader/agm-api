@@ -399,95 +399,6 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def process_documents(self, documents: list = None, master_account: str = None) -> dict:
-        """Auto-sign and upload IBKR forms given their form numbers.
-
-        The caller should supply a plain list/array of form numbers, e.g. `["2001", "8001"]`.
-        This method will:
-            1. Fetch each form via ``get_forms``.
-            2. Build the required *documents* payload (metadata + PDF bytes).
-            3. Sign the resulting *DocumentSubmissionRequest* as a JWT and POST it to
-               ``/gw/api/v1/accounts/documents``.
-        """
-        try:
-            original_creds = self._apply_credentials(master_account)
-            if documents is None or not isinstance(documents, list):
-                raise Exception("process_documents expects a list of form numbers (strings or ints).")
-
-            form_numbers = [str(f) for f in documents]
-
-            logger.info(f"Building DocumentSubmissionRequest for forms: {form_numbers}")
-
-            timestamp = int(datetime.utcnow().strftime("%Y%m%d%H%M%S"))
-
-            built_documents = []
-            for form_no in form_numbers:
-                try:
-                    form_result = self.get_forms(forms=[form_no])
-                    form_details = form_result.get("formDetails", [])
-                    if not form_details:
-                        logger.warning(f"No formDetails returned for form {form_no}")
-                        continue
-
-                    form = form_details[0]
-                    file_data = form_result.get("fileData", {})
-
-                    built_documents.append({
-                        "signedBy": ["Account Holder"],
-                        "attachedFile": {
-                            "fileName": form.get("fileName"),
-                            "fileLength": form.get("fileLength"),
-                            "sha1Checksum": form.get("sha1Checksum"),
-                        },
-                        "formNumber": int(form.get("formNumber")),
-                        "validAddress": False,
-                        "execLoginTimestamp": timestamp,
-                        "execTimestamp": timestamp,
-                        "payload": {
-                            "mimeType": "application/pdf",
-                            "data": file_data.get("data"),
-                        },
-                    })
-                except Exception as e:
-                    logger.error(f"Failed to build document for form {form_no}: {e}")
-
-            if not built_documents:
-                raise Exception("Failed to build any document payloads – all form fetches failed.")
-
-            submission_request = {
-                "processDocuments": {
-                    "documents": built_documents,
-                    "inputLanguage": "en",
-                    "translation": False,
-                }
-            }
-
-            logger.info("Uploading documents via /accounts/documents endpoint")
-            url = f"{self.BASE_URL}/gw/api/v1/accounts/documents"
-
-            token = self.get_bearer_token()
-            if not token:
-                raise Exception("No token found")
-
-            signed_jwt = self.sign_request(submission_request)
-
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/jwt"
-            }
-
-            response = requests.post(url, headers=headers, data=signed_jwt)
-            logger.info(f"Response: {response.text}")
-            
-            if response.status_code != 200:
-                raise Exception(f"Error {response.status_code}: {response.text}")
-
-            logger.success("Documents uploaded successfully")
-            return response.json()
-        finally:
-            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
-
-    @handle_exception
     def send_to_ibkr(self, application, master_account: str = None):
         try:
             original_creds = self._apply_credentials(master_account)
@@ -637,6 +548,61 @@ class IBKRWebAPI:
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def add_clp_capability(self, account_id: str, document_submission: dict = None, master_account: str = None) -> dict:
+        """Add trading permissions to the given account.
+
+        Args:
+            account_id (str): IBKR account id that will receive the permissions.
+            master_account (str | None): Credential set to use (``ad`` or ``br``). Defaults to ``None`` to use current creds.
+
+        Returns:
+            dict: API response from IBKR.
+        """
+        try:
+
+            if not document_submission:
+                raise Exception("Document submission is required")
+
+            self.submit_documents(document_submission=document_submission, master_account=master_account)
+
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Adding CLP capability for account {account_id}")
+
+            url = f"{self.BASE_URL}/gw/api/v1/accounts"
+
+            body = {
+                "accountManagementRequests": {
+                    "addCLPCapability": {
+                        "accountId": account_id,
+                    }
+                }
+            }
+
+            logger.info(f"Body: {body}")
+
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            signed_jwt = self.sign_request(body)
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt",
+            }
+
+            response = requests.patch(url, headers=headers, data=signed_jwt)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Trading permissions added successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
 
     @handle_exception
     def view_withdrawable_cash(self, master_account: str, account_id: str, client_instruction_id: str):
