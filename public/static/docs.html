@@ -79,676 +79,166 @@
             <li><code>/docs</code> - API documentation</li>
             <li><code>/</code> - Index page</li>
             <li><code>/token</code> - Token generation</li>
-            <li><code>/oauth/login</code> - OAuth login</li>
-            <li><code>/oauth/create</code> - OAuth account creation</li>
         </ul>
 
-        <p>For authenticated endpoints, include the JWT token in the Authorization header:</p>
+        <p>Include the JWT token in the Authorization header for authenticated requests:</p>
         <code>Authorization: Bearer your_jwt_token</code>
-
-        <h3>Rate Limiting</h3>
-        <p>The API implements rate limiting with the following configuration:</p>
-        <ul>
-            <li>600 requests per minute per IP address</li>
-            <li>Fixed window strategy</li>
-        </ul>
-
-        <h3>Token Expiration</h3>
-        <p>JWT tokens expire after 1 hour by default.</p>
     </div>
 
-    <div>
-        <h2>Authentication</h2>
-        <div class="endpoint">
-            <span class="method post">POST</span>
-            <span class="route">/token</span>
-            <p>Generate a JWT access token for authenticated users.</p>
-            <h4>Request Body:</h4>
-            <pre><code>{
-    "token": "string",  // User identifier
-    "scopes": ["string"]  // Array of permission scopes
-}</code></pre>
-            <h4>Response:</h4>
-            <pre><code>{
-    "access_token": "string",
-    "expires_in": 3600  // Token expiration time in seconds (1 hour)
-}</code></pre>
-            <p>Note: The token will expire after 1 hour. Include the access token in the Authorization header for subsequent requests:</p>
-            <code>Authorization: Bearer your_access_token</code>
-        </div>
+    <h2>API Endpoints</h2>
+    <div id="routes"></div>
 
-        <div class="endpoint">
-            <span class="method post">POST</span>
-            <span class="route">/oauth/login</span>
-            <p>OAuth login endpoint.</p>
-            <h4>Request Body:</h4>
-            <pre><code>{
-    "email": "string",
-    "password": "string"
-}</code></pre>
-        </div>
+    <script>
+        /*
+         * List of current AGM-API routes.
+         * KEEP THIS LIST UP-TO-DATE WITH src/app/* blueprints.
+         */
+        const routes = [
+            { path: '/', method: 'GET', group: 'Public', description: 'Index page' },
+            { path: '/docs', method: 'GET', group: 'Public', description: 'API documentation' },
+            { path: '/token', method: 'POST', group: 'Public', description: 'Generate JWT token' },
 
-        <div class="endpoint">
-            <span class="method post">POST</span>
-            <span class="route">/oauth/create</span>
-            <p>OAuth account creation endpoint.</p>
-            <h4>Request Body:</h4>
-            <pre><code>{
-    "user": "object"
-}</code></pre>
-        </div>
-    </div>
+            // Ada
+            { path: '/ada/chat', method: 'POST', group: 'Ada', description: 'Chat with Ada AI assistant' },
 
-    <h1>Applications API</h1>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/applications/create</span>
-        <p>Create a new application.</p>
-        <h4>Required Scope:</h4>
-        <code>applications/create</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "application": "object"
-}</code></pre>
-    </div>
+            // Applications
+            { path: '/applications/create', method: 'POST', group: 'Applications', description: 'Create application' },
+            { path: '/applications/read', method: 'GET', group: 'Applications', description: 'Read applications' },
+            { path: '/applications/update', method: 'POST', group: 'Applications', description: 'Update application' },
+            { path: '/applications/send_to_ibkr', method: 'POST', group: 'Applications', description: 'Send application to IBKR' },
 
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/applications/read</span>
-        <p>Read applications.</p>
-        <h4>Required Scope:</h4>
-        <code>applications/read</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "query": "object"
-}</code></pre>
-    </div>
+            // Users
+            { path: '/users/create', method: 'POST', group: 'Users', description: 'Create user' },
+            { path: '/users/login', method: 'POST', group: 'Users', description: 'User login' },
+            { path: '/users/read', method: 'GET', group: 'Users', description: 'Read users' },
+            { path: '/users/update', method: 'POST', group: 'Users', description: 'Update user' },
 
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/applications/update</span>
-        <p>Update an application.</p>
-        <h4>Required Scope:</h4>
-        <code>applications/update</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "application": "object",
-    "query": "object"
-}</code></pre>
-    </div>
+            // Accounts
+            { path: '/accounts/create', method: 'POST', group: 'Accounts', description: 'Create account' },
+            { path: '/accounts/read', method: 'GET', group: 'Accounts', description: 'Read accounts' },
+            { path: '/accounts/update', method: 'POST', group: 'Accounts', description: 'Update account' },
+            { path: '/accounts/instructions', method: 'POST', group: 'Accounts', description: 'Create instruction' },
+            { path: '/accounts/instructions', method: 'GET', group: 'Accounts', description: 'Read instructions' },
+            { path: '/accounts/documents', method: 'GET', group: 'Accounts', description: 'Read documents' },
+            { path: '/accounts/documents', method: 'POST', group: 'Accounts', description: 'Upload document' },
+            { path: '/accounts/ibkr/details', method: 'GET', group: 'Accounts', description: 'Account details' },
+            { path: '/accounts/ibkr/documents', method: 'POST', group: 'Accounts', description: 'Submit documents' },
+            { path: '/accounts/ibkr/registration_tasks', method: 'GET', group: 'Accounts', description: 'Registration tasks' },
+            { path: '/accounts/ibkr/pending_tasks', method: 'GET', group: 'Accounts', description: 'Pending tasks' },
+            { path: '/accounts/ibkr/fee_template', method: 'POST', group: 'Accounts', description: 'Apply fee template' },
+            { path: '/accounts/ibkr/account_email', method: 'POST', group: 'Accounts', description: 'Update account email' },
+            { path: '/accounts/ibkr/pending_alias', method: 'PATCH', group: 'Accounts', description: 'Update pending aliases' },
+            { path: '/accounts/ibkr/trading_permissions', method: 'POST', group: 'Accounts', description: 'Add trading permissions' },
+            { path: '/accounts/ibkr/clp_capability', method: 'POST', group: 'Accounts', description: 'Add CLP capability' },
+            { path: '/accounts/ibkr/bank_instructions', method: 'GET', group: 'Accounts', description: 'View bank instructions' },
+            { path: '/accounts/ibkr/withdrawable_cash', method: 'GET', group: 'Accounts', description: 'View withdrawable cash' },
+            { path: '/accounts/ibkr/instructions', method: 'GET', group: 'Accounts', description: 'Instruction status' },
+            { path: '/accounts/ibkr/sso/create', method: 'POST', group: 'Accounts', description: 'Create SSO session' },
+            { path: '/accounts/ibkr/sso/initialize', method: 'POST', group: 'Accounts', description: 'Initialize brokerage session' },
+            { path: '/accounts/ibkr/sso/logout', method: 'POST', group: 'Accounts', description: 'Logout brokerage session' },
+            { path: '/accounts/ibkr/sso/accounts', method: 'GET', group: 'Accounts', description: 'Get brokerage accounts' },
+            { path: '/accounts/ibkr/security_questions', method: 'GET', group: 'Accounts', description: 'Security questions' },
+            { path: '/accounts/ibkr/forms', method: 'POST', group: 'Accounts', description: 'Get forms' },
+            { path: '/accounts/ibkr/product_country_bundles', method: 'GET', group: 'Accounts', description: 'Product country bundles' },
 
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/applications/send_to_ibkr</span>
-        <p>Send application to IBKR.</p>
-        <h4>Required Scope:</h4>
-        <code>applications/send</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "application": "object"
-}</code></pre>
-    </div>
+            // Advisors
+            { path: '/advisors/create', method: 'POST', group: 'Advisors', description: 'Create advisor' },
+            { path: '/advisors/read', method: 'GET', group: 'Advisors', description: 'Read advisors' },
 
-    <h1>Users API</h1>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/users/create</span>
-        <p>Create a new user.</p>
-        <h4>Required Scope:</h4>
-        <code>users/create</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "user": "object"
-}</code></pre>
-    </div>
+            // Advisor Changes
+            { path: '/advisor_changes/create', method: 'POST', group: 'Advisor Changes', description: 'Create advisor change' },
+            { path: '/advisor_changes/read', method: 'GET', group: 'Advisor Changes', description: 'Read advisor changes' },
 
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/users/read</span>
-        <p>Read users.</p>
-        <h4>Required Scope:</h4>
-        <code>users/read</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "query": "object"
-}</code></pre>
-    </div>
+            // Contacts
+            { path: '/contacts/create', method: 'POST', group: 'Contacts', description: 'Create contact' },
+            { path: '/contacts/read', method: 'GET', group: 'Contacts', description: 'Read contacts' },
+            { path: '/contacts/update', method: 'POST', group: 'Contacts', description: 'Update contact' },
 
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/users/update</span>
-        <p>Update a user.</p>
-        <h4>Required Scope:</h4>
-        <code>users/update</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "user": "object"
-}</code></pre>
-    </div>
+            // Leads
+            { path: '/leads/create', method: 'POST', group: 'Leads', description: 'Create lead' },
+            { path: '/leads/read', method: 'GET', group: 'Leads', description: 'Read leads' },
+            { path: '/leads/update', method: 'POST', group: 'Leads', description: 'Update lead' },
+            { path: '/leads/follow_up/create', method: 'POST', group: 'Leads', description: 'Create lead follow-up' },
+            { path: '/leads/follow_up/read', method: 'GET', group: 'Leads', description: 'Read lead follow-ups' },
+            { path: '/leads/follow_up/update', method: 'POST', group: 'Leads', description: 'Update lead follow-up' },
+            { path: '/leads/follow_up/delete', method: 'POST', group: 'Leads', description: 'Delete lead follow-up' },
 
-    <h1>RTD API</h1>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/rtd/read</span>
-        <p>Read RTD data.</p>
-        <h4>Required Scope:</h4>
-        <code>accounts/read</code>
-    </div>
+            // Pending Tasks
+            { path: '/pending_tasks/create', method: 'POST', group: 'Pending Tasks', description: 'Create pending task' },
+            { path: '/pending_tasks/read', method: 'GET', group: 'Pending Tasks', description: 'Read pending tasks' },
+            { path: '/pending_tasks/update', method: 'POST', group: 'Pending Tasks', description: 'Update pending task' },
+            { path: '/pending_tasks/follow_up/create', method: 'POST', group: 'Pending Tasks', description: 'Create pending task follow-up' },
+            { path: '/pending_tasks/follow_up/update', method: 'POST', group: 'Pending Tasks', description: 'Update pending task follow-up' },
+            { path: '/pending_tasks/follow_up/delete', method: 'POST', group: 'Pending Tasks', description: 'Delete pending task follow-up' },
 
-    <h1>Accounts API</h1>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/accounts/create</span>
-        <p>Create a new account.</p>
-        <h4>Required Scope:</h4>
-        <code>accounts/create</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "account": "object"
-}</code></pre>
-    </div>
+            // Fee Template Requests
+            { path: '/fee_template_requests/create', method: 'POST', group: 'Fee Template Requests', description: 'Create fee template request' },
+            { path: '/fee_template_requests/read', method: 'GET', group: 'Fee Template Requests', description: 'Read fee template requests' },
+            { path: '/fee_template_requests/update', method: 'POST', group: 'Fee Template Requests', description: 'Update fee template request' },
 
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/accounts/read</span>
-        <p>Read accounts.</p>
-        <h4>Required Scope:</h4>
-        <code>accounts/read</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "query": "object"
-}</code></pre>
-    </div>
+            // Management Type Requests
+            { path: '/management_type_requests/create', method: 'POST', group: 'Management Type Requests', description: 'Create management type request' },
+            { path: '/management_type_requests/read', method: 'GET', group: 'Management Type Requests', description: 'Read management type requests' },
 
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/accounts/read_contact</span>
-        <p>Read account contact information.</p>
-        <h4>Required Scope:</h4>
-        <code>accounts/read</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "account_id": "string",
-    "query": "object"
-}</code></pre>
-    </div>
+            // Risk Profiles
+            { path: '/risk_profiles/create', method: 'POST', group: 'Risk Profiles', description: 'Create risk profile' },
+            { path: '/risk_profiles/read', method: 'GET', group: 'Risk Profiles', description: 'Read risk profiles' },
+            { path: '/risk_profiles/list', method: 'GET', group: 'Risk Profiles', description: 'List risk profiles' },
 
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/accounts/update_info</span>
-        <p>Update account information.</p>
-        <h4>Required Scope:</h4>
-        <code>accounts/update</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "account_id": "string",
-    "query": "object",
-    "account_info": "object"
-}</code></pre>
-    </div>
+            // Reporting
+            { path: '/reporting/run', method: 'GET', group: 'Reporting', description: 'Run reporting pipeline' },
+            { path: '/reporting/clients', method: 'GET', group: 'Reporting', description: 'Clients report' },
+            { path: '/reporting/nav', method: 'GET', group: 'Reporting', description: 'NAV report' },
+            { path: '/reporting/market_data_snapshot', method: 'GET', group: 'Reporting', description: 'Market data snapshot' },
 
-    <div class="endpoint">
-        <span class="method get">GET</span>
-        <span class="route">/accounts/list</span>
-        <p>List all accounts.</p>
-        <h4>Required Scope:</h4>
-        <code>accounts/read</code>
-    </div>
+            // Trade Tickets
+            { path: '/trade_tickets/list', method: 'GET', group: 'Trade Tickets', description: 'List trade tickets' },
+            { path: '/trade_tickets/read', method: 'GET', group: 'Trade Tickets', description: 'Read trade ticket' },
+            { path: '/trade_tickets/generate', method: 'POST', group: 'Trade Tickets', description: 'Generate trade ticket' },
 
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/accounts/details</span>
-        <p>Get account details.</p>
-        <h4>Required Scope:</h4>
-        <code>accounts/read</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "account_id": "string"
-}</code></pre>
-    </div>
+            // Emails
+            { path: '/email/send_email/trade_ticket', method: 'POST', group: 'Email', description: 'Send trade ticket email' },
+            { path: '/email/send_email/email_confirmation', method: 'POST', group: 'Email', description: 'Send email confirmation' },
+            { path: '/email/send_email/application_link', method: 'POST', group: 'Email', description: 'Send application link email' },
+            { path: '/email/send_email/task_reminder', method: 'POST', group: 'Email', description: 'Send task reminder email' },
+            { path: '/email/send_email/lead_reminder', method: 'POST', group: 'Email', description: 'Send lead reminder email' },
+            { path: '/email/send_email/credentials', method: 'POST', group: 'Email', description: 'Send credentials email' },
+            { path: '/email/send_email/transfer_instructions', method: 'POST', group: 'Email', description: 'Send transfer instructions email' },
+        ];
 
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/accounts/registration_tasks</span>
-        <p>Get registration tasks for an account.</p>
-        <h4>Required Scope:</h4>
-        <code>accounts/read</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "account_id": "string"
-}</code></pre>
-    </div>
+        // Group by API section
+        const container = document.getElementById('routes');
+        const groups = [...new Set(routes.map(r => r.group))].sort();
 
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/accounts/forms</span>
-        <p>Get account forms.</p>
-        <h4>Required Scope:</h4>
-        <code>accounts/forms</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "forms": "object"
-}</code></pre>
-    </div>
+        groups.forEach(group => {
+            const h2 = document.createElement('h2');
+            h2.textContent = group + (group === 'Public' ? '' : ' API');
+            container.appendChild(h2);
 
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/accounts/pending_tasks</span>
-        <p>Get pending tasks for an account.</p>
-        <h4>Required Scope:</h4>
-        <code>accounts/read</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "account_id": "string"
-}</code></pre>
-    </div>
+            routes.filter(r => r.group === group).forEach(route => {
+                const div = document.createElement('div');
+                div.className = 'endpoint';
 
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/accounts/update</span>
-        <p>Update account management requests.</p>
-        <h4>Required Scope:</h4>
-        <code>accounts/update</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "account_management_requests": "object"
-}</code></pre>
-    </div>
+                const methodSpan = document.createElement('span');
+                methodSpan.className = 'method ' + route.method.toLowerCase();
+                methodSpan.textContent = route.method;
+                div.appendChild(methodSpan);
 
-    <h1>Leads API</h1>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/leads/create</span>
-        <p>Create a new lead.</p>
-        <h4>Required Scope:</h4>
-        <code>leads/create</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "lead": "object",
-    "follow_ups": "object"
-}</code></pre>
-    </div>
+                const routeSpan = document.createElement('span');
+                routeSpan.className = 'route';
+                routeSpan.textContent = route.path;
+                div.appendChild(routeSpan);
 
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/leads/read</span>
-        <p>Read leads.</p>
-        <h4>Required Scope:</h4>
-        <code>leads/read</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "query": "object"
-}</code></pre>
-    </div>
+                if (route.description) {
+                    const p = document.createElement('p');
+                    p.textContent = route.description;
+                    div.appendChild(p);
+                }
 
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/leads/read_follow_ups</span>
-        <p>Read lead follow-ups.</p>
-        <h4>Required Scope:</h4>
-        <code>leads/read_follow_ups</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "query": "object"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/leads/update</span>
-        <p>Update a lead.</p>
-        <h4>Required Scope:</h4>
-        <code>leads/update</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "lead": "object",
-    "query": "object"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/leads/update_follow_up</span>
-        <p>Update a lead follow-up.</p>
-        <h4>Required Scope:</h4>
-        <code>leads/update_follow_up</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "follow_up": "object",
-    "lead_id": "string"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/leads/delete</span>
-        <p>Delete a lead.</p>
-        <h4>Required Scope:</h4>
-        <code>leads/delete</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "query": "object"
-}</code></pre>
-    </div>
-
-    <h1>Contacts API</h1>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/contacts/create</span>
-        <p>Create a new contact.</p>
-        <h4>Required Scope:</h4>
-        <code>contacts/create</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "contact": "object"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/contacts/read</span>
-        <p>Read contacts.</p>
-        <h4>Required Scope:</h4>
-        <code>contacts/read</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "query": "object"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/contacts/update</span>
-        <p>Update a contact.</p>
-        <h4>Required Scope:</h4>
-        <code>contacts/update</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "contact": "object",
-    "query": "object"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/contacts/delete</span>
-        <p>Delete a contact.</p>
-        <h4>Required Scope:</h4>
-        <code>contacts/delete</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "query": "object"
-}</code></pre>
-    </div>
-
-    <h1>Advisors API</h1>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/advisors/create</span>
-        <p>Create a new advisor.</p>
-        <h4>Required Scope:</h4>
-        <code>advisors/create</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "advisor": "object"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/advisors/read</span>
-        <p>Read advisors.</p>
-        <h4>Required Scope:</h4>
-        <code>advisors/read</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "query": "object"
-}</code></pre>
-    </div>
-
-    <h1>Trade Tickets API</h1>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/trade_tickets/list</span>
-        <p>List trade tickets.</p>
-        <h4>Required Scope:</h4>
-        <code>trade_tickets/list</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "query": "object"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/trade_tickets/fetch</span>
-        <p>Fetch a trade ticket.</p>
-        <h4>Required Scope:</h4>
-        <code>trade_tickets/fetch</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "query_id": "string"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/trade_tickets/generate_trade_ticket</span>
-        <p>Generate a trade ticket.</p>
-        <h4>Required Scope:</h4>
-        <code>trade_tickets/generate_trade_ticket</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "indices": "string",  // Comma-separated indices
-    "flex_query_dict": "object"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/trade_tickets/generate_client_confirmation_message</span>
-        <p>Generate a client confirmation message.</p>
-        <h4>Required Scope:</h4>
-        <code>trade_tickets/generate_client_confirmation_message</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "trade_data": "object"
-}</code></pre>
-    </div>
-
-    <h1>Risk Profiles API</h1>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/risk_profiles/create</span>
-        <p>Create a new risk profile.</p>
-        <h4>Required Scope:</h4>
-        <code>risk_profiles/create</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "data": "object"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/risk_profiles/read</span>
-        <p>Read risk profiles.</p>
-        <h4>Required Scope:</h4>
-        <code>risk_profiles/read</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "query": "object"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method get">GET</span>
-        <span class="route">/risk_profiles/list</span>
-        <p>List risk profiles.</p>
-        <h4>Required Scope:</h4>
-        <code>risk_profiles/list</code>     
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "query": "object"
-}</code></pre>
-    </div>
-
-    <h1>Reporting API</h1>
-    <div class="endpoint">
-        <span class="method get">GET</span>
-        <span class="route">/reporting/run</span>
-        <p>Run the reporting ETL pipeline.</p>
-        <h4>Required Scope:</h4>
-        <code>reporting/run</code>
-    </div>
-
-    <div class="endpoint">
-        <span class="method get">GET</span>
-        <span class="route">/reporting/extract</span>
-        <p>Extract reporting data.</p>
-        <h4>Required Scope:</h4>
-        <code>reporting/extract</code>
-    </div>
-
-    <div class="endpoint">
-        <span class="method get">GET</span>
-        <span class="route">/reporting/transform</span>
-        <p>Transform reporting data.</p>
-        <h4>Required Scope:</h4>
-        <code>reporting/transform</code>
-    </div>
-
-    <div class="endpoint">
-        <span class="method get">GET</span>
-        <span class="route">/reporting/clients</span>
-        <p>Get clients report.</p>
-        <h4>Required Scope:</h4>
-        <code>reporting/clients</code>
-    </div>
-
-    <div class="endpoint">
-        <span class="method get">GET</span>
-        <span class="route">/reporting/client_fees</span>
-        <p>Get client fees report.</p>
-        <h4>Required Scope:</h4>
-        <code>reporting/client_fees</code>
-    </div>
-
-    <div class="endpoint">
-        <span class="method get">GET</span>
-        <span class="route">/reporting/nav</span>
-        <p>Get NAV report.</p>
-        <h4>Required Scope:</h4>
-        <code>reporting/nav</code>
-    </div>
-
-    <div class="endpoint">
-        <span class="method get">GET</span>
-        <span class="route">/reporting/rtd</span>
-        <p>Get RTD report.</p>
-        <h4>Required Scope:</h4>
-        <code>reporting/rtd</code>
-    </div>
-
-    <div class="endpoint">
-        <span class="method get">GET</span>
-        <span class="route">/reporting/open_positions</span>
-        <p>Get open positions report.</p>
-        <h4>Required Scope:</h4>
-        <code>reporting/open_positions</code>
-    </div>
-
-    <div class="endpoint">
-        <span class="method get">GET</span>
-        <span class="route">/reporting/securities_bond</span>
-        <p>Get securities bond dictionary.</p>
-        <h4>Required Scope:</h4>
-        <code>reporting/securities_bond</code>
-    </div>
-
-    <h1>Email API</h1>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/email/send_email</span>
-        <p>Send a generic email.</p>
-        <h4>Required Scope:</h4>
-        <code>email/send_email</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "content": "object",
-    "client_email": "string",
-    "subject": "string",
-    "email_template": "string"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/email/send_email/account_access</span>
-        <p>Send account access email.</p>
-        <h4>Required Scope:</h4>
-        <code>email/send_email</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "content": "object",
-    "client_email": "string"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/email/send_email/trade_ticket</span>
-        <p>Send trade ticket confirmation.</p>
-        <h4>Required Scope:</h4>
-        <code>email/send_email</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "content": "object",
-    "client_email": "string"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/email/send_email/email_change</span>
-        <p>Send email change notification.</p>
-        <h4>Required Scope:</h4>
-        <code>email/send_email</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "client_email": "string",
-    "advisor_email": "string"
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/email/send_email/two_factor_reminder</span>
-        <p>Send 2FA reminder.</p>
-        <h4>Required Scope:</h4>
-        <code>email/send_email</code>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "content": "object",
-    "client_email": "string"
-}</code></pre>
-    </div>
-
-    <h1>Ada (AI Assistant) API</h1>
-    <div class="endpoint">
-        <span class="method post">POST</span>
-        <span class="route">/ada/chat</span>
-        <p>Chat with Ada AI assistant.</p>
-        <p><strong>Note:</strong> This endpoint does not require authentication or scopes.</p>
-        <h4>Request Body:</h4>
-        <pre><code>{
-    "messages": ["object"]
-}</code></pre>
-        <h4>Response:</h4>
-        <pre><code>{
-    "response": "string"
-}</code></pre>
-    </div>
+                container.appendChild(div);
+            });
+        });
+    </script>
 
 </body>
 </html> 

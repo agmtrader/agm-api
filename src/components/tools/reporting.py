@@ -146,6 +146,19 @@ def get_proposals_equity_report():
     proposals_equity = Drive.export_file(file_id='1AqpIE7LRV40J-Aew5fA-P6gEfji3Yb-Rp5DohI9BQFY', mime_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', parse=True)
     return proposals_equity
 
+def get_market_data_snapshot():
+    """
+    Get the market data snapshot.
+    
+    :return: Response object with market data snapshot or error message
+    """
+    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
+    market_data_snapshot_file = [market_data_snapshot for market_data_snapshot in files_in_resources_folder if 'ibkr_market_data_snapshot' in market_data_snapshot['name']]
+    if len(market_data_snapshot_file) != 1:
+        logger.error('Market data snapshot file not found or multiple files found')
+        raise Exception('Market data snapshot file not found or multiple files found')
+    market_data_snapshot = Drive.download_file(file_id=market_data_snapshot_file[0]['id'], parse=True)
+    return market_data_snapshot
 """
 ETL PIPELINE
 """
@@ -211,8 +224,12 @@ def extract() -> dict:
     df.columns = df.columns.str.upper()
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
     df['TIMESTAMP'] = timestamp
-    file_name = f'bond_{timestamp}.csv'
-    Drive.upload_file(file_name=file_name, mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id='1luTnQ1qRDNWLrqjMan-kF_eMgH16R-J9')
+    bond_snapshot_config = next((config for config in report_configs if config['name'] == 'market_data_snapshot'), None)
+    if bond_snapshot_config is None:
+        logger.error('Bond snapshot configuration not found')
+        raise Exception('Bond snapshot configuration not found')
+    file_name = bond_snapshot_config['backup_name']
+    Drive.upload_file(file_name=file_name, mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=bond_snapshot_config['backup_folder_id'])
 
     rename_files_in_batch()
     sort_batch_files_to_backup_folders()
@@ -610,6 +627,15 @@ def process_client_fees(df):
     """
     return df
 
+def process_market_data_snapshot(df):
+    """
+    Process the market data snapshot file.
+    
+    :param df: Input dataframe
+    :return: Processed dataframe
+    """
+    return df
+
 def get_finance_data():
     """
     Get finance data from the finance folder.
@@ -707,6 +733,14 @@ report_configs = [
         'backup_name': '732383' + '_' + today_date + '.csv',
         'transform_func': process_client_fees,
         'output_filename': 'ibkr_client_fees.csv'
+    },
+    {
+        'name': 'market_data_snapshot',
+        'backup_folder_id': '1luTnQ1qRDNWLrqjMan-kF_eMgH16R-J9',
+        'flex': False,
+        'backup_name': 'bond' + '_' + today_date + '.csv',
+        'transform_func': process_market_data_snapshot,
+        'output_filename': 'ibkr_market_data_snapshot.csv'
     }
 ]
 
