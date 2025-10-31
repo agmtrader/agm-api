@@ -6,15 +6,17 @@ from io import BytesIO
 import base64
 import yfinance as yf
 import time
-from src.components.entities.accounts import read_accounts
-from src.utils.connectors.drive import GoogleDrive
 import pytz
-from src.utils.connectors.flex_query_api import getFlexQuery
 import pandas as pd
 import os
 import sys
 
+from src.utils.connectors.drive import GoogleDrive
+from src.utils.connectors.flex_query_api import getFlexQuery
+from src.utils.exception import handle_exception
+
 logger.announcement('Initializing Reporting Service', type='info')
+Drive = GoogleDrive()
 ratings = {
     # S&P Ratings
     "AAA": {"Short-term": "A-1+", "NAIC": 1, "Class1": "Prime", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 1, "S&P Equivalent": "AAA", "Source": "S&P"},
@@ -64,12 +66,16 @@ ratings = {
     "C": {"Short-term": "Not prime", "NAIC": 6, "Class1": "In default", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 21, "S&P Equivalent": "C", "Source": "Moody's"},
     "D": {"Short-term": "Not prime", "NAIC": 6, "Class1": "In default", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 22, "S&P Equivalent": "D", "Source": "Moody's"},
 }
-Drive = GoogleDrive()
 cst = pytz.timezone('America/Costa_Rica')
 cst_time = datetime.now(cst)
 batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
-backups_folder_id = '1d9RShyGidP04XdnH87pUHsADghgOiWj3'
 resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+
+# Get the current time in CST
+today_date = cst_time.strftime('%Y%m%d%H%M')
+yesterday_date = (cst_time - BDay(1)).strftime('%Y%m%d')
+first_date = cst_time.replace(day=1).strftime('%Y%m%d')
+
 logger.announcement('Initialized Reporting Service', type='success')
 
 def get_clients_report():
@@ -85,21 +91,6 @@ def get_clients_report():
         raise Exception('Clients file not found or multiple files found')
     clients = Drive.download_file(file_id=clients_file[0]['id'], parse=True)
     return clients
-
-def get_client_fees():
-    """
-    Get the client fees.
-    
-    :return: Response object with client fees or error message
-    """
-    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
-    client_fees_file = [client_fees for client_fees in files_in_resources_folder if 'ibkr_client_fees' in client_fees['name']]
-    logger.info(f'Client fees file: {client_fees_file}')
-    if len(client_fees_file) != 1:
-        logger.error('Client fees file not found or multiple files found')
-        raise Exception('Client fees file not found or multiple files found')
-    client_fees = Drive.download_file(file_id=client_fees_file[0]['id'], parse=True)
-    return client_fees
 
 def get_nav_report():
     """
@@ -152,19 +143,11 @@ def get_proposals_equity_report():
     proposals_equity = Drive.export_file(file_id='1AqpIE7LRV40J-Aew5fA-P6gEfji3Yb-Rp5DohI9BQFY', mime_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', parse=True)
     return proposals_equity
 
-def get_securities_bond_dictionary():
-    """
-    Get the securities bond dictionary.
-    
-    :return: Response object with securities bond dictionary or error message
-    """
-    securities_bond_dictionary = Drive.download_file(file_id='1hNhc35aug_smWefPkT8mDLil97_i8_E9', parse=True)
-    return securities_bond_dictionary
-
 """
 ETL PIPELINE
 """
 
+@handle_exception
 def run():
     """
     Run the ETL pipeline.
@@ -180,11 +163,11 @@ def run():
     return {'status': 'success'}
 
 def extract() -> dict:
-    logger.announcement('Generating Reports.', type='info')
+    logger.announcement('Extracting information for reports.', type='info')
 
     # Fetch Flex Queries
     logger.announcement('Fetching Flex Queries.', type='info')
-    flex_query_ids = ['732383', '734782', '742588']
+    flex_query_ids = [config['name'] for config in report_configs if config['flex']]
     flex_queries = {}
     for query_id in flex_query_ids:
         try:
@@ -206,21 +189,16 @@ def extract() -> dict:
     logger.announcement('Flex Queries uploaded to batch folder.', type='success')
     time.sleep(2)
 
-    # Rename files in batch folder
-    logger.announcement('Renaming files in batch folder.', type='info')
-    number_renamed = rename_files_in_batch()
-    logger.announcement(f'{number_renamed} files renamed successfully.', type='success')
-    
-    # Sort files to respective backup folders
-    logger.announcement('Sorting files to backup folders.', type='info')
-    number_sorted = sort_batch_files_to_backup_folders()
-    logger.announcement(f'{number_sorted} files sorted to backup folders.', type='success')
+    # Upload RTD to batch folder
 
-    logger.announcement('Reports successfully extracted.', type='success')
+
+    rename_files_in_batch()
+    sort_batch_files_to_backup_folders()
+    logger.announcement('Information successfully extracted for reports.', type='success')
     return {'status': 'success'}
 
 def transform() -> dict:
-    logger.announcement('Transforming reports.', type='info')
+    logger.announcement('Transforming backups into reports.', type='info')
 
     # Clear resources folder
     logger.announcement('Clearing resources folder.', type='info')
@@ -229,61 +207,35 @@ def transform() -> dict:
 
     # Process files in each backup folder
     logger.announcement('Processing files.', type='info')
-    for report_type, config in report_configs.items():
-        logger.announcement(f'Processing {report_type.capitalize()} file.', type='info')
+    for config in report_configs:
         process_report(config)
     logger.announcement('Files processed.', type='success')
 
-    logger.announcement('Reports successfully transformed.', type='success')
+    logger.announcement('Backups successfully transformed into reports.', type='success')
     return {'status': 'success'}
 
 """
 EXTRACT HELPERS
 """
+
 def rename_files_in_batch():
     """
     Rename files in the batch folder based on specific naming conventions.
     :return: Response object with updated batch files or error message
     """
-    # Get the current time in CST
-    today_date = cst_time.strftime('%Y%m%d%H%M')
-    yesterday_date = (cst_time - BDay(1)).strftime('%Y%m%d')
-    first_date = cst_time.replace(day=1).strftime('%Y%m%d')
-
-    # Get all files in batch
-    batch_files = Drive.get_files_in_folder(batch_folder_id)
-
-    count = 0
-
-    # Rename files based on specific patterns
-    for f in batch_files:
-        if ('742588' in f['name']):
-            new_name = ('742588_' + yesterday_date + '.csv')
-        elif ('734782' in f['name']):
-            new_name = ('734782_' + yesterday_date + '.csv')
-        elif ('732383' in f['name']):
-            new_name = ('732383_' + first_date + '_' + yesterday_date + '.csv')
-        elif ('clients' in f['name']):
-            new_name = ('clients ' + today_date + ' agmtech212' + '.xls')
-        elif ('tasks_for_subaccounts' in f['name']):
-            new_name = ('tasks_for_subaccounts ' + today_date + ' agmtech212' + '.csv')
-        elif ('ContactListSummary' in f['name']):
-            new_name = ('ContactListSummary ' + today_date + ' agmtech212' + '.csv')
-        elif ('RTD' in f['name']):
-            new_name = ('RTD ' + today_date + '.csv')
-        else:
-            logger.error(f'File {f["name"]} did not match any pattern in when renaming files in batch. Defaulting to yesterday date.')
-            new_name = f['name'] + yesterday_date + '.csv'
-
-        try:
-            Drive.rename_file(file_id=f['id'], new_name=new_name)
-            count += 1
-        except:
-            logger.error(f'Error renaming file.')
-            raise Exception(f'Error renaming file.')
-        
-    logger.announcement(f'{count} files renamed.', type='success')
-    return count
+    logger.announcement('Renaming files in batch folder.', type='info')
+    try:
+        batch_files = Drive.get_files_in_folder(batch_folder_id)
+        for f in batch_files:
+            for config in report_configs:
+                if config['name'] in f['name']:
+                    new_name = config['backup_name']
+                    Drive.rename_file(file_id=f['id'], new_name=new_name)
+    except:
+        logger.error(f'Error renaming files in batch.')
+        raise Exception(f'Error renaming files in batch.')
+    logger.announcement('Files renamed successfully.', type='success')
+    return {'status': 'success'}
 
 def sort_batch_files_to_backup_folders():
     """
@@ -292,58 +244,19 @@ def sort_batch_files_to_backup_folders():
     :param batch_files: List of files in the batch folder
     :return: Response object with success message or error
     """
-    folder_names = ['TasksForSubaccounts', 'ContactListSummary', 'RTD', 'Clients', '742588', '734782', '732383']
-    folders_info = {}
-
-    # Get info for all backup folders
-    for folder_name in folder_names:
-        folder_info = Drive.get_folder_info(backups_folder_id, folder_name)
-        folders_info[folder_name] = folder_info
-    
-    # Assign folder info to variables
-    subaccounts_folder_info = folders_info['TasksForSubaccounts']
-    contacts_folder_info = folders_info['ContactListSummary']
-    rtd_folder_info = folders_info['RTD']
-    clients_folder_info = folders_info['Clients']
-    open_positions_folder_info = folders_info['742588']
-    nav_folder_info = folders_info['734782']
-    client_fees_folder_info = folders_info['732383']
-
-    # Get all files in batch
-    batch_files = Drive.get_files_in_folder(batch_folder_id)
-
-    count = 0
-
-    # Sort files to their respective folders
-    for f in batch_files:
-        # Determine the destination folder based on file name
-        if 'clients' in f['name']:
-            new_parent_id = clients_folder_info['id']
-        elif 'ContactListSummary' in f['name']:
-            new_parent_id = contacts_folder_info['id']
-        elif 'tasks_for_subaccounts' in f['name']:
-            new_parent_id = subaccounts_folder_info['id']
-        elif 'RTD' in f['name']:
-            new_parent_id = rtd_folder_info['id']
-        elif '742588' in f['name']:
-            new_parent_id = open_positions_folder_info['id']
-        elif '734782' in f['name']:
-            new_parent_id = nav_folder_info['id']
-        elif '732383' in f['name']:
-            new_parent_id = client_fees_folder_info['id']
-        else:
-            new_parent_id = 'root'
-
-        # Move file to destination
-        try:
-            Drive.move_file(f=f, newParentId=new_parent_id)
-            count += 1
-        except:
-            logger.error(f'Error moving file to destination')
-            raise Exception(f'Error moving file to destination')
-
-    logger.announcement(f'{count} files moved to backup folders.', type='success')
-    return count
+    logger.announcement('Sorting files to backup folders.', type='info')
+    try:
+        batch_files = Drive.get_files_in_folder(batch_folder_id)
+        for f in batch_files:
+            for config in report_configs:
+                if config['name'] in f['name']:
+                    new_parent_id = config['backup_folder_id']
+                    Drive.move_file(f=f, newParentId=new_parent_id)
+    except:
+        logger.error(f'Error sorting files to backup folders.')
+        raise Exception(f'Error sorting files to backup folders.')
+    logger.announcement('Files sorted to backup folders successfully.', type='success')
+    return {'status': 'success'}
 
 """
 TRANSFORM HELPERS
@@ -355,32 +268,46 @@ def process_report(config):
     :param config: Dictionary containing report configuration
     :return: Response object with success message or error
     """
-    folder_id = config['folder_id']
-    output_filename = config['output_filename']
+    try:
+        logger.info(f'Processing {config} file.')
+        folder_id = config['backup_folder_id']
+        output_filename = config['output_filename']
+        
+        # Get files in the report's backup folder
+        files = Drive.get_files_in_folder(folder_id)
+
+        if len(files) == 0:
+            logger.error(f'No files found in backup folder.')
+            raise Exception('No files found in backup folder.')
+
+        # Get most recent file
+        most_recent_file = get_most_recent_file(files)
+
+        # Download file and read into dataframe
+        f = Drive.download_file(file_id=most_recent_file['id'], parse=True)
+        file_df = pd.DataFrame(f)
+        file_df = file_df.fillna('')
+
+        # Apply custom processing if specified
+        if 'process_func' in config:
+            file_df = config['process_func'](file_df)
+
+        # Upload processed file to Resources folder
+        file_dict = file_df.to_dict(orient='records')
+        Drive.upload_file(file_name=output_filename, mime_type='text/csv', file_data=file_dict, parent_folder_id=resources_folder_id)
+    except:
+        logger.error(f'Error processing {config} file.')
+        raise Exception(f'Error processing {config} file.')
+    logger.announcement(f'{config} successfully processed.', type='success')
+
+def process_clients(df):
+    """
+    Process the clients file.
     
-    # Get files in the report's backup folder
-    files = Drive.get_files_in_folder(folder_id)
-
-    if len(files) == 0:
-        logger.error(f'No files found in backup folder.')
-        raise Exception('No files found in backup folder.')
-
-    # Get most recent file
-    most_recent_file = get_most_recent_file(files)
-
-    # Download file and read into dataframe
-    f = Drive.download_file(file_id=most_recent_file['id'], parse=True)
-    file_df = pd.DataFrame(f)
-    file_df = file_df.fillna('')
-
-    # Apply custom processing if specified
-    if 'process_func' in config:
-        file_df = config['process_func'](file_df)
-
-    # Upload processed file to Resources folder
-    file_dict = file_df.to_dict(orient='records')
-    Drive.upload_file(file_name=output_filename, mime_type='text/csv', file_data=file_dict, parent_folder_id=resources_folder_id)
-    return
+    :param df: Input dataframe
+    :return: Processed dataframe
+    """
+    return df
 
 def process_rtd(df):
     """
@@ -518,15 +445,6 @@ def process_rtd(df):
 
     return df_ibcid
 
-def process_clients_file(sheets_df):
-    """
-    Process the clients file by concatenating all sheets into a single dataframe.
-    
-    :param df: Input dataframe from Excel file
-    :return: Processed dataframe
-    """
-    return sheets_df
-
 def process_open_positions_template(df):
     """
     Process the open positions template file.
@@ -652,6 +570,24 @@ def process_open_positions_template(df):
 
     return concatenated_df
 
+def process_nav(df):
+    """
+    Process the nav file.
+    
+    :param df: Input dataframe
+    :return: Processed dataframe
+    """
+    return df
+
+def process_client_fees(df):
+    """
+    Process the client fees file.
+    
+    :param df: Input dataframe
+    :return: Processed dataframe
+    """
+    return df
+
 def get_finance_data():
     """
     Get finance data from the finance folder.
@@ -693,31 +629,64 @@ def get_finance_data():
     Drive.upload_file(file_name=filename, mime_type='text/csv', file_data=base64_data, parent_folder_id=resources_folder_id)
     return {'status': 'success'}
 
-report_configs = {
-    'clients': {
-        'folder_id': '1FNcbWNptK-A5IhmLws-R2Htl85OSFrIn',
-        'output_filename': 'ibkr_clients.csv',
-        'process_func': process_clients_file,
+report_configs = [
+    {
+        'name': 'tasks_for_subaccounts',
+        'backup_folder_id': '1tkfjpKykmbiePg8_aW1Il_YnbDW4sSTt',
+        'flex': False,
+        'backup_name': 'tasks_for_subaccounts' + ' ' + today_date + ' ' + 'agmtech212.csv',
+        'transform_func': None,
+        'output_filename': 'ibkr_tasks_for_subaccounts.csv',
     },
-    'rtd': {
-        'folder_id': '12L3NKflYtMiisnZOpU9aa1syx2ZJA6JC',
+    {
+        'name': 'ContactListSummary',
+        'backup_folder_id': '1myxgwZY1oIG4hN6ZjXRFfhYSumzTVkXa',
+        'flex': False,
+        'backup_name': 'ContactListSummary' + ' ' + today_date + ' ' + 'agmtech212.csv',
+        'transform_func': None,
+        'output_filename': 'ibkr_contact_list_summary.csv',
+    },
+    {
+        'name': 'clients',
+        'backup_folder_id': '1iq3WW7TFzxL8RkTZcFp2qyELuqZPBB8T',
+        'flex': False,
+        'backup_name': 'clients' + ' ' + today_date +  ' ' + 'agmtech212.xls',
+        'transform_func': process_clients,
+        'output_filename': 'ibkr_clients.csv'
+    },
+    {
+        'name': 'rtd',
+        'backup_folder_id': '1M7Tdz4vJpYmw0xGSgx-m_Kq4Rpc1gxci',
+        'flex': False,
+        'backup_name': 'RTD' + ' ' + today_date + '.csv',
+        'transform_func': process_rtd,
         'output_filename': 'ibkr_rtd.csv',
-        'process_func': process_rtd,
     },
-    'open_positions': {
-        'folder_id': '1JL4__mr1XgOtnesYihHo-netWKMIGMet',
+    {
+        'name': '742588',
+        'backup_folder_id': '1FJSGaj4tXyjp1otRyBayJIX6M7TVBxbJ',
+        'flex': True,
+        'backup_name': '742588' + '_' + today_date + '.csv',
+        'transform_func': process_open_positions_template,
         'output_filename': 'ibkr_open_positions_template.csv',
-        'process_func': process_open_positions_template,
     },
-    'client_fees': {
-        'folder_id': '1OnSEo8B2VUF5u-VkhtzZVIzx6ABe_YB7',
-        'output_filename': 'ibkr_client_fees.csv',
+    {
+        'name': '734782',
+        'backup_folder_id': '1focfkCCzycuhpCwVsMcNKF8s9hAhvBWk',
+        'flex': True,
+        'backup_name': '734782' + '_' + today_date + '.csv',
+        'transform_func': process_nav,
+        'output_filename': 'ibkr_nav_in_base.csv'
     },
-    'nav': {
-        'folder_id': '1WgYA-Q9mnPYrbbLfYLuJZwUIWBYjiD4c',
-        'output_filename': 'ibkr_nav_in_base.csv',
-    },
-}
+    {
+        'name': '732383',
+        'backup_folder_id': '1iiX9rBfDJGjDSpkCWNutnWbV5-ZxIgAl',
+        'flex': True,
+        'backup_name': '732383' + '_' + today_date + '.csv',
+        'transform_func': process_client_fees,
+        'output_filename': 'ibkr_client_fees.csv'
+    }
+]
 
 """
 HELPER FUNCTIONS

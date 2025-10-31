@@ -169,7 +169,6 @@ def create_investment_proposal(risk_profile: dict = None):
             top_bonds = equivalent_df.head(assets_to_invest - len(asset_type['bonds']))
             asset_type['bonds'].extend(top_bonds[['Symbol_x', 'Current Yield', 'S&P Equivalent']].to_dict(orient='records'))
 
-    # Print results
     for asset_type in investment_proposal:
         logger.announcement(f'Asset Type: {asset_type["name"]}')
         logger.announcement(f'Percentage: {risk_archetype[asset_type["name"]]}')

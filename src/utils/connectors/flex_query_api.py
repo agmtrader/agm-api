@@ -94,7 +94,6 @@ def getFlexQuery(queryId):
 
 def binaryXMLtoDF(binaryXMLData):
     xml_data = binaryXMLData.decode('utf-8')
-    print(xml_data)
 
     reader = csv.reader(xml_data.splitlines(), skipinitialspace=True)
 

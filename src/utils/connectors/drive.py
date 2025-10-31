@@ -313,6 +313,14 @@ class GoogleDrive:
 
   @retry_on_connection_error()
   @handle_exception
+  def get_folder_info_by_id(self, folder_id):
+    logger.info(f'Getting folder info for folder: {folder_id}')
+    f = self.service.files().get(fileId=folder_id, fields='id, name, parents, mimeType, size, modifiedTime, createdTime', supportsAllDrives=True).execute()
+    logger.success(f"Folder found with ID: {folder_id}")
+    return f
+
+  @retry_on_connection_error()
+  @handle_exception
   def rename_file(self, file_id, new_name):
     logger.info(f'Renaming file {file_id} to {new_name}')
     file_metadata = {
