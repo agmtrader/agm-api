@@ -9,6 +9,7 @@ import time
 import pytz
 import pandas as pd
 import os
+import requests
 import sys
 
 from src.utils.connectors.drive import GoogleDrive
@@ -192,7 +193,9 @@ def extract() -> dict:
     time.sleep(2)
 
     # Upload RTD to batch folder
-    ibkr_web_api.create_sso_session('agmtech212', '200.229.8.74')
+    # Get public ip
+    ip = requests.get('https://api.ipify.org').content.decode('utf8')
+    ibkr_web_api.create_sso_session('agmtech212', ip)
     ibkr_web_api.initialize_brokerage_session()
     watchlist_information = ibkr_web_api.get_watchlist_information('100')
     conids = []
