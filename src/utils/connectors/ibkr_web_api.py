@@ -928,7 +928,7 @@ class IBKRWebAPI:
                 raise Exception(f"Error {response.status_code}: {response.text}")
             
             logger.info(f"Waiting for market data snapshot to be ready")
-            time.sleep(2)
+            time.sleep(10)
             response = requests.get(url, headers=headers)
             if response.status_code != 200:
                 logger.error(f"Error {response.status_code}: {response.text}")

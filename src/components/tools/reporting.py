@@ -14,9 +14,11 @@ import sys
 from src.utils.connectors.drive import GoogleDrive
 from src.utils.connectors.flex_query_api import getFlexQuery
 from src.utils.exception import handle_exception
+from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 
 logger.announcement('Initializing Reporting Service', type='info')
 Drive = GoogleDrive()
+ibkr_web_api = IBKRWebAPI()
 ratings = {
     # S&P Ratings
     "AAA": {"Short-term": "A-1+", "NAIC": 1, "Class1": "Prime", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 1, "S&P Equivalent": "AAA", "Source": "S&P"},
@@ -190,7 +192,24 @@ def extract() -> dict:
     time.sleep(2)
 
     # Upload RTD to batch folder
-
+    ibkr_web_api.create_sso_session('agmtech212', '200.229.8.74')
+    ibkr_web_api.initialize_brokerage_session()
+    watchlist_information = ibkr_web_api.get_watchlist_information('100')
+    conids = []
+    for watchlist_item in watchlist_information['instruments']:
+        try:
+            if watchlist_item['assetClass'] == 'BOND':
+                conids.append(str(watchlist_item['conid']))
+        except Exception as e:
+            continue
+    print(len(conids))
+    market_data_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[:350]))
+    df = pd.DataFrame(market_data_snapshot)
+    df.columns = df.columns.str.upper()
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    df['TIMESTAMP'] = timestamp
+    file_name = f'bond_{timestamp}.csv'
+    Drive.upload_file(file_name=file_name, mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id='1luTnQ1qRDNWLrqjMan-kF_eMgH16R-J9')
 
     rename_files_in_batch()
     sort_batch_files_to_backup_folders()
