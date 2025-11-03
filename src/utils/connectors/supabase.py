@@ -115,6 +115,7 @@ class Supabase:
             application = Column(JSONB, nullable=True)
             status = Column(Text, nullable=False, default='Started')
             security_questions = Column(JSONB, nullable=True)
+            estimated_deposit = Column(Integer, nullable=True)
         
         class Account(self.Base):
             __tablename__ = 'account'
