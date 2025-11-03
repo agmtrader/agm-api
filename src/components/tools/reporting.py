@@ -205,9 +205,6 @@ def extract() -> dict:
     logger.announcement('Flex Queries uploaded to batch folder.', type='success')
     time.sleep(2)
 
-    # U6785549
-    # Upload RTD to batch folder
-    # Get public ip
     ip = requests.get('https://api.ipify.org').content.decode('utf8')
     ibkr_web_api.create_sso_session('agmtech212', ip)
     ibkr_web_api.initialize_brokerage_session()
