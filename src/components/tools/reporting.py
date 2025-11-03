@@ -207,6 +207,7 @@ def extract() -> dict:
 
     # Upload RTD to batch folder
     # Get public ip
+    """
     ip = requests.get('https://api.ipify.org').content.decode('utf8')
     ibkr_web_api.create_sso_session('agmtech212', ip)
     ibkr_web_api.initialize_brokerage_session()
@@ -230,7 +231,8 @@ def extract() -> dict:
         raise Exception('Bond snapshot configuration not found')
     file_name = bond_snapshot_config['backup_name']
     Drive.upload_file(file_name=file_name, mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=bond_snapshot_config['backup_folder_id'])
-
+    """
+    
     rename_files_in_batch()
     sort_batch_files_to_backup_folders()
     logger.announcement('Information successfully extracted for reports.', type='success')
