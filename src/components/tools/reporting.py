@@ -205,12 +205,13 @@ def extract() -> dict:
     logger.announcement('Flex Queries uploaded to batch folder.', type='success')
     time.sleep(2)
 
+    # U6785549
     # Upload RTD to batch folder
     # Get public ip
-    """
     ip = requests.get('https://api.ipify.org').content.decode('utf8')
     ibkr_web_api.create_sso_session('agmtech212', ip)
     ibkr_web_api.initialize_brokerage_session()
+    time.sleep(2)
     watchlist_information = ibkr_web_api.get_watchlist_information('100')
     conids = []
     for watchlist_item in watchlist_information['instruments']:
@@ -231,8 +232,7 @@ def extract() -> dict:
         raise Exception('Bond snapshot configuration not found')
     file_name = bond_snapshot_config['backup_name']
     Drive.upload_file(file_name=file_name, mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=bond_snapshot_config['backup_folder_id'])
-    """
-    
+
     rename_files_in_batch()
     sort_batch_files_to_backup_folders()
     logger.announcement('Information successfully extracted for reports.', type='success')
@@ -330,12 +330,10 @@ def process_report(config):
         file_df = file_df.fillna('')
 
         # Apply custom processing if specified
-        if 'process_func' in config:
-            file_df = config['process_func'](file_df)
-
-        # Upload processed file to Resources folder
-        file_dict = file_df.to_dict(orient='records')
-        Drive.upload_file(file_name=output_filename, mime_type='text/csv', file_data=file_dict, parent_folder_id=resources_folder_id)
+        if 'transform_func' in config.keys() and config['transform_func'] is not None:
+            file_df = config['transform_func'](file_df)
+            file_dict = file_df.to_dict(orient='records')
+            Drive.upload_file(file_name=output_filename, mime_type='text/csv', file_data=file_dict, parent_folder_id=resources_folder_id)
     except:
         logger.error(f'Error processing {config} file.')
         raise Exception(f'Error processing {config} file.')
@@ -705,7 +703,7 @@ report_configs = [
         'output_filename': 'ibkr_clients.csv'
     },
     {
-        'name': 'rtd',
+        'name': 'RTD',
         'backup_folder_id': '1M7Tdz4vJpYmw0xGSgx-m_Kq4Rpc1gxci',
         'flex': False,
         'backup_name': 'RTD' + ' ' + today_date + '.csv',
