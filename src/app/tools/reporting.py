@@ -2,6 +2,7 @@ from flask import Blueprint
 from src.components.tools.reporting import get_clients_report, get_nav_report, get_market_data_snapshot
 from src.components.tools.reporting import run
 from src.utils.response import format_response
+import json
 
 bp = Blueprint('reporting', __name__)
 
@@ -24,3 +25,10 @@ def get_nav_report_route():
 @format_response
 def get_market_data_snapshot_route():
     return get_market_data_snapshot()
+
+@bp.route('/bvi', methods=['GET'])
+@format_response
+def bvi_inspection_route():
+    with open('accounts.json', 'r') as f:
+        accounts = json.load(f)
+    return accounts

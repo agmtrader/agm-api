@@ -1,7 +1,7 @@
 from flask import Blueprint, request
 from requests import get
 from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_documents_by_account_id, create_instruction, read_instructions
-from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, view_withdrawable_cash, view_active_bank_instructions, get_status_of_instruction, add_clp_capability
+from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, view_withdrawable_cash, view_active_bank_instructions, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions
 from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts
 from src.utils.response import format_response
 
@@ -171,6 +171,29 @@ def view_withdrawable_cash_route():
         return {"error": "Missing master_account, account_id, or client_instruction_id"}, 400
     return view_withdrawable_cash(master_account=master_account, account_id=account_id, client_instruction_id=client_instruction_id)
 
+# Deposit funds
+@bp.route('/ibkr/deposit', methods=['POST'])
+@format_response
+def deposit_funds_route():
+    payload = request.get_json(force=True)
+    master_account = payload.get('master_account')
+    client_instruction_id = payload.get('client_instruction_id')
+    account_id = payload.get('account_id')
+    amount = payload.get('amount')
+    currency = payload.get('currency', 'USD')
+    bank_instruction_method = payload.get('bank_instruction_method', 'WIRE')
+    is_ira = payload.get('is_ira', False)
+    sending_institution = payload.get('sending_institution')
+    identifier = payload.get('identifier')
+    special_instruction = payload.get('special_instruction')
+    bank_instruction_name = payload.get('bank_instruction_name')
+    sender_institution_name = payload.get('sender_institution_name')
+
+    if not master_account or not client_instruction_id or not account_id or amount is None:
+        return {"error": "Missing master_account, client_instruction_id, account_id, or amount"}, 400
+
+    return deposit_funds(master_account=master_account, client_instruction_id=client_instruction_id, account_id=account_id, amount=amount, currency=currency, bank_instruction_method=bank_instruction_method, is_ira=is_ira, sending_institution=sending_institution, identifier=identifier, special_instruction=special_instruction, bank_instruction_name=bank_instruction_name, sender_institution_name=sender_institution_name)
+
 @bp.route('/ibkr/instructions', methods=['GET'])
 @format_response
 def get_status_of_instruction_route():
@@ -178,6 +201,17 @@ def get_status_of_instruction_route():
     if not client_instruction_id:
         return {"error": "Missing client_instruction_id"}, 400
     return get_status_of_instruction(client_instruction_id=client_instruction_id)
+
+@bp.route('/ibkr/wire_instructions', methods=['POST'])
+@format_response
+def get_wire_instructions_route():
+    payload = request.get_json(force=True)
+    master_account = payload.get('master_account', None)
+    account_id = payload.get('account_id', None)
+    currency = payload.get('currency', 'USD')
+    if not master_account or not account_id or not currency:
+        return {"error": "Missing master_account or account_id"}, 400
+    return get_wire_instructions(master_account=master_account, account_id=account_id, currency=currency)
 
 # Trading API
 @bp.route('/ibkr/sso/create', methods=['POST'])

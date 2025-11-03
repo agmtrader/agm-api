@@ -1170,6 +1170,107 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @handle_exception
+    def get_wire_instructions(self, master_account: str, account_id: str, currency: str = "USD") -> dict:
+        """Retrieve wire instructions for a given account & currency.
+
+        Args:
+            master_account (str): Credential set to use ('ad' or 'br').
+            account_id (str): IBKR account ID.
+            currency (str, optional): Currency code (e.g., "USD"). Defaults to "USD".
+        Returns:
+            dict: IBKR wire instruction details.
+        """
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Fetching wire instructions for account {account_id} ({currency})")
+
+            url = f"{self.BASE_URL}/gw/api/v1/enumerations/wire-instructions?accountId={account_id}&currency={currency}"
+
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            headers = {"Authorization": f"Bearer {token}"}
+
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Wire instructions fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def deposit_funds(self, master_account: str, client_instruction_id: str, account_id: str, amount: float, currency: str = "USD", bank_instruction_method: str = "WIRE", is_ira: bool = False, sending_institution: str | None = None, identifier: str | None = None, special_instruction: str | None = None, bank_instruction_name: str | None = None, sender_institution_name: str | None = None) -> dict:
+        """Submit a deposit instruction to IBKR.
+
+        Args:
+            master_account (str): Which credential set to use ('ad' or 'br').
+            client_instruction_id (str): Unique identifier for the client instruction.
+            account_id (str): IBKR account receiving the deposit.
+            amount (float): Deposit amount.
+            currency (str, optional): Currency of the deposit. Defaults to "USD".
+            bank_instruction_method (str, optional): Method for deposit (e.g. "WIRE"). Defaults to "WIRE".
+            is_ira (bool, optional): Whether the account is an IRA. Defaults to False.
+            sending_institution (str | None, optional): Name of the sending institution. Defaults to None.
+            identifier (str | None, optional): Identifier for the deposit. Defaults to None.
+            special_instruction (str | None, optional): Any special instruction. Defaults to None.
+            bank_instruction_name (str | None, optional): Name of the bank instruction. Defaults to None.
+            sender_institution_name (str | None, optional): Sender's institution name. Defaults to None.
+        Returns:
+            dict: API response from IBKR.
+        """
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Submitting deposit instruction for account {account_id} (amount={amount} {currency})")
+
+            url = f"{self.BASE_URL}/gw/api/v1/external-cash-transfers"
+
+            instruction = {
+                "clientInstructionId": client_instruction_id,
+                "accountId": account_id,
+                "currency": currency,
+                "amount": amount,
+                "bankInstructionMethod": bank_instruction_method,
+                "isIRA": is_ira,
+                "sendingInstitution": sending_institution,
+                "identifier": identifier,
+                "specialInstruction": special_instruction,
+                "bankInstructionName": bank_instruction_name,
+                "senderInstitutionName": sender_institution_name,
+            }
+            # Remove keys with None values – IBKR rejects nulls
+            instruction = {k: v for k, v in instruction.items() if v is not None}
+
+            body = {
+                "instructionType": "DEPOSIT",
+                "instruction": instruction,
+            }
+
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            signed_jwt = self.sign_request(body)
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt",
+            }
+
+            response = requests.post(url, headers=headers, data=signed_jwt)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Deposit instruction submitted successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
 # Apply the retry decorator to all public methods that make HTTP requests
 for _method_name in [
     'get_bearer_token',
@@ -1193,6 +1294,8 @@ for _method_name in [
     'get_brokerage_accounts',
     'get_watchlist_information',
     'get_market_data_snapshot',
+    'deposit_funds',
+    'get_wire_instructions',
 ]:
     if 'IBKRWebAPI' in globals() and hasattr(IBKRWebAPI, _method_name):
         setattr(

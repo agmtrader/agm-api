@@ -131,6 +131,12 @@ def add_clp_capability(account_id: str = None, document_submission: dict = None,
     """Add CLP capability to an account via IBKR API."""
     return ibkr_web_api.add_clp_capability(account_id=account_id, document_submission=document_submission, master_account=master_account)
 
+# Cash Transfers
+@handle_exception
+def deposit_funds(master_account: str = None, client_instruction_id: str = None, account_id: str = None, amount: float = None, currency: str = "USD", bank_instruction_method: str = "WIRE", is_ira: bool = False, sending_institution: str = None, identifier: str = None, special_instruction: str = None, bank_instruction_name: str = None, sender_institution_name: str = None) -> dict:
+    """Deposit funds via IBKR API."""
+    return ibkr_web_api.deposit_funds(master_account=master_account, client_instruction_id=client_instruction_id, account_id=account_id, amount=amount, currency=currency, bank_instruction_method=bank_instruction_method, is_ira=is_ira, sending_institution=sending_institution, identifier=identifier, special_instruction=special_instruction, bank_instruction_name=bank_instruction_name, sender_institution_name=sender_institution_name)
+
 @handle_exception
 def get_status_of_instruction(client_instruction_id: str = None) -> dict:
     """Get the status of a banking instruction via IBKR API."""
@@ -181,3 +187,9 @@ def get_product_country_bundles() -> dict:
 @handle_exception
 def get_forms(forms: list = None, master_account: str = None) -> dict:
     return ibkr_web_api.get_forms(forms=forms, master_account=master_account)
+
+# Wire instructions
+@handle_exception
+def get_wire_instructions(master_account: str = None, account_id: str = None, currency: str = "USD") -> dict:
+    """Get wire instructions via IBKR API."""
+    return ibkr_web_api.get_wire_instructions(master_account=master_account, account_id=account_id, currency=currency)
