@@ -25,6 +25,10 @@ def read_user_by_id(id: str) -> dict:
         raise Exception(f'Single entry has {len(user)} matches.')
 
 @handle_exception
-def update_user(user):
-    user = db.update(table='user', data=user)
-    return user
+def update_user(query: dict = None, user: dict = None):
+    if query is None:
+        raise Exception("Query must be provided.")
+    if user is None:
+        raise Exception("User must be provided.")
+    user = db.update(table='user', query=query, data=user)
+    return {'id': user}

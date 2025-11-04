@@ -57,4 +57,11 @@ def read_users_route():
 def update_user_route():
     payload = request.get_json(force=True)
     user = payload.get('user', None)
-    return update_user(user=user)
+    query = {}
+    id = payload.get('id', None)
+    email = payload.get('email', None)
+    if id:
+        query['id'] = id
+    if email:
+        query['email'] = email
+    return update_user(query=query, user=user)
