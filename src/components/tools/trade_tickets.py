@@ -240,6 +240,35 @@ def generate_excel_file(flex_query_dict, indices):
     ]
 
     df_indexed = df_indexed[trade_confirmation_columns]
+
+    # Translate the columns to Spanish
+    df_indexed = df_indexed.rename(columns={
+        'ClientAccountID': 'Cuenta de Cliente',
+        'AccountAlias': 'Alias de Cuenta',
+        'CurrencyPrimary': 'Moneda Principal',
+        'AssetClass': 'Clase de Activo',
+        'Symbol': 'Símbolo',
+        'Description': 'Descripción',
+        'Conid': 'Conid',
+        'SecurityID': 'ID de Seguridad',
+        'SecurityIDType': 'Tipo de ID de Seguridad',
+        'CUSIP': 'CUSIP',
+        'ISIN': 'ISIN',
+        'FIGI': 'FIGI',
+        'Issuer': 'Emisor',
+        'Maturity': 'Vencimiento',
+        'Buy/Sell': 'Compra/Venta',
+        'SettleDate': 'Fecha de Liquidación',
+        'TradeDate': 'Fecha de Operación',
+        'Exchange': 'Bolsa',
+        'Quantity': 'Cantidad',
+        'AccruedInterest': 'Interés Acumulado',
+        'Accrued (Days)': 'Días de Interés Acumulado',
+        'Price': 'Precio',
+        'Price (including Commissions)': 'Precio (incluyendo Comisiones)',
+        'Amount': 'Cantidad',
+        'TotalAmount': 'Cantidad Total'
+    })
     indexed_dict = df_indexed.to_dict(orient='records')
     return {'data': indexed_dict}
 
