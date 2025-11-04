@@ -45,13 +45,10 @@ class Supabase:
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             email = Column(Text, nullable=True, unique=True)
-            image = Column(Text, nullable=True)
             password = Column(Text, nullable=False)
+            image = Column(Text, nullable=True)
             scopes = Column(Text, nullable=True)
             name = Column(Text, nullable=False)
-            country = Column(Text, nullable=True)
-            company_name = Column(Text, nullable=True)
-            phone = Column(Text, nullable=True)
             last_login = Column(Text, nullable=True)
 
         class Contact(self.Base):
