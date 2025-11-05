@@ -1271,6 +1271,55 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @handle_exception
+    def change_financial_information(self, account_id: str, new_financial_information: dict, master_account: str = None):
+        """Change the financial information for a given account.
+
+        Args:
+            account_id (str): The IBKR account ID.
+            new_financial_information (dict): Dictionary with the new financial information.
+            master_account (str | None): Credential set to use (``ad`` or ``br``).
+        Returns:
+            dict: API response after updating the financial information.
+        """
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Changing financial information for account {account_id}")
+
+            url = f"{self.BASE_URL}/gw/api/v1/accounts"
+
+            body = {
+                "accountManagementRequests": {
+                    "changeFinancialInformation": {
+                        "accountId": account_id,
+                        "newFinancialInformation": new_financial_information,
+                    }
+                }
+            }
+
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            signed_jwt = self.sign_request(body)
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt",
+            }
+
+            response = requests.patch(url, headers=headers, data=signed_jwt)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Financial information changed successfully")
+            data = response.json()
+            print(data)
+            return data
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
 # Apply the retry decorator to all public methods that make HTTP requests
 for _method_name in [
     'get_bearer_token',
@@ -1296,6 +1345,7 @@ for _method_name in [
     'get_market_data_snapshot',
     'deposit_funds',
     'get_wire_instructions',
+    'change_financial_information',
 ]:
     if 'IBKRWebAPI' in globals() and hasattr(IBKRWebAPI, _method_name):
         setattr(

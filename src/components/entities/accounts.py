@@ -131,6 +131,11 @@ def add_clp_capability(account_id: str = None, document_submission: dict = None,
     """Add CLP capability to an account via IBKR API."""
     return ibkr_web_api.add_clp_capability(account_id=account_id, document_submission=document_submission, master_account=master_account)
 
+@handle_exception
+def change_financial_information(account_id: str = None, new_financial_information: dict = None, master_account: str = None) -> dict:
+    """Change account financial information via IBKR API."""
+    return ibkr_web_api.change_financial_information(account_id=account_id, new_financial_information=new_financial_information, master_account=master_account)
+
 # Cash Transfers
 @handle_exception
 def deposit_funds(master_account: str = None, client_instruction_id: str = None, account_id: str = None, amount: float = None, currency: str = "USD", bank_instruction_method: str = "WIRE", is_ira: bool = False, sending_institution: str = None, identifier: str = None, special_instruction: str = None, bank_instruction_name: str = None, sender_institution_name: str = None) -> dict:
