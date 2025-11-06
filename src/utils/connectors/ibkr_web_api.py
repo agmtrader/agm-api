@@ -1272,7 +1272,7 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def change_financial_information(self, account_id: str, new_financial_information: dict, master_account: str = None):
+    def change_financial_information(self, account_id: str, investment_experience: dict = None, master_account: str = None):
         """Change the financial information for a given account.
 
         Args:
@@ -1292,10 +1292,13 @@ class IBKRWebAPI:
                 "accountManagementRequests": {
                     "changeFinancialInformation": {
                         "accountId": account_id,
-                        "newFinancialInformation": new_financial_information,
+                        "newFinancialInformation": {},
                     }
                 }
             }
+
+            if investment_experience:
+                body['accountManagementRequests']['changeFinancialInformation']['newFinancialInformation']['investmentExperience'] = investment_experience
 
             token = self.get_bearer_token()
             if not token:

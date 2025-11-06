@@ -260,9 +260,7 @@ def get_product_country_bundles_route():
 @format_response
 def change_financial_information_route():
     payload = request.get_json(force=True)
-    account_id = payload.get('account_id')
-    new_financial_information = payload.get('new_financial_information')
+    account_id = payload.get('account_id', None)
+    investment_experience = payload.get('investment_experience', None)
     master_account = payload.get('master_account', None)
-    if not account_id or not new_financial_information:
-        return {"error": "Missing account_id or new_financial_information"}, 400
-    return change_financial_information(account_id=account_id, new_financial_information=new_financial_information, master_account=master_account)
+    return change_financial_information(account_id=account_id, investment_experience=investment_experience, master_account=master_account)
