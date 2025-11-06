@@ -299,7 +299,7 @@ def sort_batch_files_to_backup_folders():
                         for backed_up_file in backup_files:
                             if backed_up_file['name'] == f['name']:
                                 logger.warning(f'Deleting backed up file: {backed_up_file}')
-                                Drive.delete_file(backed_up_file['id'])
+                                #Drive.delete_file(backed_up_file['id'])
                     Drive.move_file(f=f, newParentId=new_parent_id)
     except:
         logger.error(f'Error sorting files to backup folders.')
