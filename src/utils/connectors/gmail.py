@@ -10,11 +10,68 @@ from premailer import transform
 
 import os
 import base64
-from datetime import datetime, timezone, timedelta
+import time
+from functools import wraps
+from google.auth.exceptions import RefreshError
 
 from src.utils.logger import logger
 from src.utils.exception import handle_exception
 from src.utils.managers.secret_manager import get_secret
+
+# ---------------------------------------------------------------------
+# Retry decorator (mirrors Drive connector logic)
+# ---------------------------------------------------------------------
+
+
+def retry_on_connection_error(max_retries: int = 3, delay: int = 1):
+    """Decorator to retry operations on connection errors, refreshing the Gmail
+    service if necessary.
+    """
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            last_exception = None
+            for attempt in range(max_retries):
+                try:
+                    # Ensure we have a fresh connection before each attempt
+                    self._ensure_fresh_connection()
+                    return func(self, *args, **kwargs)
+                except Exception as exc:
+                    last_exception = exc
+                    error_msg = str(exc).lower()
+
+                    # Identify common connection-related error substrings
+                    if any(err in error_msg for err in [
+                        "broken pipe",
+                        "connection reset",
+                        "connection aborted",
+                        "connection timeout",
+                        "socket.error",
+                        "httplib.badstatusline",
+                        "ssl.sslerror",
+                        "connectionerror",
+                        "timeout",
+                    ]):
+                        logger.warning(
+                            f"Gmail connection error on attempt {attempt + 1}/{max_retries}: {exc}"
+                        )
+                        if attempt < max_retries - 1:
+                            # Force a connection refresh and apply exponential back-off
+                            self._force_connection_refresh()
+                            time.sleep(delay * (attempt + 1))
+                            continue
+
+                    # Not a connection error or retries exhausted – re-raise
+                    raise exc
+
+            # All retries failed
+            raise last_exception
+
+        return wrapper
+
+    return decorator
+
 
 class GmailConnector:
     """Low-level Gmail connector responsible for authorizing against the Gmail API
@@ -25,22 +82,74 @@ class GmailConnector:
 
     def __init__(self):
         logger.announcement("Initializing Gmail connection.", type="info")
-        SCOPES = ["https://mail.google.com/"]
-        creds_data = get_secret("OAUTH_PYTHON_CREDENTIALS_INFO")
+
+        # Connection lifecycle tracking
+        self._service = None
+        self._last_connection_time: float | None = None
+        self._connection_timeout: int = 300  # 5 minutes
+
+        # Establish first connection eagerly so that failures surface early
         try:
-            creds = Credentials(
-                token=creds_data["token"],
-                refresh_token=creds_data["refresh_token"],
-                token_uri="https://oauth2.googleapis.com/token",
-                client_id=creds_data["client_id"],
-                client_secret=creds_data["client_secret"],
-                scopes=SCOPES,
-            )
-            self.service = build("gmail", "v1", credentials=creds)
+            self._service = self._create_service()
             logger.announcement("Initialized Gmail connection.", type="success")
         except Exception as exc:
             logger.error(f"Error initializing Gmail: {exc}")
             raise
+
+    # Expose service property (read-only)
+    @property
+    def service(self):
+        return self._service
+
+    # ------------------------------------------------------------------
+    # Connection helpers (largely mirrored from Drive connector)
+    # ------------------------------------------------------------------
+
+    def _get_credentials(self):
+        """Obtain fresh OAuth credentials, refreshing if necessary."""
+        creds_data = get_secret("OAUTH_PYTHON_CREDENTIALS_INFO")
+        SCOPES = ["https://mail.google.com/"]
+
+        creds = Credentials(
+            token=creds_data["token"],
+            refresh_token=creds_data["refresh_token"],
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=creds_data["client_id"],
+            client_secret=creds_data["client_secret"],
+            scopes=SCOPES,
+        )
+
+        if creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(creds._request)
+                logger.info("OAuth token refreshed successfully for Gmail")
+            except RefreshError as exc:
+                logger.error(f"Failed to refresh Gmail OAuth token: {exc}")
+                raise Exception(f"OAuth token refresh failed: {exc}")
+
+        return creds
+
+    def _create_service(self):
+        """Create a fresh Gmail service binding."""
+        creds = self._get_credentials()
+        service = build("gmail", "v1", credentials=creds)
+        self._last_connection_time = time.time()
+        return service
+
+    def _is_connection_stale(self):
+        if self._service is None or self._last_connection_time is None:
+            return True
+        return (time.time() - self._last_connection_time) > self._connection_timeout
+
+    def _ensure_fresh_connection(self):
+        if self._is_connection_stale():
+            logger.info("Refreshing Gmail connection…")
+            self._service = self._create_service()
+
+    def _force_connection_refresh(self):
+        logger.info("Force-refreshing Gmail connection…")
+        self._service = None
+        self._last_connection_time = None
 
     # ---------------------------------------------------------------------
     # Helpers
@@ -120,6 +229,7 @@ class GmailConnector:
         return {"raw": raw}
 
     # ------------------------------------------------------------------
+    @retry_on_connection_error()
     @handle_exception
     def send_email(
         self,
@@ -132,11 +242,19 @@ class GmailConnector:
         cc: str = "",
     ) -> str:
         """Send an email and return Gmail message id."""
-        logger.announcement(f"Sending {email_template} email to: {client_email}", type="info")
-        raw_message = self.create_html_email(content, subject, client_email, email_template, bcc, cc)
+
+        logger.announcement(
+            f"Sending {email_template} email to: {client_email}", type="info"
+        )
+
+        raw_message = self.create_html_email(
+            content, subject, client_email, email_template, bcc, cc
+        )
+
         sent_response = (
             self.service.users().messages().send(userId="me", body=raw_message).execute()
         )
+
         logger.announcement(
             f"Successfully sent {email_template} email to: {client_email}", type="success"
         )
