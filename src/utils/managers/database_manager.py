@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, Table, MetaData
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.exc import SQLAlchemyError, OperationalError, DatabaseError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from datetime import datetime
 from functools import wraps
@@ -160,61 +160,19 @@ class DatabaseManager:
         logger.info(f"Schema validation completed for table '{table_name}'")
 
     def with_session(self, func):
-        """Decorator that manages the session life-cycle and automatically
-        attempts to reconnect once if a connection-related error occurs."""
-
         @wraps(func)
         def wrapper(*args, **kwargs):
-            attempt = 0  # number of connection attempts
-
-            while attempt < 2:  # initial try + one reconnect attempt
-                session = Session(bind=self.engine)
-                try:
-                    result = func(session, *args, **kwargs)
-                    session.commit()
-                    return result
-
-                # Handle connectivity issues first
-                except (OperationalError, DatabaseError) as e:
-                    session.rollback()
-                    logger.error(
-                        f"Database connection error in {func.__name__}: {str(e)}"
-                    )
-
-                    # Try to reconnect only once
-                    if attempt == 0:
-                        attempt += 1
-                        logger.info("Attempting to reconnect to the database…")
-                        try:
-                            # Dispose the existing engine/connection pool
-                            self.engine.dispose()
-
-                            # Re-create the engine using the original URL
-                            self.engine = create_engine(str(self.engine.url))
-
-                            # Re-reflect metadata so subsequent operations work
-                            self.metadata.reflect(bind=self.engine)
-                            continue  # retry the operation
-                        except Exception as conn_exc:
-                            logger.error(
-                                f"Failed to reconnect to the database: {conn_exc}"
-                            )
-                            raise Exception(
-                                f"Database reconnection failed: {conn_exc}"
-                            )
-
-                    # If we've already retried once, re-raise the original error
-                    raise Exception(f"Database error: {str(e)}")
-
-                # Any other kind of error – just report it
-                except Exception as e:
-                    session.rollback()
-                    logger.error(f"Database error in {func.__name__}: {str(e)}")
-                    raise Exception(f"Database error: {str(e)}")
-
-                finally:
-                    session.close()
-
+            session = Session(bind=self.engine)
+            try:
+                result = func(session, *args, **kwargs)
+                session.commit()
+                return result
+            except Exception as e:
+                session.rollback()
+                logger.error(f"Database error in {func.__name__}: {str(e)}")
+                raise Exception(f"Database error: {str(e)}")
+            finally:
+                session.close()
         return wrapper
 
     def _ids_to_string(self, data: dict):
