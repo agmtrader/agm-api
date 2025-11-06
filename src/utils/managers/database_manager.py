@@ -159,20 +159,91 @@ class DatabaseManager:
         
         logger.info(f"Schema validation completed for table '{table_name}'")
 
-    def with_session(self, func):
+    def with_session(self, func, max_retries: int = 3, delay: int = 1):
+        """Decorator to manage a SQLAlchemy session with automatic reconnection logic.
+
+        Parameters
+        ----------
+        func : callable
+            The target function that receives a SQLAlchemy `Session` as its first argument.
+        max_retries : int, optional
+            How many times to retry the wrapped function when a connection-related error
+            is detected. Defaults to 3.
+        delay : int, optional
+            Seconds to wait before each retry (with simple exponential back-off). Defaults to 1.
+        """
+
         @wraps(func)
         def wrapper(*args, **kwargs):
-            session = Session(bind=self.engine)
-            try:
-                result = func(session, *args, **kwargs)
-                session.commit()
-                return result
-            except Exception as e:
-                session.rollback()
-                logger.error(f"Database error in {func.__name__}: {str(e)}")
-                raise Exception(f"Database error: {str(e)}")
-            finally:
-                session.close()
+            last_exception = None
+
+            for attempt in range(max_retries):
+                # Lazily create a brand-new session for every attempt so it picks up a fresh
+                # connection from the pool (which might have been refreshed).
+                session = Session(bind=self.engine)
+                try:
+                    result = func(session, *args, **kwargs)
+                    session.commit()
+                    return result
+
+                except Exception as e:
+                    session.rollback()
+                    last_exception = e
+
+                    # Detect connection/operational errors by inspecting the exception hierarchy
+                    # and message. This is intentionally broad because different drivers/platforms
+                    # surface these errors differently.
+                    error_msg = str(e).lower()
+                    connection_error_indicators = [
+                        "operationalerror",          # Generic SQLAlchemy wrapper
+                        "server closed the connection",
+                        "connection refused",
+                        "could not connect",
+                        "connection already closed",
+                        "timeout",
+                        "too many connections",
+                        "connection reset",
+                    ]
+
+                    is_connection_error = any(indicator in error_msg for indicator in connection_error_indicators)
+
+                    if is_connection_error and attempt < max_retries - 1:
+                        logger.warning(
+                            f"Connection error when executing {func.__name__} (attempt {attempt + 1}/{max_retries}): {e}. "
+                            "Refreshing engine and retrying…"
+                        )
+
+                        # Fully dispose of the existing engine (closes all pooled connections)
+                        try:
+                            self.engine.dispose()
+                        except Exception:
+                            pass  # Best-effort
+
+                        # Re-create the engine using the same URL. This requires that the instance carrying
+                        # the URL attribute is the original Supabase class that created this DatabaseManager.
+                        from sqlalchemy import create_engine  # Local import to avoid circular
+
+                        try:
+                            self.engine = create_engine(self.engine.url)
+                        except Exception as create_e:
+                            logger.error(f"Failed to recreate engine: {create_e}")
+                            break  # Give up and raise the original exception
+
+                        # Simple exponential back-off
+                        import time  # Local import to keep module-level imports minimal
+                        time.sleep(delay * (attempt + 1))
+                        continue
+
+                    # Not a connection error or retries exhausted ― re-raise.
+                    logger.error(f"Database error in {func.__name__}: {str(e)}")
+                    raise Exception(f"Database error: {str(e)}")
+
+                finally:
+                    session.close()
+
+            # All retries failed
+            raise last_exception
+
         return wrapper
 
     def _ids_to_string(self, data: dict):

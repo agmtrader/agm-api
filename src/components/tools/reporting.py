@@ -205,33 +205,38 @@ def extract() -> dict:
     logger.announcement('Flex Queries uploaded to batch folder.', type='success')
     time.sleep(2)
 
+    # Extract Bond Snapshot
     ip = requests.get('https://api.ipify.org').content.decode('utf8')
     ibkr_web_api.create_sso_session('agmtech212', ip)
     ibkr_web_api.initialize_brokerage_session()
     time.sleep(2)
-    watchlist_information = ibkr_web_api.get_watchlist_information('100')
+
+    retry_count = 0
+    while retry_count < 5:
+        watchlist_information = ibkr_web_api.get_watchlist_information('100')
+        if len(watchlist_information['instruments']) > 500:
+            break
+            
     conids = []
+
     for watchlist_item in watchlist_information['instruments']:
-        try:
-            if watchlist_item['assetClass'] == 'BOND':
-                conids.append(str(watchlist_item['conid']))
-        except Exception as e:
-            continue
-    print(len(conids))
+        if 'assetClass' in watchlist_item.keys() and watchlist_item['assetClass'] == 'BOND':
+            conids.append(str(watchlist_item['conid']))
+
     market_data_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[:350]))
     df = pd.DataFrame(market_data_snapshot)
     df.columns = df.columns.str.upper()
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
     df['TIMESTAMP'] = timestamp
+
+    # Upload Bond Snapshot to batch folder
     bond_snapshot_config = next((config for config in report_configs if config['name'] == 'market_data_snapshot'), None)
-    if bond_snapshot_config is None:
-        logger.error('Bond snapshot configuration not found')
-        raise Exception('Bond snapshot configuration not found')
     file_name = bond_snapshot_config['backup_name']
     Drive.upload_file(file_name=file_name, mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=bond_snapshot_config['backup_folder_id'])
 
     rename_files_in_batch()
     sort_batch_files_to_backup_folders()
+
     logger.announcement('Information successfully extracted for reports.', type='success')
     return {'status': 'success'}
 
@@ -289,6 +294,12 @@ def sort_batch_files_to_backup_folders():
             for config in report_configs:
                 if config['name'] in f['name']:
                     new_parent_id = config['backup_folder_id']
+                    backup_files = Drive.get_files_in_folder(new_parent_id)
+                    if len(backup_files) > 0:
+                        for backed_up_file in backup_files:
+                            if backed_up_file['name'] == f['name']:
+                                logger.warning(f'Deleting backed up file: {backed_up_file}')
+                                Drive.delete_file(backed_up_file['id'])
                     Drive.move_file(f=f, newParentId=new_parent_id)
     except:
         logger.error(f'Error sorting files to backup folders.')
@@ -322,7 +333,14 @@ def process_report(config):
         most_recent_file = get_most_recent_file(files)
 
         # Download file and read into dataframe
-        f = Drive.download_file(file_id=most_recent_file['id'], parse=True)
+        try:
+            f = Drive.download_file(file_id=most_recent_file['id'], parse=True)
+        except:
+            try:
+                f = Drive.export_file(file_id=most_recent_file['id'], mime_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', parse=True)
+            except:
+                logger.error(f'Error downloading file: {most_recent_file}')
+                raise Exception(f'Error downloading file: {most_recent_file}')
         file_df = pd.DataFrame(f)
         file_df = file_df.fillna('')
 
@@ -711,7 +729,7 @@ report_configs = [
         'name': '742588',
         'backup_folder_id': '1FJSGaj4tXyjp1otRyBayJIX6M7TVBxbJ',
         'flex': True,
-        'backup_name': '742588' + '_' + today_date + '.csv',
+        'backup_name': '742588' + '_' + yesterday_date + '.csv',
         'transform_func': process_open_positions_template,
         'output_filename': 'ibkr_open_positions_template.csv',
     },
@@ -719,7 +737,7 @@ report_configs = [
         'name': '734782',
         'backup_folder_id': '1focfkCCzycuhpCwVsMcNKF8s9hAhvBWk',
         'flex': True,
-        'backup_name': '734782' + '_' + today_date + '.csv',
+        'backup_name': '734782' + '_' + yesterday_date + '.csv',
         'transform_func': process_nav,
         'output_filename': 'ibkr_nav_in_base.csv'
     },
@@ -727,7 +745,7 @@ report_configs = [
         'name': '732383',
         'backup_folder_id': '1iiX9rBfDJGjDSpkCWNutnWbV5-ZxIgAl',
         'flex': True,
-        'backup_name': '732383' + '_' + today_date + '.csv',
+        'backup_name': '732383' + '_' + first_date + '_' + yesterday_date + '.csv',
         'transform_func': process_client_fees,
         'output_filename': 'ibkr_client_fees.csv'
     },
