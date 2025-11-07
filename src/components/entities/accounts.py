@@ -114,6 +114,7 @@ def update_pending_aliases(master_account: str = None) -> dict:
                     'account_id': account_id,
                     'new_alias': new_alias
                 })
+                logger.success(f"Updated alias for {account_id} to {new_alias}")
             except Exception as e:
                 logger.error(f"Failed to update alias for {account_id}: {e}")
     return {
