@@ -115,21 +115,12 @@ def get_rtd_report():
     
     :return: Response object with RTD report or error message
     """
-    """
     files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
-    rtd_file = [rtd for rtd in files_in_resources_folder if 'ibkr_rtd' in rtd['name']]
+    rtd_file = [rtd for rtd in files_in_resources_folder if 'ibkr_market_data_snapshot' in rtd['name']]
     if len(rtd_file) != 1:
         logger.error('RTD file not found or multiple files found')
         raise Exception('RTD file not found or multiple files found')
     rtd = Drive.download_file(file_id=rtd_file[0]['id'], parse=True)
-    """
-    files_in_market_data_folder = Drive.get_files_in_folder('1luTnQ1qRDNWLrqjMan-kF_eMgH16R-J9')
-    bond_snapshot_file = [bond_snapshot for bond_snapshot in files_in_market_data_folder if 'ibkr_bond_snapshot' in bond_snapshot['name']]
-    if len(bond_snapshot_file) != 1:
-        logger.error('Bond snapshot file not found or multiple files found')
-        raise Exception('Bond snapshot file not found or multiple files found')
-    bond_snapshot = Drive.download_file(file_id=bond_snapshot_file[0]['id'], parse=True)
-    return bond_snapshot
     return rtd  
 
 def get_open_positions_report():
@@ -234,9 +225,47 @@ def extract() -> dict:
 
     market_data_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[:350]))
     df = pd.DataFrame(market_data_snapshot)
-    df.columns = df.columns.str.upper()
+    df.columns = df.columns.str.capitalize()
+
+    df['Financial Instrument'] = df['Symbol'] + ' ' + df['Contract_description_2']
+    df['Symbol'] = 'IBCID' + df['Conidex']
+
+    from src.components.tools.trade_tickets import extract_bond_details
+    for index, row in df.iterrows():
+        bond_details = extract_bond_details(row['Financial Instrument'])
+        df.at[index, 'Coupon'] = float(bond_details['coupon'])
+        df.at[index, 'Maturity'] = bond_details['maturity']
+        df.at[index, 'ISIN'] = bond_details['isin']
+    
+    # 
+    df['Next Option Date'] = ''
+    df['Payment Frequency'] = ''
+    df['Trading Currency'] = 'USD'
+    df['Sector'] = ''
+
+    def extract_numbers(text):
+        return ''.join(filter(str.isdigit, text))
+
+    df['Last'] = df['Last_price'].astype(str).apply(extract_numbers)
+    df['Current Yield'] = ((1000 * df['Coupon'].astype(float)) / df['Last'].astype(float)) * 100
+
+    rename_map = {
+        'Company_name': 'Company Name',
+        'Bid_size': 'Bid Size',
+        'Bid_price': 'Bid',
+        'Bid_yield': 'Bid Yield',
+        'Ask_size': 'Ask Size',
+        'Ask_price': 'Ask',
+        'Ask_yield': 'Ask Yield',
+        'Issue_date': 'Issue Date',
+        'Last_trading_date': 'Last Trading Date',
+    }
+
+    df = df.rename(columns=rename_map)
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    df['TIMESTAMP'] = timestamp
+    df['Timestamp'] = timestamp
+
+    df.to_csv('ibkr_market_data_snapshot.csv', index=False)
 
     # Upload Bond Snapshot to batch folder
     bond_snapshot_config = next((config for config in report_configs if config['name'] == 'market_data_snapshot'), None)
@@ -306,7 +335,7 @@ def sort_batch_files_to_backup_folders():
                     backup_files = Drive.get_files_in_folder(new_parent_id)
                     if len(backup_files) > 0:
                         for backed_up_file in backup_files:
-                            if backed_up_file['name'] == f['name']:
+                            if backed_up_file['createdTime'].split('T')[0] == datetime.now().strftime('%Y-%m-%d'):
                                 logger.warning(f'Deleting backed up file: {backed_up_file}')
                                 #Drive.delete_file(backed_up_file['id'])
                     Drive.move_file(f=f, newParentId=new_parent_id)
@@ -482,10 +511,6 @@ def process_rtd(df):
     # Drop the temporary columns
     df = df.drop(['SP_Level', 'Moodys_Level'], axis=1)
 
-
-    # Create a new dictionary with only S&P ratings
-    sp_dict = {rating: info for rating, info in ratings.items() if info["Source"] == "S&P"}
-
     # Create S&P Equivalent column by mapping Rating Level to S&P rating
     def get_sp_equivalent(level):
         """
@@ -503,10 +528,7 @@ def process_rtd(df):
 
     df['S&P Equivalent'] = df['Rating Level'].apply(get_sp_equivalent)
 
-    # Filter df to only include rows where Symbol contains 'IBCID'
-    df_ibcid = df[df['Symbol'].str.contains('IBCID', na=False)]
-
-    return df_ibcid
+    return df
 
 def process_open_positions_template(df):
     """
@@ -651,15 +673,6 @@ def process_client_fees(df):
     """
     return df
 
-def process_market_data_snapshot(df):
-    """
-    Process the market data snapshot file.
-    
-    :param df: Input dataframe
-    :return: Processed dataframe
-    """
-    return df
-
 def get_finance_data():
     """
     Get finance data from the finance folder.
@@ -727,14 +740,6 @@ report_configs = [
         'output_filename': 'ibkr_clients.csv'
     },
     {
-        'name': 'RTD',
-        'backup_folder_id': '1M7Tdz4vJpYmw0xGSgx-m_Kq4Rpc1gxci',
-        'flex': False,
-        'backup_name': 'RTD' + ' ' + today_date + '.csv',
-        'transform_func': process_rtd,
-        'output_filename': 'ibkr_rtd.csv',
-    },
-    {
         'name': '742588',
         'backup_folder_id': '1FJSGaj4tXyjp1otRyBayJIX6M7TVBxbJ',
         'flex': True,
@@ -763,10 +768,21 @@ report_configs = [
         'backup_folder_id': '1luTnQ1qRDNWLrqjMan-kF_eMgH16R-J9',
         'flex': False,
         'backup_name': 'bond' + '_' + today_date + '.csv',
-        'transform_func': process_market_data_snapshot,
+        'transform_func': process_rtd,
         'output_filename': 'ibkr_market_data_snapshot.csv'
     }
 ]
+
+"""
+{
+    'name': 'RTD',
+    'backup_folder_id': '1M7Tdz4vJpYmw0xGSgx-m_Kq4Rpc1gxci',
+    'flex': False,
+    'backup_name': 'RTD' + ' ' + today_date + '.csv',
+    'transform_func': process_rtd,
+    'output_filename': 'ibkr_rtd.csv',
+}
+"""
 
 """
 HELPER FUNCTIONS

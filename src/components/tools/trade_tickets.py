@@ -37,7 +37,11 @@ def generate_trade_confirmation_message(flex_query_dict, indices):
         logger.error('Not all rows in the Description column have the same value.')
         raise Exception('Not all rows in the Description column have the same value.')
 
-    symbol, coupon, maturity = extract_bond_details(df_indexed['Description'].iloc[0])
+    bond_details = extract_bond_details(df_indexed['Description'].iloc[0])
+
+    # Use extracted bond details
+    coupon = bond_details.get('coupon')
+    maturity = bond_details.get('maturity')
 
     if (df_indexed.loc[:,'AccruedInterest'] == 0).any():
         logger.error('At least one row has AccruedInterest value of 0.')
@@ -142,37 +146,91 @@ def generate_trade_confirmation_message(flex_query_dict, indices):
     logger.success(f'Client confirmation message generated.')
     return {'data': message}
 
-def extract_bond_details(description):
-    
-    # Extract symbol (assuming it's always at the beginning)
+def extract_bond_details(description: str):
+    """Extract symbol, coupon, maturity, ISIN and ratings from a bond description.
+
+    Expected examples:
+        "GM CORP 5 Oct01'28 37045VAS9 BAA2/BBB"
+        "US TREASURY 3.25 12/31/2032 US91282CHF10 AA+/AA+"
+
+    The function is designed to be resilient to minor format variations.
+    """
+
     logger.info(f'Extracting bond details from description: {description}')
-    symbol = description.split()[0]
-    
-    # Extract coupon (handling both mixed number and decimal formats)
-    coupon_match = re.search(r'(\d+(?:\s+\d+/\d+|\.\d+)|\d+)', description)
+
+    # -----------------------------
+    # Symbol (take everything before the coupon figure)
+    # -----------------------------
+    coupon_pattern = re.compile(r"\b\d+(?:\s+\d+/\d+|\.\d+)?\b")  # e.g. 5 or 5 1/2 or 5.25
+    coupon_match = coupon_pattern.search(description)
     if coupon_match:
-        coupon_str = coupon_match.group(1)
-        if '/' in coupon_str:
+        symbol_part = description[:coupon_match.start()].strip()
+    else:
+        # Fallback: up to first date or identifier
+        symbol_part = description.split()[0]
+
+    symbol = symbol_part
+
+    # -----------------------------
+    # Coupon
+    # -----------------------------
+    coupon = None
+    if coupon_match:
+        coupon_str = coupon_match.group(0)
+        if ' ' in coupon_str:  # mixed number e.g. "5 1/2"
             whole, fraction = coupon_str.split(' ')
-            numerator, denominator = fraction.split('/')
-            coupon = float(whole) + (float(numerator) / float(denominator))
+            num, den = fraction.split('/')
+            coupon = float(whole) + float(num) / float(den)
         else:
             coupon = float(coupon_str)
-    else:
-        coupon = None
-    
-    # Extract date (assuming it's always at the end)
-    date_match = re.search(r'(\d{2}/\d{2}/\d{2,4})$', description)
-    if date_match:
-        date_str = date_match.group(1)
-        date_obj = datetime.strptime(date_str, '%m/%d/%y' if len(date_str) == 8 else '%m/%d/%Y')
-        maturity = date_obj.strftime('%Y-%m-%d')
-    else:
-        maturity = None
-    
-    logger.success(f'Extracted bond details: symbol={symbol}, coupon={coupon}, maturity={maturity}')
-    return symbol, coupon, maturity
 
+    # -----------------------------
+    # Maturity (support formats like Oct01'28 or 12/31/2032)
+    # -----------------------------
+    maturity = None
+
+    # Format 1: MMMDD'YY e.g. Oct01'28
+    mat1 = re.search(r"([A-Za-z]{3})(\d{2})'?(\d{2})", description)
+    if mat1:
+        mon_str, day_str, yr_str = mat1.groups()
+        try:
+            date_obj = datetime.strptime(f"{mon_str}{day_str}{yr_str}", "%b%d%y")
+            maturity = date_obj.strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+
+    # Format 2: MM/DD/YY(YY) e.g. 12/31/2032
+    if maturity is None:
+        mat2 = re.search(r"(\d{2})/(\d{2})/(\d{2,4})", description)
+        if mat2:
+            m, d, y = mat2.groups()
+            fmt = "%y" if len(y) == 2 else "%Y"
+            date_obj = datetime.strptime(f"{m}/{d}/{y}", f"%m/%d/{fmt}")
+            maturity = date_obj.strftime("%Y-%m-%d")
+
+    # -----------------------------
+    # ISIN (two letters + 10 alphanumerics)
+    # -----------------------------
+    isin_match = re.search(r"\b[A-Z]{2}[A-Z0-9]{10}\b", description)
+    isin = isin_match.group(0) if isin_match else None
+
+    # -----------------------------
+    # Ratings (capture Moody's/S&P pair e.g. BAA2/BBB, Aa1/AA-, etc.)
+    # -----------------------------
+    ratings_match = re.search(r"\b([A-Z]{1,4}[+-]?\d?/[A-Z]{1,4}[+-]?\d?)\b", description)
+    ratings = ratings_match.group(1) if ratings_match else None
+
+    logger.success(
+        f"Extracted bond details: symbol={symbol}, coupon={coupon}, maturity={maturity}, isin={isin}, ratings={ratings}"
+    )
+
+    return {
+        'symbol': symbol,
+        'coupon': coupon,
+        'maturity': maturity,
+        'isin': isin,
+        'ratings': ratings,
+    }
 @handle_exception
 def generate_excel_file(flex_query_dict, indices):
     logger.info('Generating trade ticket. Processing data...')
@@ -181,14 +239,14 @@ def generate_excel_file(flex_query_dict, indices):
     flex_query_df = pd.DataFrame(flex_query_dict)
     df_indexed = flex_query_df.iloc[indices].copy()
 
-    symbol, coupon, maturity = extract_bond_details(df_indexed['Description'].iloc[0])
+    bond_details = extract_bond_details(df_indexed['Description'].iloc[0])
 
     if (df_indexed.loc[:,'AccruedInterest'] == 0).any():
         logger.error('At least one row has AccruedInterest value of 0.')
         raise Exception('At least one row has AccruedInterest value of 0.')
 
-    df_indexed['Coupon'] = coupon
-    df_indexed['Maturity'] = maturity
+    df_indexed['Coupon'] = bond_details['coupon']
+    df_indexed['Maturity'] = bond_details['maturity']
 
     df_indexed.loc[:,'Quantity'] = df_indexed['Quantity'].astype(float).abs()
     df_indexed.loc[:,'AccruedInterest'] = df_indexed['AccruedInterest'].astype(float).abs()

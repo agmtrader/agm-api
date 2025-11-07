@@ -873,11 +873,14 @@ class IBKRWebAPI:
 
             # Build a comprehensive field list to match sandbox column requirements
             desired_fields = [
-                # Identification & Instrument
+
                 MarketDataField.SYMBOL,              # Symbol (Ticker)
                 MarketDataField.COMPANY_NAME,        # Company Name
                 MarketDataField.CONID_EXCHANGE,      # Conid + Exchange (proxy for CUSIP/ISIN uniqueness)
                 MarketDataField.SECTYPE,             # Financial Instrument / Asset Class
+                MarketDataField.TEXT,                # Text
+                MarketDataField.CONTRACT_DESCRIPTION_1, # Contract Description 1
+                MarketDataField.CONTRACT_DESCRIPTION_2, # Contract Description 2
 
                 # Quote & Size
                 MarketDataField.BID_PRICE,
