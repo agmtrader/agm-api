@@ -346,8 +346,9 @@ class IBKRWebAPI:
                 logger.error(f"Error {response.status_code}: {response.text}")
                 raise Exception(f"Error {response.status_code}: {response.text}")
 
-            logger.success("Fee template applied successfully")
-            return response.json()
+            data = response.json()
+            print(data)
+            return data
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 

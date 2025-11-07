@@ -115,12 +115,21 @@ def get_rtd_report():
     
     :return: Response object with RTD report or error message
     """
+    """
     files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
     rtd_file = [rtd for rtd in files_in_resources_folder if 'ibkr_rtd' in rtd['name']]
     if len(rtd_file) != 1:
         logger.error('RTD file not found or multiple files found')
         raise Exception('RTD file not found or multiple files found')
     rtd = Drive.download_file(file_id=rtd_file[0]['id'], parse=True)
+    """
+    files_in_market_data_folder = Drive.get_files_in_folder('1luTnQ1qRDNWLrqjMan-kF_eMgH16R-J9')
+    bond_snapshot_file = [bond_snapshot for bond_snapshot in files_in_market_data_folder if 'ibkr_bond_snapshot' in bond_snapshot['name']]
+    if len(bond_snapshot_file) != 1:
+        logger.error('Bond snapshot file not found or multiple files found')
+        raise Exception('Bond snapshot file not found or multiple files found')
+    bond_snapshot = Drive.download_file(file_id=bond_snapshot_file[0]['id'], parse=True)
+    return bond_snapshot
     return rtd  
 
 def get_open_positions_report():
