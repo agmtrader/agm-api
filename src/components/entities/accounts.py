@@ -137,11 +137,12 @@ def change_financial_information(account_id: str = None, investment_experience: 
     """Change account financial information via IBKR API."""
     return ibkr_web_api.change_financial_information(account_id=account_id, investment_experience=investment_experience, master_account=master_account)
 
-# Cash Transfers
 @handle_exception
-def deposit_funds(master_account: str = None, client_instruction_id: str = None, account_id: str = None, amount: float = None, currency: str = "USD", bank_instruction_method: str = "WIRE", is_ira: bool = False, sending_institution: str = None, identifier: str = None, special_instruction: str = None, bank_instruction_name: str = None, sender_institution_name: str = None) -> dict:
+def deposit_funds(master_account: str = None, instruction: dict = None, account_id: str = None) -> dict:
     """Deposit funds via IBKR API."""
-    return ibkr_web_api.deposit_funds(master_account=master_account, client_instruction_id=client_instruction_id, account_id=account_id, amount=amount, currency=currency, bank_instruction_method=bank_instruction_method, is_ira=is_ira, sending_institution=sending_institution, identifier=identifier, special_instruction=special_instruction, bank_instruction_name=bank_instruction_name, sender_institution_name=sender_institution_name)
+    client_instruction_id = db.create(table='account_instruction', data={'account_id': account_id})
+    instruction['clientInstructionId'] = client_instruction_id
+    return ibkr_web_api.deposit_funds(master_account=master_account, instruction=instruction)
 
 @handle_exception
 def get_status_of_instruction(client_instruction_id: str = None) -> dict:

@@ -159,6 +159,7 @@ def get_market_data_snapshot():
         raise Exception('Market data snapshot file not found or multiple files found')
     market_data_snapshot = Drive.download_file(file_id=market_data_snapshot_file[0]['id'], parse=True)
     return market_data_snapshot
+
 """
 ETL PIPELINE
 """
@@ -205,26 +206,46 @@ def extract() -> dict:
     logger.announcement('Flex Queries uploaded to batch folder.', type='success')
     time.sleep(2)
 
-    # Extract Bond Snapshot
+    extract_bond_snapshot()
+
+    rename_files_in_batch()
+    sort_batch_files_to_backup_folders()
+
+    logger.announcement('Information successfully extracted for reports.', type='success')
+    return {'status': 'success'}
+
+def extract_bond_snapshot():
+    """
+    Extract the bond snapshot.
+    
+    :return: Response object with bond snapshot or error message
+    """
     ip = requests.get('https://api.ipify.org').content.decode('utf8')
     ibkr_web_api.create_sso_session('agmtech212', ip)
     ibkr_web_api.initialize_brokerage_session()
     time.sleep(2)
 
     retry_count = 0
-    while retry_count < 5:
-        watchlist_information = ibkr_web_api.get_watchlist_information('100')
-        if len(watchlist_information['instruments']) > 500:
-            break
-            
     conids = []
 
-    for watchlist_item in watchlist_information['instruments']:
-        if 'assetClass' in watchlist_item.keys() and watchlist_item['assetClass'] == 'BOND':
-            conids.append(str(watchlist_item['conid']))
+    while retry_count < 5:
+        watchlist_information = ibkr_web_api.get_watchlist_information('100')
 
-    market_data_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[:350]))
-    df = pd.DataFrame(market_data_snapshot)
+        for watchlist_item in watchlist_information['instruments']:
+            if 'assetClass' in watchlist_item.keys() and watchlist_item['assetClass'] == 'BOND':
+                conids.append(str(watchlist_item['conid']))
+
+        if len(conids) > 500:
+            break
+            
+        retry_count += 1
+        time.sleep(2)
+
+    first_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[:350]))
+    second_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[351:699]))
+    third_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[700:]))
+    print(first_snapshot, second_snapshot, third_snapshot)
+    df = pd.DataFrame(first_snapshot + second_snapshot + third_snapshot)
     df.columns = df.columns.str.capitalize()
 
     df['Financial Instrument'] = df['Symbol'] + ' ' + df['Contract_description_2']
@@ -233,7 +254,7 @@ def extract() -> dict:
     from src.components.tools.trade_tickets import extract_bond_details
     for index, row in df.iterrows():
         bond_details = extract_bond_details(row['Financial Instrument'])
-        df.at[index, 'Coupon'] = float(bond_details['coupon'])
+        df.at[index, 'Coupon'] = float(bond_details['coupon']) if bond_details['coupon'] != '' else 0.0
         df.at[index, 'Maturity'] = bond_details['maturity']
         df.at[index, 'ISIN'] = bond_details['isin']
     
@@ -246,8 +267,9 @@ def extract() -> dict:
     def extract_numbers(text):
         return ''.join(filter(str.isdigit, text))
 
-    df['Last'] = df['Last_price'].astype(str).apply(extract_numbers)
-    df['Current Yield'] = ((1000 * df['Coupon'].astype(float)) / df['Last'].astype(float)) * 100
+    df['Last'] = pd.to_numeric(df['Last'], errors='coerce')
+    df['Coupon'] = pd.to_numeric(df['Coupon'], errors='coerce')
+    df['Current Yield'] = ((1000 * df['Coupon']) / df['Last']) * 100
 
     rename_map = {
         'Company_name': 'Company Name',
@@ -265,18 +287,10 @@ def extract() -> dict:
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
     df['Timestamp'] = timestamp
 
-    df.to_csv('ibkr_market_data_snapshot.csv', index=False)
-
-    # Upload Bond Snapshot to batch folder
-    bond_snapshot_config = next((config for config in report_configs if config['name'] == 'market_data_snapshot'), None)
-    file_name = bond_snapshot_config['backup_name']
-    Drive.upload_file(file_name=file_name, mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=bond_snapshot_config['backup_folder_id'])
-
-    rename_files_in_batch()
-    sort_batch_files_to_backup_folders()
-
-    logger.announcement('Information successfully extracted for reports.', type='success')
-    return {'status': 'success'}
+    market_data_snapshot_config = next((config for config in report_configs if config['name'] == 'market_data_snapshot'), None)
+    file_name = market_data_snapshot_config['backup_name']
+    Drive.upload_file(file_name=file_name, mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=market_data_snapshot_config['backup_folder_id'])
+    return df
 
 def transform() -> dict:
     logger.announcement('Transforming backups into reports.', type='info')
@@ -337,7 +351,7 @@ def sort_batch_files_to_backup_folders():
                         for backed_up_file in backup_files:
                             if backed_up_file['createdTime'].split('T')[0] == datetime.now().strftime('%Y-%m-%d'):
                                 logger.warning(f'Deleting backed up file: {backed_up_file}')
-                                #Drive.delete_file(backed_up_file['id'])
+                                Drive.delete_file(backed_up_file['id'])
                     Drive.move_file(f=f, newParentId=new_parent_id)
     except:
         logger.error(f'Error sorting files to backup folders.')
@@ -772,17 +786,6 @@ report_configs = [
         'output_filename': 'ibkr_market_data_snapshot.csv'
     }
 ]
-
-"""
-{
-    'name': 'RTD',
-    'backup_folder_id': '1M7Tdz4vJpYmw0xGSgx-m_Kq4Rpc1gxci',
-    'flex': False,
-    'backup_name': 'RTD' + ' ' + today_date + '.csv',
-    'transform_func': process_rtd,
-    'output_filename': 'ibkr_rtd.csv',
-}
-"""
 
 """
 HELPER FUNCTIONS

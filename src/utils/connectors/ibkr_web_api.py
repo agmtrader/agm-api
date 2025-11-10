@@ -1210,51 +1210,27 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def deposit_funds(self, master_account: str, client_instruction_id: str, account_id: str, amount: float, currency: str = "USD", bank_instruction_method: str = "WIRE", is_ira: bool = False, sending_institution: str | None = None, identifier: str | None = None, special_instruction: str | None = None, bank_instruction_name: str | None = None, sender_institution_name: str | None = None) -> dict:
+    def deposit_funds(self, master_account: str, instruction: dict) -> dict:
         """Submit a deposit instruction to IBKR.
 
         Args:
             master_account (str): Which credential set to use ('ad' or 'br').
             client_instruction_id (str): Unique identifier for the client instruction.
-            account_id (str): IBKR account receiving the deposit.
-            amount (float): Deposit amount.
-            currency (str, optional): Currency of the deposit. Defaults to "USD".
-            bank_instruction_method (str, optional): Method for deposit (e.g. "WIRE"). Defaults to "WIRE".
-            is_ira (bool, optional): Whether the account is an IRA. Defaults to False.
-            sending_institution (str | None, optional): Name of the sending institution. Defaults to None.
-            identifier (str | None, optional): Identifier for the deposit. Defaults to None.
-            special_instruction (str | None, optional): Any special instruction. Defaults to None.
-            bank_instruction_name (str | None, optional): Name of the bank instruction. Defaults to None.
-            sender_institution_name (str | None, optional): Sender's institution name. Defaults to None.
+            instruction (dict): Instruction details.
         Returns:
             dict: API response from IBKR.
         """
         try:
             original_creds = self._apply_credentials(master_account)
-            logger.info(f"Submitting deposit instruction for account {account_id} (amount={amount} {currency})")
+            logger.info(f"Submitting deposit instruction for account {instruction['accountId']}")
 
             url = f"{self.BASE_URL}/gw/api/v1/external-cash-transfers"
-
-            instruction = {
-                "clientInstructionId": client_instruction_id,
-                "accountId": account_id,
-                "currency": currency,
-                "amount": amount,
-                "bankInstructionMethod": bank_instruction_method,
-                "isIRA": is_ira,
-                "sendingInstitution": sending_institution,
-                "identifier": identifier,
-                "specialInstruction": special_instruction,
-                "bankInstructionName": bank_instruction_name,
-                "senderInstitutionName": sender_institution_name,
-            }
-            # Remove keys with None values – IBKR rejects nulls
-            instruction = {k: v for k, v in instruction.items() if v is not None}
 
             body = {
                 "instructionType": "DEPOSIT",
                 "instruction": instruction,
             }
+            print(body)
 
             token = self.get_bearer_token()
             if not token:
@@ -1268,7 +1244,7 @@ class IBKRWebAPI:
             }
 
             response = requests.post(url, headers=headers, data=signed_jwt)
-            if response.status_code != 200:
+            if response.status_code != 202:
                 logger.error(f"Error {response.status_code}: {response.text}")
                 raise Exception(f"Error {response.status_code}: {response.text}")
 

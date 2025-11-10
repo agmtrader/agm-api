@@ -176,23 +176,10 @@ def view_withdrawable_cash_route():
 @format_response
 def deposit_funds_route():
     payload = request.get_json(force=True)
-    master_account = payload.get('master_account')
-    client_instruction_id = payload.get('client_instruction_id')
-    account_id = payload.get('account_id')
-    amount = payload.get('amount')
-    currency = payload.get('currency', 'USD')
-    bank_instruction_method = payload.get('bank_instruction_method', 'WIRE')
-    is_ira = payload.get('is_ira', False)
-    sending_institution = payload.get('sending_institution')
-    identifier = payload.get('identifier')
-    special_instruction = payload.get('special_instruction')
-    bank_instruction_name = payload.get('bank_instruction_name')
-    sender_institution_name = payload.get('sender_institution_name')
-
-    if not master_account or not client_instruction_id or not account_id or amount is None:
-        return {"error": "Missing master_account, client_instruction_id, account_id, or amount"}, 400
-
-    return deposit_funds(master_account=master_account, client_instruction_id=client_instruction_id, account_id=account_id, amount=amount, currency=currency, bank_instruction_method=bank_instruction_method, is_ira=is_ira, sending_institution=sending_institution, identifier=identifier, special_instruction=special_instruction, bank_instruction_name=bank_instruction_name, sender_institution_name=sender_institution_name)
+    master_account = payload.get('master_account', None)
+    instruction = payload.get('instruction', None)
+    account_id = payload.get('account_id', None)
+    return deposit_funds(master_account=master_account, instruction=instruction, account_id=account_id)
 
 @bp.route('/ibkr/instructions', methods=['GET'])
 @format_response
