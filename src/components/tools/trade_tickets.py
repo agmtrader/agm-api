@@ -303,30 +303,60 @@ def generate_excel_file(flex_query_dict, indices):
     df_indexed = df_indexed.rename(columns={
         'ClientAccountID': 'Cuenta de Cliente',
         'AccountAlias': 'Alias de Cuenta',
-        'CurrencyPrimary': 'Moneda Principal',
+        'CurrencyPrimary': 'Moneda',
         'AssetClass': 'Clase de Activo',
         'Symbol': 'Símbolo',
         'Description': 'Descripción',
-        'Conid': 'Conid',
+        'Conid': 'Numero de Contrato',
         'SecurityID': 'ID de Seguridad',
         'SecurityIDType': 'Tipo de ID de Seguridad',
         'CUSIP': 'CUSIP',
-        'ISIN': 'ISIN',
+        'ISIN': 'Serie',
         'FIGI': 'FIGI',
         'Issuer': 'Emisor',
         'Maturity': 'Vencimiento',
-        'Buy/Sell': 'Compra/Venta',
+        'Buy/Sell': 'Tipo de Transacción',
         'SettleDate': 'Fecha de Liquidación',
         'TradeDate': 'Fecha de Operación',
         'Exchange': 'Bolsa',
-        'Quantity': 'Cantidad',
+        'Quantity': 'Facial',
         'AccruedInterest': 'Interés Acumulado',
         'Accrued (Days)': 'Días de Interés Acumulado',
         'Price': 'Precio',
         'Price (including Commissions)': 'Precio (incluyendo Comisiones)',
         'Amount': 'Cantidad',
-        'TotalAmount': 'Cantidad Total'
+        'TotalAmount': 'Valor Transado'
     })
+
+    df_indexed['Emision'] = df_indexed['Serie']
+    df_indexed['Dias Al Vencimiento'] = ''
+    df_indexed['Rendimiento Bruto'] = ''
+    df_indexed['Mercado'] = ''
+    df_indexed['Comision En Bolsa En Caso De Que Aplique'] = ''
+
+    df_indexed = df_indexed[[
+        "Numero de Contrato",
+        "Fecha de Operación",
+        "Fecha de Liquidación",
+        "Emision",
+        "Serie",
+        "Facial",
+
+        "Precio",
+        'Rendimiento Bruto',
+        "Interés Acumulado",
+        "Valor Transado",
+
+        "Moneda",
+        'Dias Al Vencimiento',
+        "Vencimiento",
+
+        "Bolsa",
+        'Mercado',
+        "Tipo de Transacción",
+        "Comision En Bolsa En Caso De Que Aplique"
+    ]]
+
     indexed_dict = df_indexed.to_dict(orient='records')
     return {'data': indexed_dict}
 

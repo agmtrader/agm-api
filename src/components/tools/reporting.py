@@ -207,7 +207,6 @@ def extract() -> dict:
     time.sleep(2)
 
     extract_bond_snapshot()
-
     rename_files_in_batch()
     sort_batch_files_to_backup_folders()
 
@@ -267,9 +266,11 @@ def extract_bond_snapshot():
     def extract_numbers(text):
         return ''.join(filter(str.isdigit, text))
 
-    df['Last'] = pd.to_numeric(df['Last'], errors='coerce')
-    df['Coupon'] = pd.to_numeric(df['Coupon'], errors='coerce')
-    df['Current Yield'] = ((1000 * df['Coupon']) / df['Last']) * 100
+    df['Last'] = df['Last_price'].astype(str).apply(extract_numbers)
+    # Convert extracted strings to numeric, coercing errors to NaN, then replace NaN with 0.0 to avoid ValueError
+    df['Last'] = pd.to_numeric(df['Last'], errors='coerce').fillna(0.0)
+
+    df['Current Yield'] = ((1000 * df['Coupon'].astype(float)) / df['Last'].astype(float)) * 100
 
     rename_map = {
         'Company_name': 'Company Name',
@@ -351,7 +352,7 @@ def sort_batch_files_to_backup_folders():
                         for backed_up_file in backup_files:
                             if backed_up_file['createdTime'].split('T')[0] == datetime.now().strftime('%Y-%m-%d'):
                                 logger.warning(f'Deleting backed up file: {backed_up_file}')
-                                Drive.delete_file(backed_up_file['id'])
+                                #Drive.delete_file(backed_up_file['id'])
                     Drive.move_file(f=f, newParentId=new_parent_id)
     except:
         logger.error(f'Error sorting files to backup folders.')
