@@ -145,6 +145,13 @@ def deposit_funds(master_account: str = None, instruction: dict = None, account_
     return ibkr_web_api.deposit_funds(master_account=master_account, instruction=instruction)
 
 @handle_exception
+def withdraw_funds(master_account: str = None, instruction: dict = None, account_id: str = None) -> dict:
+    """Withdraw funds via IBKR API."""
+    client_instruction_id = db.create(table='account_instruction', data={'account_id': account_id})
+    instruction['clientInstructionId'] = client_instruction_id
+    return ibkr_web_api.withdraw_funds(master_account=master_account, instruction=instruction)
+
+@handle_exception
 def get_status_of_instruction(client_instruction_id: str = None) -> dict:
     """Get the status of a banking instruction via IBKR API."""
     return ibkr_web_api.get_status_of_instruction(client_instruction_id=client_instruction_id)

@@ -1,7 +1,7 @@
 from flask import Blueprint, request
 from requests import get
 from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_documents_by_account_id, create_instruction, read_instructions
-from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, view_withdrawable_cash, view_active_bank_instructions, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information
+from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, view_withdrawable_cash, view_active_bank_instructions, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, withdraw_funds
 from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts
 from src.utils.response import format_response
 
@@ -180,6 +180,15 @@ def deposit_funds_route():
     instruction = payload.get('instruction', None)
     account_id = payload.get('account_id', None)
     return deposit_funds(master_account=master_account, instruction=instruction, account_id=account_id)
+
+@bp.route('/ibkr/withdraw', methods=['POST'])
+@format_response
+def withdraw_funds_route():
+    payload = request.get_json(force=True)
+    master_account = payload.get('master_account', None)
+    instruction = payload.get('instruction', None)
+    account_id = payload.get('account_id', None)
+    return withdraw_funds(master_account=master_account, instruction=instruction, account_id=account_id)
 
 @bp.route('/ibkr/instructions', methods=['GET'])
 @format_response

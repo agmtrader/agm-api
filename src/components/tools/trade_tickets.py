@@ -231,6 +231,7 @@ def extract_bond_details(description: str):
         'isin': isin,
         'ratings': ratings,
     }
+
 @handle_exception
 def generate_excel_file(flex_query_dict, indices):
     logger.info('Generating trade ticket. Processing data...')

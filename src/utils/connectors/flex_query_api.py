@@ -6,9 +6,11 @@ import pandas as pd
 import csv
 
 from src.utils.logger import logger
-from src.utils.exception import handle_exception
+from src.utils.connectors.drive import GoogleDrive
+from datetime import datetime
 
 logger.announcement('Initializing Flex Query Service', type='info')
+Drive = GoogleDrive()
 version='&v=3'
 url = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest?"
 logger.announcement('Initialized Flex Query Service', type='success')
@@ -89,6 +91,9 @@ def getFlexQuery(queryId):
     
     xml_data = generatedReportResponse.content
     df = binaryXMLtoDF(xml_data)
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    df_dict = df.to_dict(orient='records')
+    Drive.upload_file(file_name=f'flex_query_{queryId}_{timestamp}.csv', mime_type='text/csv', file_data=df_dict, parent_folder_id='19kDy7YNptLPPMaYoMG2UmRyzwHSv7h0I')
     logger.success(f"Flex Query generated")
     return df.to_dict(orient='records')
 

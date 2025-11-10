@@ -1254,6 +1254,43 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
+    def withdraw_funds(self, master_account: str, instruction: dict) -> dict:
+        """Submit a withdrawal instruction to IBKR.
+        """
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Submitting withdrawal instruction for account {instruction['accountId']}")
+
+            url = f"{self.BASE_URL}/gw/api/v1/external-cash-transfers"
+
+            body = {
+                "instructionType": "WITHDRAWAL",
+                "instruction": instruction,
+            }
+            print(body)
+
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            signed_jwt = self.sign_request(body)
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt",
+            }
+
+            response = requests.post(url, headers=headers, data=signed_jwt)
+            if response.status_code != 202:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Withdrawal instruction submitted successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
     def change_financial_information(self, account_id: str, investment_experience: dict = None, master_account: str = None):
         """Change the financial information for a given account.
 
