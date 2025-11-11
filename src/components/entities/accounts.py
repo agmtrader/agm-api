@@ -156,6 +156,14 @@ def withdraw_funds(master_account: str = None, instruction: dict = None, account
     return ibkr_web_api.withdraw_funds(master_account=master_account, instruction=instruction)
 
 @handle_exception
+def transfer_position_internally(source_account_id: str = None, target_account_id: str = None, position: int = None, transfer_quantity: int = None, master_account: str = None) -> dict:
+    return ibkr_web_api.transfer_position_internally(source_account_id=source_account_id, target_account_id=target_account_id, position=position, transfer_quantity=transfer_quantity, master_account=master_account)
+
+@handle_exception
+def place_fop_instruction(account_id: str = None, client_instruction_id: int = None, contra_broker_account_id: str = None, contra_broker_dtc_code: str = None, quantity: int = None, conid: int = None, master_account: str = None) -> dict:
+    return ibkr_web_api.transfer_position_externally(account_id=account_id, client_instruction_id=client_instruction_id, contra_broker_account_id=contra_broker_account_id, contra_broker_dtc_code=contra_broker_dtc_code, quantity=quantity, conid=conid, master_account=master_account)
+
+@handle_exception
 def get_status_of_instruction(client_instruction_id: str = None) -> dict:
     """Get the status of a banking instruction via IBKR API."""
     return ibkr_web_api.get_status_of_instruction(client_instruction_id=client_instruction_id)

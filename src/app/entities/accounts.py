@@ -1,7 +1,9 @@
 from flask import Blueprint, request
-from requests import get
+
 from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_documents_by_account_id, create_instruction, read_instructions
-from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, view_withdrawable_cash, view_active_bank_instructions, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, withdraw_funds, create_user_for_account
+
+from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, view_withdrawable_cash, view_active_bank_instructions, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, withdraw_funds, create_user_for_account, transfer_position_internally, transfer_position_externally
+
 from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts
 from src.utils.response import format_response
 
@@ -182,6 +184,34 @@ def view_withdrawable_cash_route():
     if not master_account or not account_id or not client_instruction_id:
         return {"error": "Missing master_account, account_id, or client_instruction_id"}, 400
     return view_withdrawable_cash(master_account=master_account, account_id=account_id, client_instruction_id=client_instruction_id)
+
+@bp.route('/ibkr/transfer_position_internally', methods=['POST'])
+@format_response
+def transfer_position_internally_route():
+    payload = request.get_json(force=True)
+    source_account_id = payload.get('source_account_id', None)
+    target_account_id = payload.get('target_account_id', None)
+    conid = payload.get('conid', None)
+    transfer_quantity = payload.get('transfer_quantity', None)
+    master_account = payload.get('master_account', None)
+    if not source_account_id or not target_account_id or not conid or not transfer_quantity:
+        return {"error": "Missing source_account_id, target_account_id, conid, or transfer_quantity"}, 400
+    return transfer_position_internally(source_account_id=source_account_id, target_account_id=target_account_id, conid=conid, transfer_quantity=transfer_quantity, master_account=master_account)
+
+@bp.route('/ibkr/transfer_position_externally', methods=['POST'])
+@format_response
+def transfer_position_externally_route():
+    payload = request.get_json(force=True)
+    account_id = payload.get('account_id', None)
+    client_instruction_id = payload.get('client_instruction_id', None)
+    contra_broker_account_id = payload.get('contra_broker_account_id', None)
+    contra_broker_dtc_code = payload.get('contra_broker_dtc_code', None)
+    quantity = payload.get('quantity', None)
+    conid = payload.get('conid', None)
+    master_account = payload.get('master_account', None)
+    if not account_id or not client_instruction_id or not contra_broker_account_id or not contra_broker_dtc_code or not quantity or not conid:
+        return {"error": "Missing account_id, client_instruction_id, contra_broker_account_id, contra_broker_dtc_code, quantity, or conid"}, 400
+    return transfer_position_externally(account_id=account_id, client_instruction_id=client_instruction_id, contra_broker_account_id=contra_broker_account_id, contra_broker_dtc_code=contra_broker_dtc_code, quantity=quantity, conid=conid, master_account=master_account)
 
 # Deposit funds
 @bp.route('/ibkr/deposit', methods=['POST'])

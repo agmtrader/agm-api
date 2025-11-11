@@ -615,6 +615,85 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
+    def transfer_position_internally(self, source_account_id: str, target_account_id: str, conid: int, transfer_quantity: int, master_account: str = None):
+        """Transfer a position internally within IBKR.
+        """
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Transferring position internally for account {source_account_id} to {target_account_id}")
+            url = f"{self.BASE_URL}/gw/api/v1/internal-asset-transfers"
+            body = {
+                "instructionType": "INTERNAL_POSITION_TRANSFER",
+                "instruction": {
+                    "clientInstructionId": 7013044,
+                    "sourceAccountId": source_account_id,
+                    "targetAccountId": target_account_id,
+                    "transferQuantity": transfer_quantity,
+                    "tradingInstrument": {
+                        "conid": conid,
+                        "currency": "USD"
+                    }
+                }
+            }
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+            signed_jwt = self.sign_request(body)
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt",
+            }
+            response = requests.patch(url, headers=headers, data=signed_jwt)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success("Position transferred internally successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+    
+    @handle_exception
+    def transfer_position_externally(self, account_id: str, client_instruction_id: int, contra_broker_account_id: str, contra_broker_dtc_code: str, quantity: int, conid: int, master_account: str = None):
+        """
+        Place a FOP instruction within IBKR.
+        """
+        try:    
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Getting position by conid {conid}")
+            url = f"{self.BASE_URL}/gw/api/v1/external-asset-transfers"
+            body = {
+                "instructionType": "FOP",
+                "instruction": {
+                    "clientInstructionId": client_instruction_id,
+                    "direction": "IN",
+                    "accountId": account_id,
+                    "contraBrokerAccountId": contra_broker_account_id,
+                    "contraBrokerDtcCode": contra_broker_dtc_code,
+                    "quantity": quantity,
+                    "tradingInstrument": {
+                        "conid": conid,
+                        "currency": "USD"
+                    }
+                }
+            }
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+            signed_jwt = self.sign_request(body)
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt",
+            }
+            response = requests.get(url, headers=headers, data=signed_jwt)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success("Position by conid fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
     def change_financial_information(self, account_id: str, investment_experience: dict = None, master_account: str = None):
         """Change the financial information for a given account.
 
@@ -775,7 +854,6 @@ class IBKRWebAPI:
             return data
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
-
 
     @handle_exception
     def view_withdrawable_cash(self, master_account: str, account_id: str, client_instruction_id: str):
