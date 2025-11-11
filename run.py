@@ -145,3 +145,11 @@ def start_api():
 app = start_api()
 logger.announcement('Running safety checks...', type='info')
 logger.announcement('Successfully started AGM API', type='success')
+
+# Generate docs
+from src.utils.docs_generator import generate_docs
+try:
+    generate_docs(app)
+    logger.announcement('Documentation generated', type='success')
+except Exception as e:
+    logger.error(f'Failed to generate docs: {e}')
