@@ -172,6 +172,7 @@ def create_investment_proposal(risk_profile: dict = None):
                         == equivalent
                 ]
                 equivalent_df.to_csv('equivalent_df.csv')
+                print(equivalent_df)
                 top_bonds = equivalent_df.head(assets_to_invest - len(asset_type['bonds']))
                 asset_type['bonds'].extend(top_bonds[['Symbol_x', 'Current Yield', 'S&P Equivalent']].to_dict(orient='records'))
 

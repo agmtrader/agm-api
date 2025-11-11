@@ -137,20 +137,6 @@ def get_open_positions_report():
     open_positions = Drive.download_file(file_id=open_positions_file[0]['id'], parse=True)
     return open_positions
 
-def get_market_data_snapshot():
-    """
-    Get the market data snapshot.
-    
-    :return: Response object with market data snapshot or error message
-    """
-    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
-    market_data_snapshot_file = [market_data_snapshot for market_data_snapshot in files_in_resources_folder if 'ibkr_market_data_snapshot' in market_data_snapshot['name']]
-    if len(market_data_snapshot_file) != 1:
-        logger.error('Market data snapshot file not found or multiple files found')
-        raise Exception('Market data snapshot file not found or multiple files found')
-    market_data_snapshot = Drive.download_file(file_id=market_data_snapshot_file[0]['id'], parse=True)
-    return market_data_snapshot
-
 def get_proposals_equity_report():
     """
     Get the proposals equity report.
