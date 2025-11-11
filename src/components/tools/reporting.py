@@ -137,15 +137,6 @@ def get_open_positions_report():
     open_positions = Drive.download_file(file_id=open_positions_file[0]['id'], parse=True)
     return open_positions
 
-def get_proposals_equity_report():
-    """
-    Get the proposals equity report.
-    
-    :return: Response object with proposals equity report or error message
-    """
-    proposals_equity = Drive.export_file(file_id='1AqpIE7LRV40J-Aew5fA-P6gEfji3Yb-Rp5DohI9BQFY', mime_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', parse=True)
-    return proposals_equity
-
 def get_market_data_snapshot():
     """
     Get the market data snapshot.
@@ -159,6 +150,15 @@ def get_market_data_snapshot():
         raise Exception('Market data snapshot file not found or multiple files found')
     market_data_snapshot = Drive.download_file(file_id=market_data_snapshot_file[0]['id'], parse=True)
     return market_data_snapshot
+
+def get_proposals_equity_report():
+    """
+    Get the proposals equity report.
+    
+    :return: Response object with proposals equity report or error message
+    """
+    proposals_equity = Drive.export_file(file_id='1AqpIE7LRV40J-Aew5fA-P6gEfji3Yb-Rp5DohI9BQFY', mime_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', parse=True)
+    return proposals_equity
 
 """
 ETL PIPELINE

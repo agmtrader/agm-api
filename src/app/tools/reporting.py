@@ -1,5 +1,5 @@
 from flask import Blueprint
-from src.components.tools.reporting import get_clients_report, get_nav_report, get_market_data_snapshot, get_rtd_report
+from src.components.tools.reporting import get_clients_report, get_nav_report, get_market_data_snapshot, get_rtd_report, get_proposals_equity_report
 from src.components.tools.reporting import run
 from src.utils.response import format_response
 import json
@@ -11,6 +11,7 @@ bp = Blueprint('reporting', __name__)
 def run_route():
     return run()
 
+# Daily Reports
 @bp.route('/clients', methods=['GET'])
 @format_response
 def get_clients_report_route():
@@ -31,9 +32,7 @@ def get_rtd_report_route():
 def get_market_data_snapshot_route():
     return get_market_data_snapshot()
 
-@bp.route('/bvi', methods=['GET'])
+@bp.route('/proposals_equity', methods=['GET'])
 @format_response
-def bvi_inspection_route():
-    with open('accounts.json', 'r') as f:
-        accounts = json.load(f)
-    return accounts
+def get_proposals_equity_report_route():
+    return get_proposals_equity_report()
