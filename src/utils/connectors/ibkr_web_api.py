@@ -497,6 +497,176 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
+    def create_user_for_account(self, account_id: str, prefix: str = None, user_name: str = None, external_id: str = None, authorized_trader: bool = False, master_account: str = None):
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Getting open positions for account {account_id}")
+            url = f"{self.BASE_URL}/gw/api/v1/accounts"
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+            body = {
+                "accountManagementRequests": {
+                    "createUser": {
+                        "prefix": prefix,
+                        "userName": user_name,
+                        "externalId": external_id,
+                        "authorizedTrader": authorized_trader,
+                        "accountId": account_id,
+                        'id': external_id
+                    }
+                }
+            }
+            signed_jwt = self.sign_request(body)
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt"
+            }
+            response = requests.post(url, headers=headers, data=signed_jwt)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success("User created successfully")
+            data = response.json()
+            print(data)
+            return data
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def deposit_funds(self, master_account: str, instruction: dict) -> dict:
+        """Submit a deposit instruction to IBKR.
+
+        Args:
+            master_account (str): Which credential set to use ('ad' or 'br').
+            client_instruction_id (str): Unique identifier for the client instruction.
+            instruction (dict): Instruction details.
+        Returns:
+            dict: API response from IBKR.
+        """
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Submitting deposit instruction for account {instruction['accountId']}")
+
+            url = f"{self.BASE_URL}/gw/api/v1/external-cash-transfers"
+
+            body = {
+                "instructionType": "DEPOSIT",
+                "instruction": instruction,
+            }
+            print(body)
+
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            signed_jwt = self.sign_request(body)
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt",
+            }
+
+            response = requests.post(url, headers=headers, data=signed_jwt)
+            if response.status_code != 202:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Deposit instruction submitted successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def withdraw_funds(self, master_account: str, instruction: dict) -> dict:
+        """Submit a withdrawal instruction to IBKR.
+        """
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Submitting withdrawal instruction for account {instruction['accountId']}")
+
+            url = f"{self.BASE_URL}/gw/api/v1/external-cash-transfers"
+
+            body = {
+                "instructionType": "WITHDRAWAL",
+                "instruction": instruction,
+            }
+            print(body)
+
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            signed_jwt = self.sign_request(body)
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt",
+            }
+
+            response = requests.post(url, headers=headers, data=signed_jwt)
+            if response.status_code != 202:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Withdrawal instruction submitted successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def change_financial_information(self, account_id: str, investment_experience: dict = None, master_account: str = None):
+        """Change the financial information for a given account.
+
+        Args:
+            account_id (str): The IBKR account ID.
+            new_financial_information (dict): Dictionary with the new financial information.
+            master_account (str | None): Credential set to use (``ad`` or ``br``).
+        Returns:
+            dict: API response after updating the financial information.
+        """
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Changing financial information for account {account_id}")
+
+            url = f"{self.BASE_URL}/gw/api/v1/accounts"
+
+            body = {
+                "accountManagementRequests": {
+                    "changeFinancialInformation": {
+                        "accountId": account_id,
+                        "newFinancialInformation": {},
+                    }
+                }
+            }
+
+            if investment_experience:
+                body['accountManagementRequests']['changeFinancialInformation']['newFinancialInformation']['investmentExperience'] = investment_experience
+
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            signed_jwt = self.sign_request(body)
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt",
+            }
+
+            response = requests.patch(url, headers=headers, data=signed_jwt)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Financial information changed successfully")
+            data = response.json()
+            print(data)
+            return data
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
     def add_trading_permissions(self, account_id: str, trading_permissions: list = None, master_account: str = None) -> dict:
         """Add trading permissions to the given account.
 
@@ -1206,139 +1376,6 @@ class IBKRWebAPI:
 
             logger.success("Wire instructions fetched successfully")
             return response.json()
-        finally:
-            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
-
-    @handle_exception
-    def deposit_funds(self, master_account: str, instruction: dict) -> dict:
-        """Submit a deposit instruction to IBKR.
-
-        Args:
-            master_account (str): Which credential set to use ('ad' or 'br').
-            client_instruction_id (str): Unique identifier for the client instruction.
-            instruction (dict): Instruction details.
-        Returns:
-            dict: API response from IBKR.
-        """
-        try:
-            original_creds = self._apply_credentials(master_account)
-            logger.info(f"Submitting deposit instruction for account {instruction['accountId']}")
-
-            url = f"{self.BASE_URL}/gw/api/v1/external-cash-transfers"
-
-            body = {
-                "instructionType": "DEPOSIT",
-                "instruction": instruction,
-            }
-            print(body)
-
-            token = self.get_bearer_token()
-            if not token:
-                raise Exception("No token found")
-
-            signed_jwt = self.sign_request(body)
-
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/jwt",
-            }
-
-            response = requests.post(url, headers=headers, data=signed_jwt)
-            if response.status_code != 202:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
-
-            logger.success("Deposit instruction submitted successfully")
-            return response.json()
-        finally:
-            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
-
-    @handle_exception
-    def withdraw_funds(self, master_account: str, instruction: dict) -> dict:
-        """Submit a withdrawal instruction to IBKR.
-        """
-        try:
-            original_creds = self._apply_credentials(master_account)
-            logger.info(f"Submitting withdrawal instruction for account {instruction['accountId']}")
-
-            url = f"{self.BASE_URL}/gw/api/v1/external-cash-transfers"
-
-            body = {
-                "instructionType": "WITHDRAWAL",
-                "instruction": instruction,
-            }
-            print(body)
-
-            token = self.get_bearer_token()
-            if not token:
-                raise Exception("No token found")
-
-            signed_jwt = self.sign_request(body)
-
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/jwt",
-            }
-
-            response = requests.post(url, headers=headers, data=signed_jwt)
-            if response.status_code != 202:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
-
-            logger.success("Withdrawal instruction submitted successfully")
-            return response.json()
-        finally:
-            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
-
-    @handle_exception
-    def change_financial_information(self, account_id: str, investment_experience: dict = None, master_account: str = None):
-        """Change the financial information for a given account.
-
-        Args:
-            account_id (str): The IBKR account ID.
-            new_financial_information (dict): Dictionary with the new financial information.
-            master_account (str | None): Credential set to use (``ad`` or ``br``).
-        Returns:
-            dict: API response after updating the financial information.
-        """
-        try:
-            original_creds = self._apply_credentials(master_account)
-            logger.info(f"Changing financial information for account {account_id}")
-
-            url = f"{self.BASE_URL}/gw/api/v1/accounts"
-
-            body = {
-                "accountManagementRequests": {
-                    "changeFinancialInformation": {
-                        "accountId": account_id,
-                        "newFinancialInformation": {},
-                    }
-                }
-            }
-
-            if investment_experience:
-                body['accountManagementRequests']['changeFinancialInformation']['newFinancialInformation']['investmentExperience'] = investment_experience
-
-            token = self.get_bearer_token()
-            if not token:
-                raise Exception("No token found")
-
-            signed_jwt = self.sign_request(body)
-
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/jwt",
-            }
-
-            response = requests.patch(url, headers=headers, data=signed_jwt)
-            if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
-
-            logger.success("Financial information changed successfully")
-            data = response.json()
-            print(data)
-            return data
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 

@@ -123,6 +123,10 @@ def update_pending_aliases(master_account: str = None) -> dict:
     }
 
 @handle_exception
+def create_user_for_account(account_id: str = None, prefix: str = None, user_name: str = None, external_id: str = None, authorized_trader: bool = False, master_account: str = None) -> dict:
+    return ibkr_web_api.create_user_for_account(account_id=account_id, prefix=prefix, user_name=user_name, external_id=external_id, authorized_trader=authorized_trader, master_account=master_account)
+
+@handle_exception
 def add_trading_permissions(account_id: str = None, trading_permissions: list = None, master_account: str = None) -> dict:
     """Add trading permissions to an account via IBKR API."""
     return ibkr_web_api.add_trading_permissions(account_id=account_id, trading_permissions=trading_permissions, master_account=master_account)
