@@ -16,6 +16,9 @@ def create_advisor_route():
 def advisors_route():
     query = {}
     id = request.args.get('id', None)
+    code = request.args.get('code', None)
     if id:
         query['id'] = id
+    if code:
+        query['code'] = code
     return read_advisors(query=query)
