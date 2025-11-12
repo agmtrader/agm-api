@@ -1080,6 +1080,32 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds   
 
     @handle_exception
+    def get_all_watchlists(self):
+        """
+        Get all watchlists.
+        Returns:
+            dict: All watchlists.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/v1/api/iserver/watchlists"
+            if not self.sso_token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {self.sso_token}",
+                "Content-Type": "application/json"
+            }
+
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success("All watchlists fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
     def get_watchlist_information(self, watchlist_id: str):
         """
         Get the watchlist information.

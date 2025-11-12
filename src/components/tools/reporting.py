@@ -229,7 +229,6 @@ def extract_bond_snapshot():
     first_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[:350]))
     second_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[351:699]))
     third_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[700:]))
-    print(first_snapshot, second_snapshot, third_snapshot)
     df = pd.DataFrame(first_snapshot + second_snapshot + third_snapshot)
     df.columns = df.columns.str.capitalize()
 
