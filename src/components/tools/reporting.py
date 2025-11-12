@@ -193,11 +193,35 @@ def extract() -> dict:
     time.sleep(2)
 
     extract_bond_snapshot()
+    extract_ust_bond_snapshot()
+    extract_sovereign_bond_snapshot()
+
     rename_files_in_batch()
     sort_batch_files_to_backup_folders()
 
     logger.announcement('Information successfully extracted for reports.', type='success')
     return {'status': 'success'}
+
+def transform() -> dict:
+    logger.announcement('Transforming backups into reports.', type='info')
+
+    # Clear resources folder
+    logger.announcement('Clearing resources folder.', type='info')
+    Drive.clear_folder(folder_id=resources_folder_id)
+    logger.announcement('Resources folder cleared.', type='success')
+
+    # Process files in each backup folder
+    logger.announcement('Processing files.', type='info')
+    for config in report_configs:
+        process_report(config)
+    logger.announcement('Files processed.', type='success')
+
+    logger.announcement('Backups successfully transformed into reports.', type='success')
+    return {'status': 'success'}
+
+"""
+EXTRACT HELPERS
+"""
 
 def extract_bond_snapshot():
     """
@@ -278,26 +302,151 @@ def extract_bond_snapshot():
     Drive.upload_file(file_name=file_name, mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=market_data_snapshot_config['backup_folder_id'])
     return df
 
-def transform() -> dict:
-    logger.announcement('Transforming backups into reports.', type='info')
+def extract_ust_bond_snapshot():
+    
+    from src.utils.connectors.ibkr_web_api import IBKRWebAPI
+    from src.utils.connectors.drive import GoogleDrive
+    drive = GoogleDrive()
+    ibkr_web_api = IBKRWebAPI()
+    ip = requests.get('https://api.ipify.org').content.decode('utf8')
+    ibkr_web_api.create_sso_session('agmtech212', ip)
+    ibkr_web_api.initialize_brokerage_session()
+    time.sleep(2)
 
-    # Clear resources folder
-    logger.announcement('Clearing resources folder.', type='info')
-    Drive.clear_folder(folder_id=resources_folder_id)
-    logger.announcement('Resources folder cleared.', type='success')
+    retry_count = 0
 
-    # Process files in each backup folder
-    logger.announcement('Processing files.', type='info')
-    for config in report_configs:
-        process_report(config)
-    logger.announcement('Files processed.', type='success')
+    ust_conids = []
+    while retry_count < 5:
+        ust_watchlist_information = ibkr_web_api.get_watchlist_information('122')
 
-    logger.announcement('Backups successfully transformed into reports.', type='success')
-    return {'status': 'success'}
+        for watchlist_item in ust_watchlist_information['instruments']:
+            if 'assetClass' in watchlist_item.keys() and watchlist_item['assetClass'] == 'BOND':
+                ust_conids.append(str(watchlist_item['conid']))
 
-"""
-EXTRACT HELPERS
-"""
+        if len(ust_conids) > 500:
+            break
+            
+        retry_count += 1
+        time.sleep(2)
+    
+    snapshot = ibkr_web_api.get_market_data_snapshot(','.join(ust_conids[:350]))
+    df = pd.DataFrame(snapshot)
+    df.columns = df.columns.str.capitalize()
+
+    df['Financial Instrument'] = df['Symbol'] + ' ' + df['Contract_description_2']
+    df['Symbol'] = 'IBCID' + df['Conidex']
+
+    from src.components.tools.trade_tickets import extract_bond_details
+    for index, row in df.iterrows():
+        bond_details = extract_bond_details(row['Financial Instrument'])
+        df.at[index, 'Coupon'] = float(bond_details['coupon']) if bond_details['coupon'] != '' else 0.0
+        df.at[index, 'Maturity'] = bond_details['maturity']
+        df.at[index, 'ISIN'] = bond_details['isin']
+    
+    # 
+    df['Next Option Date'] = ''
+    df['Payment Frequency'] = ''
+    df['Trading Currency'] = 'USD'
+    df['Sector'] = ''
+
+    def extract_numbers(text):
+        return ''.join(filter(str.isdigit, text))
+
+    df['Last'] = df['Last_price'].astype(str).apply(extract_numbers)
+    # Convert extracted strings to numeric, coercing errors to NaN, then replace NaN with 0.0 to avoid ValueError
+    df['Last'] = pd.to_numeric(df['Last'], errors='coerce').fillna(0.0)
+
+    df['Current Yield'] = ((1000 * df['Coupon'].astype(float)) / df['Last'].astype(float)) * 100
+
+    rename_map = {
+        'Company_name': 'Company Name',
+        'Bid_size': 'Bid Size',
+        'Bid_price': 'Bid',
+        'Bid_yield': 'Bid Yield',
+        'Ask_size': 'Ask Size',
+        'Ask_price': 'Ask',
+        'Ask_yield': 'Ask Yield',
+        'Issue_date': 'Issue Date',
+        'Last_trading_date': 'Last Trading Date',
+    }
+
+    df = df.rename(columns=rename_map)
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    df['Timestamp'] = timestamp
+    pass
+
+def extract_sovereign_bond_snapshot():
+    
+    from src.utils.connectors.ibkr_web_api import IBKRWebAPI
+    from src.utils.connectors.drive import GoogleDrive
+    drive = GoogleDrive()
+    ibkr_web_api = IBKRWebAPI()
+    ip = requests.get('https://api.ipify.org').content.decode('utf8')
+    ibkr_web_api.create_sso_session('agmtech212', ip)
+    ibkr_web_api.initialize_brokerage_session()
+    time.sleep(2)
+
+    retry_count = 0
+
+    ust_conids = []
+    while retry_count < 5:
+        ust_watchlist_information = ibkr_web_api.get_watchlist_information('179')
+
+        for watchlist_item in ust_watchlist_information['instruments']:
+            if 'assetClass' in watchlist_item.keys() and watchlist_item['assetClass'] == 'BOND':
+                ust_conids.append(str(watchlist_item['conid']))
+
+        if len(ust_conids) > 500:
+            break
+            
+        retry_count += 1
+        time.sleep(2)
+    
+    snapshot = ibkr_web_api.get_market_data_snapshot(','.join(ust_conids[:350]))
+    df = pd.DataFrame(snapshot)
+    df.columns = df.columns.str.capitalize()
+
+    df['Financial Instrument'] = df['Symbol'] + ' ' + df['Contract_description_2']
+    df['Symbol'] = 'IBCID' + df['Conidex']
+
+    from src.components.tools.trade_tickets import extract_bond_details
+    for index, row in df.iterrows():
+        bond_details = extract_bond_details(row['Financial Instrument'])
+        df.at[index, 'Coupon'] = float(bond_details['coupon']) if bond_details['coupon'] != '' else 0.0
+        df.at[index, 'Maturity'] = bond_details['maturity']
+        df.at[index, 'ISIN'] = bond_details['isin']
+    
+    # 
+    df['Next Option Date'] = ''
+    df['Payment Frequency'] = ''
+    df['Trading Currency'] = 'USD'
+    df['Sector'] = ''
+
+    def extract_numbers(text):
+        return ''.join(filter(str.isdigit, text))
+
+    df['Last'] = df['Last_price'].astype(str).apply(extract_numbers)
+    # Convert extracted strings to numeric, coercing errors to NaN, then replace NaN with 0.0 to avoid ValueError
+    df['Last'] = pd.to_numeric(df['Last'], errors='coerce').fillna(0.0)
+
+    df['Current Yield'] = ((1000 * df['Coupon'].astype(float)) / df['Last'].astype(float)) * 100
+
+    rename_map = {
+        'Company_name': 'Company Name',
+        'Bid_size': 'Bid Size',
+        'Bid_price': 'Bid',
+        'Bid_yield': 'Bid Yield',
+        'Ask_size': 'Ask Size',
+        'Ask_price': 'Ask',
+        'Ask_yield': 'Ask Yield',
+        'Issue_date': 'Issue Date',
+        'Last_trading_date': 'Last Trading Date',
+    }
+
+    df = df.rename(columns=rename_map)
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    df['Timestamp'] = timestamp
+    pass
 
 def rename_files_in_batch():
     """
