@@ -168,33 +168,11 @@ def run():
 def extract() -> dict:
     logger.announcement('Extracting information for reports.', type='info')
 
-    # Fetch Flex Queries
-    logger.announcement('Fetching Flex Queries.', type='info')
-    flex_query_ids = [config['name'] for config in report_configs if config['flex']]
-    flex_queries = {}
-    for query_id in flex_query_ids:
-        try:
-            flex_queries[query_id] = getFlexQuery(query_id)
-        except:
-            logger.error(f'Error fetching Flex Query for {query_id}')
-            raise Exception(f'Error fetching Flex Query for {query_id}')
-    logger.announcement('Flex Queries fetched.', type='success')
-
-    # Upload Flex Queries to batch folder
-    logger.announcement('Uploading Flex Queries to batch folder.', type='info')
-    for key, value in flex_queries.items():
-        try:
-            Drive.upload_file(file_name=key, mime_type='text/csv', file_data=value, parent_folder_id=batch_folder_id)
-        except:
-            logger.error(f'Error uploading Flex Query for {key}')
-            raise Exception(f'Error uploading Flex Query for {key}')
-        
-    logger.announcement('Flex Queries uploaded to batch folder.', type='success')
-    time.sleep(2)
-
+    extract_flex_queries()
     extract_bond_snapshot()
-    extract_ust_bond_snapshot()
-    extract_sovereign_bond_snapshot()
+    
+    #extract_ust_bond_snapshot()
+    #extract_sovereign_bond_snapshot()
 
     rename_files_in_batch()
     sort_batch_files_to_backup_folders()
@@ -222,6 +200,35 @@ def transform() -> dict:
 """
 EXTRACT HELPERS
 """
+
+def extract_flex_queries():
+    """
+    Extract the flex queries.
+    
+    :return: Response object with flex queries or error message
+    """
+    logger.announcement('Fetching Flex Queries.', type='info')
+    flex_query_ids = [config['name'] for config in report_configs if config['flex']]
+    flex_queries = {}
+    for query_id in flex_query_ids:
+        try:
+            flex_queries[query_id] = getFlexQuery(query_id)
+        except:
+            logger.error(f'Error fetching Flex Query for {query_id}')
+            raise Exception(f'Error fetching Flex Query for {query_id}')
+    logger.announcement('Flex Queries fetched.', type='success')
+
+    # Upload Flex Queries to batch folder
+    logger.announcement('Uploading Flex Queries to batch folder.', type='info')
+    for key, value in flex_queries.items():
+        try:
+            Drive.upload_file(file_name=key, mime_type='text/csv', file_data=value, parent_folder_id=batch_folder_id)
+        except:
+            logger.error(f'Error uploading Flex Query for {key}')
+            raise Exception(f'Error uploading Flex Query for {key}')
+        
+    logger.announcement('Flex Queries uploaded to batch folder.', type='success')
+    time.sleep(2)
 
 def extract_bond_snapshot():
     """
