@@ -169,8 +169,8 @@ def extract() -> dict:
     logger.announcement('Extracting information for reports.', type='info')
 
     extract_flex_queries()
-    extract_bond_snapshot()
     
+    #extract_bond_snapshot()
     #extract_ust_bond_snapshot()
     #extract_sovereign_bond_snapshot()
 
@@ -215,7 +215,7 @@ def extract_flex_queries():
             flex_queries[query_id] = getFlexQuery(query_id)
         except:
             logger.error(f'Error fetching Flex Query for {query_id}')
-            raise Exception(f'Error fetching Flex Query for {query_id}')
+            #raise Exception(f'Error fetching Flex Query for {query_id}')
     logger.announcement('Flex Queries fetched.', type='success')
 
     # Upload Flex Queries to batch folder
@@ -889,7 +889,7 @@ report_configs = [
     },
     {
         'name': 'clients',
-        'backup_folder_id': '1iq3WW7TFzxL8RkTZcFp2qyELuqZPBB8T',
+        'backup_folder_id': '1T1a8n43ZbhmTUpJglZG715jb_ex5BMny',
         'flex': False,
         'backup_name': 'clients' + ' ' + today_date +  ' ' + 'agmtech212.xls',
         'transform_func': process_clients,
