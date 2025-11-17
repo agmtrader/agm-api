@@ -484,6 +484,9 @@ class GoogleDrive:
           _df['sheet_name'] = _sheet_name  # Track originating sheet
           consolidated_records.extend(_df.to_dict(orient='records'))
         list_data = consolidated_records
+      elif mime_type == 'application/json':
+        list_data = json.loads(downloaded_file.getvalue())
+        return list_data
       else:
         raise Exception("Unsupported MIME type for parsing.")
       
