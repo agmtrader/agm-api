@@ -178,6 +178,10 @@ class Supabase:
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
             document_id = Column(UUID(as_uuid=True), ForeignKey('document.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            category = Column(Text, nullable=True)
+            type = Column(Text, nullable=True)
+            issued_date = Column(Text, nullable=True)
+            expiry_date = Column(Text, nullable=True)
 
         class Document(self.Base):
             __tablename__ = 'document'
