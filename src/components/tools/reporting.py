@@ -152,12 +152,7 @@ def get_ibkr_accounts_with_documents():
     
     :return: Response object with IBKR accounts with documents or error message
     """
-    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
-    accounts_with_documents_file = [accounts_with_documents for accounts_with_documents in files_in_resources_folder if 'ibkr_accounts_with_documents' in accounts_with_documents['name']]
-    if len(accounts_with_documents_file) != 1:
-        logger.error('Accounts with documents file not found or multiple files found')
-        raise Exception('Accounts with documents file not found or multiple files found')
-    accounts_with_documents_list = Drive.download_file(file_id=accounts_with_documents_file[0]['id'], parse=True)
+    accounts_with_documents_list = Drive.download_file(file_id='13TRXcQ5SAO3RLarvARVh6XhKEs36Y6oK', parse=True)
     return accounts_with_documents_list  
 
 """
