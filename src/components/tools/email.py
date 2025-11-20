@@ -83,3 +83,19 @@ class Gmail(GmailConnector):
             bcc="",
             cc="jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com",
         )
+
+    @handle_exception
+    def send_welcome_email(self, content, client_email, lang="es"):
+        """Send welcome email after account approval and funding."""
+        subject = (
+            "Bienvenido a AGM Technology (BVI) Inc." if lang == "es" else "Welcome to AGM Technology (BVI) Inc."
+        )
+        email_template = f"welcome_{lang}"
+        return self.send_email(
+            content,
+            client_email,
+            subject,
+            email_template,
+            bcc="",
+            cc="jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com",
+        )

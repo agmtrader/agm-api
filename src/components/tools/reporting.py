@@ -146,14 +146,14 @@ def get_proposals_equity_report():
     proposals_equity = Drive.export_file(file_id='1AqpIE7LRV40J-Aew5fA-P6gEfji3Yb-Rp5DohI9BQFY', mime_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', parse=True)
     return proposals_equity
 
-def get_ibkr_accounts_with_documents():
+def get_ibkr_account_details():
     """
-    Get the IBKR accounts with documents report.
+    Get the IBKR account details report.
     
-    :return: Response object with IBKR accounts with documents or error message
+    :return: Response object with IBKR account details or error message
     """
-    accounts_with_documents_list = Drive.download_file(file_id='13TRXcQ5SAO3RLarvARVh6XhKEs36Y6oK', parse=True)
-    return accounts_with_documents_list  
+    account_details = Drive.download_file(file_id='10RO_AFG3W5Sv-9CnQ2qmGhikco6cmMCH', parse=True)
+    return account_details
 
 """
 ETL PIPELINE

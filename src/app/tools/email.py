@@ -46,3 +46,14 @@ def send_credentials_email_route():
 def send_transfer_instructions_email_route():
   payload = request.get_json(force=True)
   return Email.send_transfer_instructions_email(payload['content'], payload['client_email'], payload['lang'])
+
+# ------------------------------------------------------------------
+# NEW: Welcome email after account funding
+# ------------------------------------------------------------------
+
+@bp.route('/send_email/welcome', methods=['POST'])
+@format_response
+def send_welcome_email_route():
+  """HTTP POST body must include: content (dict), client_email (str), lang ('en'|'es')"""
+  payload = request.get_json(force=True)
+  return Email.send_welcome_email(payload['content'], payload['client_email'], payload.get('lang', 'es'))
