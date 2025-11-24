@@ -72,7 +72,8 @@ def upload_document_route():
     type = payload.get('type', None)
     issued_date = payload.get('issued_date', None)
     expiry_date = payload.get('expiry_date', None)
-    return upload_document(account_id=account_id, file_name=file_name, file_length=file_length, sha1_checksum=sha1_checksum, mime_type=mime_type, data=data, category=category, type=type, issued_date=issued_date, expiry_date=expiry_date)
+    name = payload.get('name', None)
+    return upload_document(account_id=account_id, file_name=file_name, file_length=file_length, sha1_checksum=sha1_checksum, mime_type=mime_type, data=data, category=category, type=type, issued_date=issued_date, expiry_date=expiry_date, name=name)
 
 # Account Management
 @bp.route('/ibkr/details', methods=['GET'])

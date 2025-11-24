@@ -36,9 +36,9 @@ def update_account(query: dict = None, account: dict = None) -> dict:
     return {'status': 'success'}
 
 @handle_exception
-def upload_document(account_id: str = None, file_name: str = None, file_length: int = None, sha1_checksum: str = None, mime_type: str = None, data: str = None, category: str = None, type: str = None, issued_date: str = None, expiry_date: str = None) -> dict:
+def upload_document(account_id: str = None, file_name: str = None, file_length: int = None, sha1_checksum: str = None, mime_type: str = None, data: str = None, category: str = None, type: str = None, issued_date: str = None, expiry_date: str = None, name: str = None) -> dict:
     logger.info(f"Uploading document: {file_name} to account: {account_id}, file_length: {file_length}, sha1_checksum: {sha1_checksum}, mime_type: {mime_type}, data: {data}")
-    return document_manager.upload_document(account_id=account_id, file_name=file_name, file_length=file_length, sha1_checksum=sha1_checksum, mime_type=mime_type, data=data, category=category, type=type, issued_date=issued_date, expiry_date=expiry_date)
+    return document_manager.upload_document(account_id=account_id, file_name=file_name, file_length=file_length, sha1_checksum=sha1_checksum, mime_type=mime_type, data=data, category=category, type=type, issued_date=issued_date, expiry_date=expiry_date, name=name)
 
 @handle_exception
 def read_documents_by_account_id(account_id: str = None) -> list:

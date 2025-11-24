@@ -6,7 +6,7 @@ Drive = GoogleDrive()
 
 class DocumentManager:
     @handle_exception
-    def upload_document(self, account_id, file_name, file_length, sha1_checksum, mime_type, data, category, type, issued_date, expiry_date):
+    def upload_document(self, account_id, file_name, file_length, sha1_checksum, mime_type, data, category, type, issued_date, expiry_date, name):
         """
         Uploads a document to the database and links it to an account.
         Args:
@@ -39,6 +39,7 @@ class DocumentManager:
                 'account_id': account_id,
                 'document_id': document_id,
                 'category': category,
+                'name': name,
                 'type': type,
                 'issued_date': issued_date,
                 'expiry_date': expiry_date
