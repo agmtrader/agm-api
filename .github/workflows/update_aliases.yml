@@ -36,13 +36,28 @@ jobs:
               exit 1
             fi
 
-            # 2. Trigger bulk alias update endpoint
+            # 2. Trigger bulk alias update endpoint for Brokerage Accounts
             response=$(curl -s -w "\n%{http_code}" -X PATCH \
               -H "Authorization: Bearer $access_token" \
               -H "Content-Type: application/json" \
               -d '{"master_account":"br"}' \
               https://api.agmtechnology.com/accounts/ibkr/pending_alias)
 
+            http_status=$(echo "$response" | tail -n1)
+            body=$(echo "$response" | sed '$d')
+
+            if [ "$http_status" != "200" ]; then
+              echo "Bulk alias update failed with status $http_status" >&2
+              exit 1
+            fi
+
+            # 3. Trigger bulk alias update endpoint for Advisor Accounts
+            response=$(curl -s -w "\n%{http_code}" -X PATCH \
+              -H "Authorization: Bearer $access_token" \
+              -H "Content-Type: application/json" \
+              -d '{"master_account":"ad"}' \
+              https://api.agmtechnology.com/accounts/ibkr/pending_alias)
+            
             http_status=$(echo "$response" | tail -n1)
             body=$(echo "$response" | sed '$d')
 
