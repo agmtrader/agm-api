@@ -55,7 +55,7 @@ def read_documents_by_account_id(account_id: str = None) -> list:
         document = db.read(table='document', query={'id': account_document['document_id']})
         for d in document:
             documents.append(d)
-    return documents
+    return documents, account_documents
 
 """
 Account Management API
