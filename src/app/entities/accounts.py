@@ -1,9 +1,6 @@
 from flask import Blueprint, request
-
-from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_documents_by_account_id, create_instruction, read_instructions, read_documents
-
+from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, create_instruction, read_instructions, delete_document, read_account_documents
 from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, view_withdrawable_cash, view_active_bank_instructions, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, withdraw_funds, create_user_for_account, transfer_position_internally, transfer_position_externally
-
 from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts
 from src.utils.response import format_response
 
@@ -36,32 +33,11 @@ def update_account_route():
     account = payload.get('account', None)
     return update_account(query=query, account=account)
 
-@bp.route('/instructions', methods=['POST'])
-@format_response
-def create_instruction_route():
-    payload = request.get_json(force=True)
-    account_id = payload.get('account_id', None)
-    return create_instruction(account_id=account_id)
- 
-@bp.route('/instructions', methods=['GET'])
-@format_response
-def read_instruction_route():
-    query = {}  
-    account_id = request.args.get('account_id', None)
-    if account_id:  
-        query['account_id'] = account_id
-    return read_instructions(query=query)
-
 @bp.route('/documents', methods=['GET'])
 @format_response
 def read_documents_by_account_id_route():
     account_id = request.args.get('account_id', None)
-    documents = None
-    account_documents = None
-    if not account_id:
-        documents, account_documents = read_documents()
-    else:
-        documents, account_documents = read_documents_by_account_id(account_id=account_id)
+    documents, account_documents = read_account_documents(account_id=account_id)
     return {'documents': documents, 'account_documents': account_documents }
 
 @bp.route('/documents', methods=['POST'])
@@ -81,6 +57,24 @@ def upload_document_route():
     name = payload.get('name', None)
     return upload_document(account_id=account_id, file_name=file_name, file_length=file_length, sha1_checksum=sha1_checksum, mime_type=mime_type, data=data, category=category, type=type, issued_date=issued_date, expiry_date=expiry_date, name=name)
 
+@bp.route('/documents', methods=['DELETE'])
+@format_response
+def delete_document_route():
+    payload = request.get_json(force=True)
+    document_id = payload.get('document_id', None)
+    if not document_id:
+        return {"error": "Missing document_id"}, 400
+    return delete_document(document_id=document_id)
+ 
+@bp.route('/instructions', methods=['GET'])
+@format_response
+def read_instruction_route():
+    query = {}  
+    account_id = request.args.get('account_id', None)
+    if account_id:  
+        query['account_id'] = account_id
+    return read_instructions(query=query)
+
 # Account Management
 @bp.route('/ibkr/details', methods=['GET'])
 @format_response
@@ -88,14 +82,6 @@ def read_accounts_details_route():
     account_id = request.args.get('account_id', None)
     master_account = request.args.get('master_account', None)
     return read_account_details(account_id=account_id, master_account=master_account)
-
-@bp.route('/ibkr/documents', methods=['POST'])
-@format_response
-def submit_documents_route():
-    payload = request.get_json(force=True)
-    document_submission_data = payload.get('document_submission', None)
-    master_account = payload.get('master_account', None)
-    return submit_documents(document_submission=document_submission_data, master_account=master_account)
 
 @bp.route('/ibkr/registration_tasks', methods=['GET'])
 @format_response
@@ -114,6 +100,14 @@ def pending_tasks_route():
     if not account_id:
         return {"error": "Missing account_id"}, 400
     return get_pending_tasks(account_id=account_id, master_account=master_account)
+
+@bp.route('/ibkr/documents', methods=['POST'])
+@format_response
+def submit_documents_route():
+    payload = request.get_json(force=True)
+    document_submission_data = payload.get('document_submission', None)
+    master_account = payload.get('master_account', None)
+    return submit_documents(document_submission=document_submission_data, master_account=master_account)
 
 @bp.route('/ibkr/fee_template', methods=['POST'])
 @format_response
@@ -186,16 +180,6 @@ def view_active_bank_instructions_route():
         return {"error": "Missing master_account, account_id, client_instruction_id, or bank_instruction_method"}, 400
     return view_active_bank_instructions(master_account=master_account, account_id=account_id, client_instruction_id=client_instruction_id, bank_instruction_method=bank_instruction_method)
 
-@bp.route('/ibkr/withdrawable_cash', methods=['GET'])
-@format_response
-def view_withdrawable_cash_route():
-    master_account = request.args.get('master_account', None)
-    account_id = request.args.get('account_id', None)
-    client_instruction_id = request.args.get('client_instruction_id', None)
-    if not master_account or not account_id or not client_instruction_id:
-        return {"error": "Missing master_account, account_id, or client_instruction_id"}, 400
-    return view_withdrawable_cash(master_account=master_account, account_id=account_id, client_instruction_id=client_instruction_id)
-
 @bp.route('/ibkr/transfer_position_internally', methods=['POST'])
 @format_response
 def transfer_position_internally_route():
@@ -224,7 +208,6 @@ def transfer_position_externally_route():
         return {"error": "Missing account_id, client_instruction_id, contra_broker_account_id, contra_broker_dtc_code, quantity, or conid"}, 400
     return transfer_position_externally(account_id=account_id, client_instruction_id=client_instruction_id, contra_broker_account_id=contra_broker_account_id, contra_broker_dtc_code=contra_broker_dtc_code, quantity=quantity, conid=conid, master_account=master_account)
 
-# Deposit funds
 @bp.route('/ibkr/deposit', methods=['POST'])
 @format_response
 def deposit_funds_route():

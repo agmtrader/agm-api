@@ -44,6 +44,7 @@ def update_route():
     query = payload.get('query', None)
     return update_application(application=application, query=query)
 
+# Account Management API
 @bp.route('/send_to_ibkr', methods=['POST'])
 @format_response
 def send_to_ibkr_route():
