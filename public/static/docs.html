@@ -17,29 +17,80 @@
   <table>
     <tr><th>Route</th><th>Methods</th><th>Path&nbsp;Parameters</th></tr>
     <tr><td>/</td><td>GET</td><td></td></tr>
+    <tr><td>/accounts/create</td><td>POST</td><td></td></tr>
     <tr><td>/accounts/documents</td><td>GET</td><td></td></tr>
+    <tr><td>/accounts/documents</td><td>POST</td><td></td></tr>
+    <tr><td>/accounts/ibkr/account_email</td><td>POST</td><td></td></tr>
     <tr><td>/accounts/ibkr/bank_instructions</td><td>GET</td><td></td></tr>
+    <tr><td>/accounts/ibkr/change_financial_information</td><td>POST</td><td></td></tr>
+    <tr><td>/accounts/ibkr/clp_capability</td><td>POST</td><td></td></tr>
+    <tr><td>/accounts/ibkr/deposit</td><td>POST</td><td></td></tr>
     <tr><td>/accounts/ibkr/details</td><td>GET</td><td></td></tr>
+    <tr><td>/accounts/ibkr/documents</td><td>POST</td><td></td></tr>
+    <tr><td>/accounts/ibkr/fee_template</td><td>POST</td><td></td></tr>
+    <tr><td>/accounts/ibkr/forms</td><td>POST</td><td></td></tr>
     <tr><td>/accounts/ibkr/instructions</td><td>GET</td><td></td></tr>
+    <tr><td>/accounts/ibkr/pending_alias</td><td>PATCH</td><td></td></tr>
     <tr><td>/accounts/ibkr/pending_tasks</td><td>GET</td><td></td></tr>
     <tr><td>/accounts/ibkr/product_country_bundles</td><td>GET</td><td></td></tr>
     <tr><td>/accounts/ibkr/registration_tasks</td><td>GET</td><td></td></tr>
     <tr><td>/accounts/ibkr/security_questions</td><td>GET</td><td></td></tr>
     <tr><td>/accounts/ibkr/sso/accounts</td><td>GET</td><td></td></tr>
+    <tr><td>/accounts/ibkr/sso/create</td><td>POST</td><td></td></tr>
+    <tr><td>/accounts/ibkr/sso/initialize</td><td>POST</td><td></td></tr>
+    <tr><td>/accounts/ibkr/sso/logout</td><td>POST</td><td></td></tr>
+    <tr><td>/accounts/ibkr/trading_permissions</td><td>POST</td><td></td></tr>
+    <tr><td>/accounts/ibkr/transfer_position_externally</td><td>POST</td><td></td></tr>
+    <tr><td>/accounts/ibkr/transfer_position_internally</td><td>POST</td><td></td></tr>
+    <tr><td>/accounts/ibkr/user</td><td>POST</td><td></td></tr>
+    <tr><td>/accounts/ibkr/wire_instructions</td><td>POST</td><td></td></tr>
+    <tr><td>/accounts/ibkr/withdraw</td><td>POST</td><td></td></tr>
     <tr><td>/accounts/ibkr/withdrawable_cash</td><td>GET</td><td></td></tr>
+    <tr><td>/accounts/instructions</td><td>POST</td><td></td></tr>
     <tr><td>/accounts/instructions</td><td>GET</td><td></td></tr>
     <tr><td>/accounts/read</td><td>GET</td><td></td></tr>
+    <tr><td>/accounts/update</td><td>POST</td><td></td></tr>
+    <tr><td>/ada/chat</td><td>POST</td><td></td></tr>
+    <tr><td>/advisor_changes/create</td><td>POST</td><td></td></tr>
     <tr><td>/advisor_changes/read</td><td>GET</td><td></td></tr>
+    <tr><td>/advisors/create</td><td>POST</td><td></td></tr>
     <tr><td>/advisors/read</td><td>GET</td><td></td></tr>
+    <tr><td>/applications/create</td><td>POST</td><td></td></tr>
     <tr><td>/applications/read</td><td>GET</td><td></td></tr>
+    <tr><td>/applications/send_to_ibkr</td><td>POST</td><td></td></tr>
+    <tr><td>/applications/update</td><td>POST</td><td></td></tr>
+    <tr><td>/contacts/create</td><td>POST</td><td></td></tr>
     <tr><td>/contacts/read</td><td>GET</td><td></td></tr>
+    <tr><td>/contacts/update</td><td>POST</td><td></td></tr>
     <tr><td>/docs</td><td>GET</td><td></td></tr>
+    <tr><td>/email/send_email/application_link</td><td>POST</td><td></td></tr>
+    <tr><td>/email/send_email/credentials</td><td>POST</td><td></td></tr>
+    <tr><td>/email/send_email/email_confirmation</td><td>POST</td><td></td></tr>
+    <tr><td>/email/send_email/lead_reminder</td><td>POST</td><td></td></tr>
+    <tr><td>/email/send_email/task_reminder</td><td>POST</td><td></td></tr>
+    <tr><td>/email/send_email/trade_ticket</td><td>POST</td><td></td></tr>
+    <tr><td>/email/send_email/transfer_instructions</td><td>POST</td><td></td></tr>
+    <tr><td>/email/send_email/welcome</td><td>POST</td><td></td></tr>
+    <tr><td>/fee_template_requests/create</td><td>POST</td><td></td></tr>
     <tr><td>/fee_template_requests/read</td><td>GET</td><td></td></tr>
+    <tr><td>/fee_template_requests/update</td><td>POST</td><td></td></tr>
+    <tr><td>/investment_proposals/create</td><td>POST</td><td></td></tr>
     <tr><td>/investment_proposals/read</td><td>GET</td><td></td></tr>
+    <tr><td>/leads/create</td><td>POST</td><td></td></tr>
+    <tr><td>/leads/follow_up/create</td><td>POST</td><td></td></tr>
+    <tr><td>/leads/follow_up/delete</td><td>POST</td><td></td></tr>
     <tr><td>/leads/follow_up/read</td><td>GET</td><td></td></tr>
+    <tr><td>/leads/follow_up/update</td><td>POST</td><td></td></tr>
     <tr><td>/leads/read</td><td>GET</td><td></td></tr>
+    <tr><td>/leads/update</td><td>POST</td><td></td></tr>
+    <tr><td>/management_type_requests/create</td><td>POST</td><td></td></tr>
     <tr><td>/management_type_requests/read</td><td>GET</td><td></td></tr>
+    <tr><td>/pending_tasks/create</td><td>POST</td><td></td></tr>
+    <tr><td>/pending_tasks/follow_up/create</td><td>POST</td><td></td></tr>
+    <tr><td>/pending_tasks/follow_up/delete</td><td>POST</td><td></td></tr>
+    <tr><td>/pending_tasks/follow_up/update</td><td>POST</td><td></td></tr>
     <tr><td>/pending_tasks/read</td><td>GET</td><td></td></tr>
+    <tr><td>/pending_tasks/update</td><td>POST</td><td></td></tr>
     <tr><td>/reporting/clients</td><td>GET</td><td></td></tr>
     <tr><td>/reporting/ibkr_account_details</td><td>GET</td><td></td></tr>
     <tr><td>/reporting/nav</td><td>GET</td><td></td></tr>
@@ -47,11 +98,17 @@
     <tr><td>/reporting/proposals_equity</td><td>GET</td><td></td></tr>
     <tr><td>/reporting/rtd</td><td>GET</td><td></td></tr>
     <tr><td>/reporting/run</td><td>GET</td><td></td></tr>
+    <tr><td>/risk_profiles/create</td><td>POST</td><td></td></tr>
     <tr><td>/risk_profiles/list</td><td>GET</td><td></td></tr>
     <tr><td>/risk_profiles/read</td><td>GET</td><td></td></tr>
+    <tr><td>/token</td><td>POST</td><td></td></tr>
+    <tr><td>/trade_tickets/generate</td><td>POST</td><td></td></tr>
     <tr><td>/trade_tickets/list</td><td>GET</td><td></td></tr>
     <tr><td>/trade_tickets/read</td><td>GET</td><td></td></tr>
+    <tr><td>/users/create</td><td>POST</td><td></td></tr>
+    <tr><td>/users/login</td><td>POST</td><td></td></tr>
     <tr><td>/users/read</td><td>GET</td><td></td></tr>
+    <tr><td>/users/update</td><td>POST</td><td></td></tr>
   </table>
 </body>
 </html>

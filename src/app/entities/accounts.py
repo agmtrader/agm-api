@@ -56,7 +56,7 @@ def read_instruction_route():
 @format_response
 def read_documents_by_account_id_route():
     account_id = request.args.get('account_id', None)
-    documents, account_documents = read_documents_by_account_id(account_id=account_id) # /accounts/documents
+    documents, account_documents = read_documents_by_account_id(account_id=account_id)
     return {
         'documents': documents,
         'account_documents': account_documents
