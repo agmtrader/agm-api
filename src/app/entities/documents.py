@@ -1,7 +1,6 @@
 from flask import Blueprint, request
 from src.utils.response import format_response
-
-from src.components.tools.documents import read_documents, get_document_data
+from src.components.entities.documents import read_documents, get_document_data
 
 bp = Blueprint('documents', __name__)
 
