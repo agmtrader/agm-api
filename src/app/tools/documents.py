@@ -9,7 +9,7 @@ bp = Blueprint('documents', __name__)
 @format_response
 def read_documents_route():
     account_id = request.args.get('account_id', None)
-    documents, account_documents = read_documents(account_id=account_id)
+    documents, account_documents = read_documents(account_id=account_id, strip_data=True)
     return {'documents': documents, 'account_documents': account_documents }
 
 @bp.route('/get_document_data', methods=['GET'])

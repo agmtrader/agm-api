@@ -6,6 +6,15 @@ from src.utils.response import format_response
 
 bp = Blueprint('accounts', __name__)
 
+@bp.route('/ibkr/pending_alias', methods=['PATCH'])
+@format_response
+def update_pending_aliases_route():
+    payload = request.get_json(force=True)
+    master_account = payload.get('master_account', None)
+    return update_pending_aliases(master_account=master_account)
+
+# Test
+
 @bp.route('/create', methods=['POST'])
 @format_response
 def create_route():
@@ -144,13 +153,6 @@ def create_user_for_account_route():
     master_account = payload.get('master_account', None)
     return create_user_for_account(account_id=account_id, prefix=prefix, user_name=user_name, external_id=external_id, authorized_trader=authorized_trader, master_account=master_account)
 
-@bp.route('/ibkr/pending_alias', methods=['PATCH'])
-@format_response
-def update_pending_aliases_route():
-    payload = request.get_json(force=True)
-    master_account = payload.get('master_account', None)
-    return update_pending_aliases(master_account=master_account)
-
 @bp.route('/ibkr/trading_permissions', methods=['POST'])
 @format_response
 def add_trading_permissions_route():
@@ -160,6 +162,15 @@ def add_trading_permissions_route():
     master_account = payload.get('master_account', None)    
     return add_trading_permissions(account_id=account_id, trading_permissions=trading_permissions, master_account=master_account)
 
+@bp.route('/ibkr/change_financial_information', methods=['POST'])
+@format_response
+def change_financial_information_route():
+    payload = request.get_json(force=True)
+    account_id = payload.get('account_id', None)
+    investment_experience = payload.get('investment_experience', None)
+    master_account = payload.get('master_account', None)
+    return change_financial_information(account_id=account_id, investment_experience=investment_experience, master_account=master_account)
+
 @bp.route('/ibkr/clp_capability', methods=['POST'])
 @format_response
 def add_clp_capability_route():
@@ -168,17 +179,6 @@ def add_clp_capability_route():
     document_submission = payload.get('document_submission', None)
     master_account = payload.get('master_account', None)
     return add_clp_capability(account_id=account_id, document_submission=document_submission, master_account=master_account)
-
-@bp.route('/ibkr/bank_instructions', methods=['GET'])
-@format_response
-def view_active_bank_instructions_route():
-    master_account = request.args.get('master_account', None)
-    account_id = request.args.get('account_id', None)
-    client_instruction_id = request.args.get('client_instruction_id', None)
-    bank_instruction_method = request.args.get('bank_instruction_method', None)
-    if not master_account or not account_id or not client_instruction_id or not bank_instruction_method:
-        return {"error": "Missing master_account, account_id, client_instruction_id, or bank_instruction_method"}, 400
-    return view_active_bank_instructions(master_account=master_account, account_id=account_id, client_instruction_id=client_instruction_id, bank_instruction_method=bank_instruction_method)
 
 @bp.route('/ibkr/transfer_position_internally', methods=['POST'])
 @format_response
@@ -287,12 +287,3 @@ def get_forms_route():
 @format_response
 def get_product_country_bundles_route():
     return get_product_country_bundles()
-
-@bp.route('/ibkr/change_financial_information', methods=['POST'])
-@format_response
-def change_financial_information_route():
-    payload = request.get_json(force=True)
-    account_id = payload.get('account_id', None)
-    investment_experience = payload.get('investment_experience', None)
-    master_account = payload.get('master_account', None)
-    return change_financial_information(account_id=account_id, investment_experience=investment_experience, master_account=master_account)
