@@ -56,7 +56,11 @@ def read_instruction_route():
 @format_response
 def read_documents_by_account_id_route():
     account_id = request.args.get('account_id', None)
-    return read_documents_by_account_id(account_id=account_id)
+    documents, account_documents = read_documents_by_account_id(account_id=account_id) # /accounts/documents
+    return {
+        'documents': documents,
+        'account_documents': account_documents
+    }
 
 @bp.route('/documents', methods=['POST'])
 @format_response
