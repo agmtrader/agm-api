@@ -19,10 +19,7 @@ def generate_docs(app: Flask, output_path: str = 'public/static/docs.html', skip
             continue
         # Extract allowed HTTP methods, ignoring implicit methods
         methods = sorted(m for m in rule.methods if m not in {'HEAD', 'OPTIONS'})
-        if 'GET' not in methods:
-            # Skip non-GET endpoints
-            continue
-        method_str = 'GET'
+        method_str = ', '.join(methods)
         params = ', '.join(sorted(rule.arguments)) if rule.arguments else ''
         rows.append((str(rule.rule), method_str, params))
 
