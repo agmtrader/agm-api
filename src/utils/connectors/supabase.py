@@ -183,6 +183,7 @@ class Supabase:
             type = Column(Text, nullable=True)
             issued_date = Column(Text, nullable=True)
             expiry_date = Column(Text, nullable=True)
+            comment = Column(Text, nullable=True)
 
         class Document(self.Base):
             __tablename__ = 'document'

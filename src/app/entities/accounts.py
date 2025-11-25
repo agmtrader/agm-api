@@ -1,6 +1,6 @@
 from flask import Blueprint, request
 
-from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_documents_by_account_id, create_instruction, read_instructions
+from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_documents_by_account_id, create_instruction, read_instructions, read_documents
 
 from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, view_withdrawable_cash, view_active_bank_instructions, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, withdraw_funds, create_user_for_account, transfer_position_internally, transfer_position_externally
 
@@ -56,11 +56,13 @@ def read_instruction_route():
 @format_response
 def read_documents_by_account_id_route():
     account_id = request.args.get('account_id', None)
-    documents, account_documents = read_documents_by_account_id(account_id=account_id)
-    return {
-        'documents': documents,
-        'account_documents': account_documents
-    }
+    documents = None
+    account_documents = None
+    if not account_id:
+        documents, account_documents = read_documents()
+    else:
+        documents, account_documents = read_documents_by_account_id(account_id=account_id)
+    return {'documents': documents, 'account_documents': account_documents }
 
 @bp.route('/documents', methods=['POST'])
 @format_response

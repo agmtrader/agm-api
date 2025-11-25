@@ -41,6 +41,16 @@ def upload_document(account_id: str = None, file_name: str = None, file_length: 
     return document_manager.upload_document(account_id=account_id, file_name=file_name, file_length=file_length, sha1_checksum=sha1_checksum, mime_type=mime_type, data=data, category=category, type=type, issued_date=issued_date, expiry_date=expiry_date, name=name)
 
 @handle_exception
+def read_documents() -> dict:
+    account_documents = db.read(table='account_document', query={})
+    documents = []
+    for account_document in account_documents:
+        document = db.read(table='document', query={'id': account_document['document_id']})
+        for d in document:
+            documents.append(d)
+    return documents, account_documents
+
+@handle_exception
 def read_documents_by_account_id(account_id: str = None) -> list:
     """
     Read all documents for an account
