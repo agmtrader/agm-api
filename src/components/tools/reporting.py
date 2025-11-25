@@ -81,6 +81,7 @@ first_date = cst_time.replace(day=1).strftime('%Y%m%d')
 
 logger.announcement('Initialized Reporting Service', type='success')
 
+@handle_exception
 def get_clients_report():
     """
     Get the clients list.
@@ -95,6 +96,7 @@ def get_clients_report():
     clients = Drive.download_file(file_id=clients_file[0]['id'], parse=True)
     return clients
 
+@handle_exception
 def get_nav_report():
     """
     Get the NAV report.
@@ -109,6 +111,7 @@ def get_nav_report():
     nav = Drive.download_file(file_id=nav_file[0]['id'], parse=True)
     return nav
 
+@handle_exception
 def get_rtd_report():
     """
     Get the RTD report.
@@ -123,6 +126,7 @@ def get_rtd_report():
     rtd = Drive.download_file(file_id=rtd_file[0]['id'], parse=True)
     return rtd  
 
+@handle_exception
 def get_open_positions_report():
     """
     Get the open positions report.
@@ -137,6 +141,7 @@ def get_open_positions_report():
     open_positions = Drive.download_file(file_id=open_positions_file[0]['id'], parse=True)
     return open_positions
 
+@handle_exception
 def get_proposals_equity_report():
     """
     Get the proposals equity report.
@@ -146,6 +151,7 @@ def get_proposals_equity_report():
     proposals_equity = Drive.export_file(file_id='1AqpIE7LRV40J-Aew5fA-P6gEfji3Yb-Rp5DohI9BQFY', mime_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', parse=True)
     return proposals_equity
 
+@handle_exception
 def get_ibkr_account_details():
     """
     Get the IBKR account details report.

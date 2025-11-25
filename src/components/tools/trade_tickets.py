@@ -23,7 +23,6 @@ def read(query_id):
     trades = getFlexQuery(query_id)
     return trades
 
-@handle_exception
 def generate_trade_confirmation_message(flex_query_dict, indices):
 
     logger.info('Generating trade ticket. Processing data...')
@@ -232,7 +231,6 @@ def extract_bond_details(description: str):
         'ratings': ratings,
     }
 
-@handle_exception
 def generate_excel_file(flex_query_dict, indices):
     logger.info('Generating trade ticket. Processing data...')
 
