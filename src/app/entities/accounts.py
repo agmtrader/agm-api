@@ -13,8 +13,6 @@ def update_pending_aliases_route():
     master_account = payload.get('master_account', None)
     return update_pending_aliases(master_account=master_account)
 
-# Test
-
 @bp.route('/create', methods=['POST'])
 @format_response
 def create_route():
