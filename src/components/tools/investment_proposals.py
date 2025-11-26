@@ -95,6 +95,15 @@ def create_investment_proposal(risk_profile: dict = None):
         #merged_df = merged_df[merged_df['Current Yield'].notna() & (merged_df['Current Yield'] != '')]
         merged_df = merged_df[merged_df['Current Yield'] != '']
 
+        # Extract ticker (issuer) — first token in Symbol_x — for deduplication across coupons/maturities
+        merged_df['Ticker'] = (
+            merged_df['Symbol_x']
+                .astype(str)
+                .str.strip()
+                .str.split()  # split by whitespace
+                .str[0]
+        )
+
         merged_df['Current Yield'] = (
             merged_df['Current Yield']
                 .astype(str)
@@ -112,12 +121,10 @@ def create_investment_proposal(risk_profile: dict = None):
         # Fill missing values with 0 for numeric columns and empty string for non-numeric columns
         numeric_cols = merged_df.select_dtypes(include=['number']).columns
         merged_df[numeric_cols] = merged_df[numeric_cols].fillna(0)
-        print(merged_df)
 
         # Fill missing values with empty string for non-numeric columns
         non_numeric_cols = merged_df.select_dtypes(exclude=['number']).columns
         merged_df[non_numeric_cols] = merged_df[non_numeric_cols].fillna('')
-        print(merged_df)
 
         # Get risk profile
         logger.announcement(f'Risk profile: {risk_profile}')
@@ -131,17 +138,17 @@ def create_investment_proposal(risk_profile: dict = None):
         investment_proposal = [
             {
                 'name': 'bonds_aaa_a',
-                'equivalents': ['AAA', 'AA', 'A'],
+                'equivalents': ['AAA', 'AAA-', 'AAA+', 'AA', 'AA+', 'AA-', 'A', 'A-', 'A+'],
                 'bonds': []
             },
             {
                 'name': 'bonds_bbb',
-                'equivalents': ['BBB'],
+                'equivalents': ['BBB', 'BBB-', 'BBB+'],
                 'bonds': []
             },
             {
                 'name': 'bonds_bb',
-                'equivalents': ['BB'],
+                'equivalents': ['BB', 'BB-', 'BB+'],
                 'bonds': []
             },
             {
@@ -154,27 +161,50 @@ def create_investment_proposal(risk_profile: dict = None):
         total_assets = 20
 
         # Populate bonds for each asset type
+        # Keep track of already selected tickers to avoid duplicates across buckets
+        used_symbols: set[str] = set()
+
         for asset_type in investment_proposal:
             percentage = risk_archetype[asset_type['name']]
             assets_to_invest = int(total_assets * percentage)
+
+            # Special handling for ETF bucket – always add SPY first
             if asset_type['name'] == 'etfs':
                 asset_type['bonds'].append({
                     'Symbol_x': 'SPY',
                     'Current Yield': float(avg_yield) if avg_yield is not None else 0.0,
                     'S&P Equivalent': 'ETF',
                 })
+                used_symbols.add('SPY')
 
-            for equivalent in asset_type['equivalents']:
-                equivalent_df = merged_df[
-                    merged_df['S&P Equivalent']
-                        .astype(str)
-                        .str.replace(r'[+\-]', '', regex=True)
-                        == equivalent
-                ]
-                equivalent_df.to_csv('equivalent_df.csv')
-                print(equivalent_df)
-                top_bonds = equivalent_df.head(assets_to_invest - len(asset_type['bonds']))
-                asset_type['bonds'].extend(top_bonds[['Symbol_x', 'Current Yield', 'S&P Equivalent']].to_dict(orient='records'))
+            # Build a combined dataframe for all equivalents that belong to this asset type
+            sanitized_equivalents = asset_type['equivalents']
+            combined_df = merged_df[
+                merged_df['S&P Equivalent']
+                    .astype(str)
+                    .str.replace(r'[+\-]', '', regex=True)
+                    .isin(sanitized_equivalents)
+            ]
+
+            # Deduplicate by ticker and order by yield
+            combined_df = (
+                combined_df
+                    .sort_values(by='Current Yield', ascending=False)
+                    .groupby('Ticker')  # one bond per issuer ticker across coupons/maturities
+                    .head(1)
+            )
+
+            # Exclude tickers that have already been used in previous buckets
+            combined_df = combined_df[~combined_df['Ticker'].isin(used_symbols)]
+
+            # Take the required number of assets for this bucket
+            top_bonds = combined_df.head(assets_to_invest - len(asset_type['bonds']))
+
+            # Append to bucket and register symbols as used
+            asset_type['bonds'].extend(
+                top_bonds[['Symbol_x', 'Current Yield', 'S&P Equivalent']].to_dict(orient='records')
+            )
+            used_symbols.update(top_bonds['Ticker'].tolist())
 
         for asset_type in investment_proposal:
             logger.announcement(f'Asset Type: {asset_type["name"]}')

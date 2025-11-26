@@ -185,7 +185,7 @@ def extract() -> dict:
 
     extract_flex_queries()
     extract_bond_snapshot()
-    
+
     #extract_ust_bond_snapshot()
     #extract_sovereign_bond_snapshot()
 
@@ -294,11 +294,7 @@ def extract_bond_snapshot():
     df['Trading Currency'] = 'USD'
     df['Sector'] = ''
 
-    def extract_numbers(text):
-        return ''.join(filter(str.isdigit, text))
-
-    df['Last'] = df['Last_price'].astype(str).apply(extract_numbers)
-    # Convert extracted strings to numeric, coercing errors to NaN, then replace NaN with 0.0 to avoid ValueError
+    df['Last'] = df['Last_price'].astype(str)
     df['Last'] = pd.to_numeric(df['Last'], errors='coerce').fillna(0.0)
 
     df['Current Yield'] = ((1000 * df['Coupon'].astype(float)) / df['Last'].astype(float)) * 100
