@@ -184,8 +184,8 @@ def extract() -> dict:
     logger.announcement('Extracting information for reports.', type='info')
 
     extract_flex_queries()
+    extract_bond_snapshot()
     
-    #extract_bond_snapshot()
     #extract_ust_bond_snapshot()
     #extract_sovereign_bond_snapshot()
 
