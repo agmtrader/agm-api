@@ -206,6 +206,54 @@ def create_investment_proposal(risk_profile: dict = None):
             )
             used_symbols.update(top_bonds['Ticker'].tolist())
 
+        # -------------------- Back-fill to reach target counts --------------------
+        # Build quick lookup: rating (stripped of +/-) -> bucket reference
+        rating_to_bucket = {}
+        for bucket in investment_proposal:
+            for equiv in bucket['equivalents']:
+                rating_to_bucket[equiv.replace('+', '').replace('-', '')] = bucket
+
+        # Calculate how many more each bucket needs
+        bucket_needs = {
+            b['name']: int(total_assets * risk_archetype[b['name']]) - len(b['bonds'])
+            for b in investment_proposal
+        }
+
+        remaining_needed = sum(v for v in bucket_needs.values() if v > 0)
+
+        if remaining_needed > 0:
+            # Candidate pool: not yet used tickers, highest yield first, unique per ticker
+            remaining_pool = (
+                merged_df[~merged_df['Ticker'].isin(used_symbols)]
+                    .sort_values(by='Current Yield', ascending=False)
+                    .groupby('Ticker')
+                    .head(1)
+            )
+
+            for _, row in remaining_pool.iterrows():
+                if remaining_needed == 0:
+                    break
+
+                rating_key = str(row['S&P Equivalent']).replace('+', '').replace('-', '')
+                bucket = rating_to_bucket.get(rating_key)
+                if not bucket:
+                    # default to lowest grade bucket
+                    bucket = next(b for b in investment_proposal if b['name'] == 'bonds_bb')
+
+                if bucket_needs[bucket['name']] <= 0:
+                    continue
+
+                bucket['bonds'].append({
+                    'Symbol_x': row['Symbol_x'],
+                    'Current Yield': row['Current Yield'],
+                    'S&P Equivalent': row['S&P Equivalent'],
+                })
+
+                used_symbols.add(row['Ticker'])
+                bucket_needs[bucket['name']] -= 1
+                remaining_needed -= 1
+
+
         for asset_type in investment_proposal:
             logger.announcement(f'Asset Type: {asset_type["name"]}')
             logger.announcement(f'Percentage: {risk_archetype[asset_type["name"]]}')
