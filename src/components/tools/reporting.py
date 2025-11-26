@@ -11,6 +11,7 @@ import pandas as pd
 import os
 import requests
 import sys
+import re
 
 from src.utils.connectors.drive import GoogleDrive
 from src.utils.connectors.flex_query_api import getFlexQuery
@@ -294,10 +295,40 @@ def extract_bond_snapshot():
     df['Trading Currency'] = 'USD'
     df['Sector'] = ''
 
-    df['Last'] = df['Last_price'].astype(str)
-    df['Last'] = pd.to_numeric(df['Last'], errors='coerce').fillna(0.0)
+    # Parse the last price robustly: try float, then int, discard zeros/invalids
+    def _parse_last_price(value):
+        """Return price as float or int; None if it cannot be parsed or equals zero."""
+        if value is None:
+            return None
+        # Extract numeric characters (including decimal point)
+        numeric_match = re.findall(r"[\d\.]+", str(value))
+        if not numeric_match:
+            return None
+        numeric_str = numeric_match[0]
 
-    df['Current Yield'] = ((1000 * df['Coupon'].astype(float)) / df['Last'].astype(float)) * 100
+        # Attempt float conversion first
+        try:
+            price_val = float(numeric_str)
+            if price_val != 0:
+                return price_val
+        except (ValueError, TypeError):
+            pass
+
+        # Fallback to int conversion
+        try:
+            price_val = int(numeric_str)
+            if price_val != 0:
+                return price_val
+        except (ValueError, TypeError):
+            pass
+
+        return None  # Could not parse or value is zero
+
+    df['Last'] = df['Last_price'].apply(_parse_last_price)
+    df['Last'] = pd.to_numeric(df['Last'], errors='coerce')
+    df = df[df['Last'].notnull()]
+
+    df['Current Yield'] = ((100 * df['Coupon'].astype(float)) / df['Last'].astype(float))
 
     rename_map = {
         'Company_name': 'Company Name',
