@@ -1,6 +1,6 @@
 from flask import Blueprint, request
-from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, create_instruction, read_instructions, delete_document, read_account_documents
-from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, view_withdrawable_cash, view_active_bank_instructions, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, withdraw_funds, create_user_for_account, transfer_position_internally, transfer_position_externally
+from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_instructions, delete_document, read_account_documents, update_account_document
+from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, withdraw_funds, create_user_for_account, transfer_position_internally, transfer_position_externally
 from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts
 from src.utils.response import format_response
 
@@ -63,6 +63,20 @@ def upload_document_route():
     expiry_date = payload.get('expiry_date', None)
     name = payload.get('name', None)
     return upload_document(account_id=account_id, file_name=file_name, file_length=file_length, sha1_checksum=sha1_checksum, mime_type=mime_type, data=data, category=category, type=type, issued_date=issued_date, expiry_date=expiry_date, name=name)
+
+
+@bp.route('/documents', methods=['PATCH'])
+@format_response
+def update_account_document_route():
+    payload = request.get_json(force=True)
+    document_id = payload.get('document_id', None)
+    comment = payload.get('comment', None)
+    category = payload.get('category', None)
+    name = payload.get('name', None)
+    type = payload.get('type', None)
+    issued_date = payload.get('issued_date', None)
+    expiry_date = payload.get('expiry_date', None)
+    return update_account_document(document_id=document_id, category=category, name=name, type=type, issued_date=issued_date, expiry_date=expiry_date, comment=comment)
 
 @bp.route('/documents', methods=['DELETE'])
 @format_response

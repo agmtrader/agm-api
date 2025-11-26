@@ -58,6 +58,18 @@ def read_account_documents(account_id: str = None) -> list:
     return documents, account_documents
 
 @handle_exception
+def update_account_document(document_id: str = None, category: str = None, name: str = None, type: str = None, issued_date: str = None, expiry_date: str = None, comment: str = None) -> dict:
+    logger.info(f"Updating account document: {document_id}, category: {category}, name: {name}, type: {type}, issued_date: {issued_date}, expiry_date: {expiry_date}, comment: {comment}")
+    return db.update(table='account_document', query={'document_id': document_id}, data={
+        'category': category,
+        'name': name,
+        'type': type,
+        'issued_date': issued_date,
+        'expiry_date': expiry_date,
+        'comment': comment
+    })
+
+@handle_exception
 def delete_document(document_id: str = None) -> dict:
     db.delete(table='account_document', query={'document_id': document_id})
     db.delete(table='document', query={'id': document_id})
