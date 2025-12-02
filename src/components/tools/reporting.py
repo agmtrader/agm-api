@@ -184,6 +184,8 @@ def run():
 def extract() -> dict:
     logger.announcement('Extracting information for reports.', type='info')
 
+    Drive.clear_folder(folder_id=batch_folder_id)
+
     extract_flex_queries()
     extract_bond_snapshot()
 
@@ -231,7 +233,7 @@ def extract_flex_queries():
             flex_queries[query_id] = getFlexQuery(query_id)
         except:
             logger.error(f'Error fetching Flex Query for {query_id}')
-            #raise Exception(f'Error fetching Flex Query for {query_id}')
+            raise Exception(f'Error fetching Flex Query for {query_id}')
     logger.announcement('Flex Queries fetched.', type='success')
 
     # Upload Flex Queries to batch folder
