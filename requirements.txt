@@ -55,3 +55,6 @@ langchain-text-splitters==1.0.0
 langchain-community ==0.4
 bs4==0.0.2
 langchain_google_genai==3.0.0
+
+# PDF Generation
+reportlab==4.1.0
