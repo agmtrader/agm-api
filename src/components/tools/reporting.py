@@ -170,7 +170,28 @@ def get_ibkr_account_pending_tasks():
     return account_pending_tasks
 
 @handle_exception
-def screen_person(name, residenceCountry, account_id):
+def get_ofac_sdn_list():
+    sdn_url = 'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV'
+    consolidated_url = 'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/CONS_PRIM.CSV'
+
+    sdn_data = requests.get(sdn_url).content
+    consolidated_data = requests.get(consolidated_url).content
+    csv_data = b'entity_number,name,type,program,title,call_sign,vessel_type,tonnage,gross_registered_tonnage,vessel_flag,vessel_owner,more_info\n' + sdn_data + consolidated_data
+
+    df = pd.read_csv(StringIO(csv_data.decode('utf-8')))
+    df['name'] = df['name'].astype(str)
+
+    # If the column 1 is Individual or individual, then change the name to be 
+    for index, row in df.iterrows():
+        if row['type'] == 'Individual' or row['type'] == 'individual':
+            df.at[index, 'name'] = row['name'].split(',')[1] + ' ' + row['name'].split(',')[0]
+    
+    #Drive.upload_file(file_name='ofac_sdn_list.csv', mime_type='text/csv', file_data=csv_data, parent_folder_id=resources_folder_id)
+    df.to_csv('ofac_sdn_list.csv', index=False)
+    return {'status': 'success'}
+
+@handle_exception
+def screen_person(name, residenceCountry):
 
     greylist = [
         'Albania',
@@ -209,21 +230,7 @@ def screen_person(name, residenceCountry, account_id):
     ]
 
     holder_screening_results = []
-
-    sdn_url = 'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV'
-    consolidated_url = 'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/CONS_PRIM.CSV'
-
-    sdn_data = requests.get(sdn_url).content
-    consolidated_data = requests.get(consolidated_url).content
-    csv_data = b'entity_number,name,type,program,title,call_sign,vessel_type,tonnage,gross_registered_tonnage,vessel_flag,vessel_owner,more_info\n' + sdn_data + consolidated_data
-
-    df = pd.read_csv(StringIO(csv_data.decode('utf-8')))
-    df['name'] = df['name'].astype(str)
-
-    # If the column 1 is Individual or individual, then change the name to be 
-    for index, row in df.iterrows():
-        if row['type'] == 'Individual' or row['type'] == 'individual':
-            df.at[index, 'name'] = row['name'].split(',')[1] + ' ' + row['name'].split(',')[0]
+    df = pd.read_csv('ofac_sdn_list.csv')
 
     similarity_threshold = 0.7
     print(residenceCountry)

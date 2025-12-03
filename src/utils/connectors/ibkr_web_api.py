@@ -214,7 +214,7 @@ class IBKRWebAPI:
     def get_account_details(self, account_id, master_account: str = None):
         try:
             original_creds = self._apply_credentials(master_account)
-            logger.info(f"Getting account details for {account_id}")
+            logger.info(f"Getting account details for {account_id} with master account: {master_account}")
             url = f"{self.BASE_URL}/gw/api/v1/accounts/{account_id}/details"
             token = self.get_bearer_token()
             if not token:
