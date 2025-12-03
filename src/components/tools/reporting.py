@@ -170,7 +170,7 @@ def get_ibkr_account_pending_tasks():
     return account_pending_tasks
 
 @handle_exception
-def screen_person(name, residenceCountry):
+def screen_person(name, residenceCountry, account_id):
 
     greylist = [
         'Albania',
@@ -226,15 +226,10 @@ def screen_person(name, residenceCountry):
             df.at[index, 'name'] = row['name'].split(',')[1] + ' ' + row['name'].split(',')[0]
 
     similarity_threshold = 0.7
-    try:
-        country = residenceCountry
-    except Exception as e:
-        print(f"Error in {name}: {e}")
-        exit()
-    print(country)
-    if country in blacklist:
+    print(residenceCountry)
+    if residenceCountry in blacklist:
         country_status = 'Blacklisted'
-    elif country in greylist:
+    elif residenceCountry in greylist:
         country_status = 'Greylisted'
     else:
         country_status = 'Not in any list'
@@ -245,24 +240,27 @@ def screen_person(name, residenceCountry):
             continue
         similarity = difflib.SequenceMatcher(None, name.lower(), sdn_name.lower()).ratio()
         if similarity >= similarity_threshold:
-            holder_screening_results.append({
-                'Entity Number': row['entity_number'],
-                'Name': sdn_name,
-                'Type': row['type'],
-                'Program': row['program'],
-                'Title': row['title'],
-                'Similarity': similarity,
-                'Call Sign': row['call_sign'],
-                'Vessel Type': row['vessel_type'],
-                'Tonnage': row['tonnage'],
-                'Gross Registered Tonnage': row['gross_registered_tonnage'],
-                'Vessel Flag': row['vessel_flag'],
-                'Vessel Owner': row['vessel_owner'],
-                'More Info': row['more_info'],
-                'FATF Status': country_status
-            })
-    
-    return holder_screening_results
+            data = {
+                'name': sdn_name,
+                'entity_number': row['entity_number'],
+                'type': row['type'],
+                'program': row['program'],
+                'title': row['title'],
+                'similarity': similarity,
+                'call_sign': row['call_sign'],
+                'vessel_type': row['vessel_type'],
+                'tonnage': row['tonnage'],
+                'gross_registered_tonnage': row['gross_registered_tonnage'],
+                'vessel_flag': row['vessel_flag'],
+                'vessel_owner': row['vessel_owner'],
+                'more_info': row['more_info']
+            }
+
+            holder_screening_results.append(data)
+    return {
+        'fatf_status': country_status,
+        'holder_screening_results': holder_screening_results
+    }
 
 """
 ETL PIPELINE
