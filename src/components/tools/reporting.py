@@ -17,6 +17,8 @@ from src.utils.connectors.drive import GoogleDrive
 from src.utils.connectors.flex_query_api import getFlexQuery
 from src.utils.exception import handle_exception
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
+import difflib
+from io import StringIO
 
 logger.announcement('Initializing Reporting Service', type='info')
 Drive = GoogleDrive()
@@ -161,6 +163,106 @@ def get_ibkr_account_details():
     """
     account_details = Drive.download_file(file_id='10RO_AFG3W5Sv-9CnQ2qmGhikco6cmMCH', parse=True)
     return account_details
+
+@handle_exception
+def get_ibkr_account_pending_tasks():
+    account_pending_tasks = Drive.download_file(file_id='1JHzd6zqRWY7ED8N_WL-QMtKVLUPLEwaR', parse=True)
+    return account_pending_tasks
+
+@handle_exception
+def screen_person(name, residenceCountry):
+
+    greylist = [
+        'Albania',
+        'Armenia',
+        'Barbados',
+        'Burkina Faso',
+        'Haiti',
+        'Ghana',
+        'Gibraltar',
+        'Democratic Republic of the Congo',
+        'Yemen',
+        'Jordan',
+        'Cambodia',
+        'Cayman Islands',
+        'Mali',
+        'Morocco',
+        'Mozambique',
+        'Nigeria',
+        'United Arab Emirates',
+        'Panama',
+        'Senegal',
+        'Syria',
+        'Tanzania',
+        'Turkey',
+        'Uganda',
+        'Philippines',
+        'South Africa',
+        'South Sudan',
+        'Jamaica',
+    ]
+
+    blacklist = [
+        'Democratic People\'s Republic of Korea (DPRK)',
+        'Iran',
+        'Myanmar'
+    ]
+
+    holder_screening_results = []
+
+    sdn_url = 'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV'
+    consolidated_url = 'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/CONS_PRIM.CSV'
+
+    sdn_data = requests.get(sdn_url).content
+    consolidated_data = requests.get(consolidated_url).content
+    csv_data = b'entity_number,name,type,program,title,call_sign,vessel_type,tonnage,gross_registered_tonnage,vessel_flag,vessel_owner,more_info\n' + sdn_data + consolidated_data
+
+    df = pd.read_csv(StringIO(csv_data.decode('utf-8')))
+    df['name'] = df['name'].astype(str)
+
+    # If the column 1 is Individual or individual, then change the name to be 
+    for index, row in df.iterrows():
+        if row['type'] == 'Individual' or row['type'] == 'individual':
+            df.at[index, 'name'] = row['name'].split(',')[1] + ' ' + row['name'].split(',')[0]
+
+    similarity_threshold = 0.7
+    try:
+        country = residenceCountry
+    except Exception as e:
+        print(f"Error in {name}: {e}")
+        exit()
+    print(country)
+    if country in blacklist:
+        country_status = 'Blacklisted'
+    elif country in greylist:
+        country_status = 'Greylisted'
+    else:
+        country_status = 'Not in any list'
+
+    for index, row in df.iterrows():
+        sdn_name = row['name'].strip()
+        if sdn_name == '':
+            continue
+        similarity = difflib.SequenceMatcher(None, name.lower(), sdn_name.lower()).ratio()
+        if similarity >= similarity_threshold:
+            holder_screening_results.append({
+                'Entity Number': row['entity_number'],
+                'Name': sdn_name,
+                'Type': row['type'],
+                'Program': row['program'],
+                'Title': row['title'],
+                'Similarity': similarity,
+                'Call Sign': row['call_sign'],
+                'Vessel Type': row['vessel_type'],
+                'Tonnage': row['tonnage'],
+                'Gross Registered Tonnage': row['gross_registered_tonnage'],
+                'Vessel Flag': row['vessel_flag'],
+                'Vessel Owner': row['vessel_owner'],
+                'More Info': row['more_info'],
+                'FATF Status': country_status
+            })
+    
+    return holder_screening_results
 
 """
 ETL PIPELINE
