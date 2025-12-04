@@ -82,7 +82,7 @@ def read_account_screenings(account_id: str = None) -> list:
     return db.read(table='account_screening', query={'account_id': account_id})
 
 @handle_exception
-def screen_person(account_id: str = None, holder_name: str = None, residence_country: str = None, risk_score: float = None) -> dict:
+def screen_person(account_id: str = None, holder_name: str = None, residence_country: str = None, risk_score: float = None, created: str = None) -> dict:
     
     greylist = [
         'Albania',
@@ -155,7 +155,7 @@ def screen_person(account_id: str = None, holder_name: str = None, residence_cou
             }
 
             ofac_results.append(data)
-    return db.create(table='account_screening', data={'account_id': account_id, 'holder_name': holder_name, 'ofac_results': ofac_results, 'fatf_status': fatf_status, 'risk_score': risk_score if risk_score is not None else 0})
+    return db.create(table='account_screening', data={'account_id': account_id, 'holder_name': holder_name, 'ofac_results': ofac_results, 'fatf_status': fatf_status, 'risk_score': risk_score if risk_score is not None else 0, 'created': created})
 
 
 """
