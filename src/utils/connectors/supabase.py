@@ -131,6 +131,16 @@ class Supabase:
             master_account = Column(Text, nullable=True)
             management_type = Column(Text, nullable=True)
 
+        class AccountScreening(self.Base):
+            __tablename__ = 'account_screening'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            holder_name = Column(Text, nullable=False)
+            ofac_results = Column(JSONB, nullable=False)
+            fatf_status = Column(Text, nullable=False)
+
         class FeeTemplateRequest(self.Base):
             __tablename__ = 'fee_template_request'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -269,7 +279,8 @@ class Supabase:
         self.AdvisorChangeRequest = AdvisorChangeRequest
         self.ManagementTypeRequest = ManagementTypeRequest
         self.AccountInstruction = AccountInstruction
-        
+        self.AccountScreening = AccountScreening
+
         # Risk Profiles
         self.RiskProfile = RiskProfile    
 

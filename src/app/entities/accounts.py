@@ -1,7 +1,11 @@
 from flask import Blueprint, request
-from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_instructions, delete_document, read_account_documents, update_account_document
+
+from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_instructions, delete_document, read_account_documents, update_account_document, screen_person, read_account_screenings
+
 from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, withdraw_funds, create_user_for_account, transfer_position_internally, transfer_position_externally
+
 from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts
+
 from src.utils.response import format_response
 
 bp = Blueprint('accounts', __name__)
@@ -95,6 +99,21 @@ def read_instruction_route():
     if account_id:  
         query['account_id'] = account_id
     return read_instructions(query=query)
+
+@bp.route('/screening', methods=['GET'])
+@format_response
+def read_account_screenings_route():
+    account_id = request.args.get('account_id', None)
+    return read_account_screenings(account_id=account_id)
+
+@bp.route('/screening', methods=['POST'])
+@format_response
+def screen_person_route():
+    payload = request.get_json(force=True)
+    account_id = payload.get('account_id', None)
+    holder_name = payload.get('holder_name', None)
+    residence_country = payload.get('residence_country', None)
+    return screen_person(account_id=account_id, holder_name=holder_name, residence_country=residence_country)
 
 # Account Management
 @bp.route('/ibkr/details', methods=['GET'])

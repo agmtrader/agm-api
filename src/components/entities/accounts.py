@@ -3,6 +3,8 @@ from src.utils.connectors.supabase import db
 from src.utils.logger import logger
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 from src.utils.managers.document_manager import DocumentManager
+import pandas as pd
+import difflib
 
 logger.announcement('Initializing Accounts Service', type='info')
 ibkr_web_api = IBKRWebAPI()
@@ -74,6 +76,95 @@ def delete_document(document_id: str = None) -> dict:
     db.delete(table='account_document', query={'document_id': document_id})
     db.delete(table='document', query={'id': document_id})
     return {'status': 'success'}
+
+@handle_exception
+def read_account_screenings(account_id: str = None) -> list:
+    return db.read(table='account_screening', query={'account_id': account_id})
+
+@handle_exception
+def screen_person(account_id: str = None, holder_name: str = None, residence_country: str = None) -> dict:
+    results = screen_person_utility(name=holder_name, residenceCountry=residence_country)
+    return db.create(table='account_screening', data={'account_id': account_id, 'holder_name': holder_name, 'ofac_results': results['ofac_results'], 'fatf_status': results['fatf_status']})
+
+@handle_exception
+def screen_person_utility(name, residenceCountry):
+
+    greylist = [
+        'Albania',
+        'Armenia',
+        'Barbados',
+        'Burkina Faso',
+        'Haiti',
+        'Ghana',
+        'Gibraltar',
+        'Democratic Republic of the Congo',
+        'Yemen',
+        'Jordan',
+        'Cambodia',
+        'Cayman Islands',
+        'Mali',
+        'Morocco',
+        'Mozambique',
+        'Nigeria',
+        'United Arab Emirates',
+        'Panama',
+        'Senegal',
+        'Syria',
+        'Tanzania',
+        'Turkey',
+        'Uganda',
+        'Philippines',
+        'South Africa',
+        'South Sudan',
+        'Jamaica',
+    ]
+
+    blacklist = [
+        'Democratic People\'s Republic of Korea (DPRK)',
+        'Iran',
+        'Myanmar'
+    ]
+
+    ofac_results = []
+    df = pd.read_csv('ofac_sdn_list.csv')
+
+    similarity_threshold = 0.7
+    print(residenceCountry)
+    if residenceCountry in blacklist:
+        country_status = 'Black listed'
+    elif residenceCountry in greylist:
+        country_status = 'Grey listed'
+    else:
+        country_status = 'Not listed'
+
+    for index, row in df.iterrows():
+        print(row['name'])
+        sdn_name = str(row['name']).strip()
+        if sdn_name == '':
+            continue
+        similarity = difflib.SequenceMatcher(None, name.lower(), sdn_name.lower()).ratio()
+        if similarity >= similarity_threshold:
+            data = {
+                'name': sdn_name,
+                'entity_number': row['entity_number'],
+                'type': row['type'],
+                'program': row['program'],
+                'title': row['title'],
+                'similarity': similarity,
+                'call_sign': row['call_sign'],
+                'vessel_type': row['vessel_type'],
+                'tonnage': row['tonnage'],
+                'gross_registered_tonnage': row['gross_registered_tonnage'],
+                'vessel_flag': row['vessel_flag'],
+                'vessel_owner': row['vessel_owner'],
+                'more_info': row['more_info']
+            }
+
+            ofac_results.append(data)
+    return {
+        'fatf_status': country_status,
+        'ofac_results': ofac_results
+    }
 
 """
 Account Management API
