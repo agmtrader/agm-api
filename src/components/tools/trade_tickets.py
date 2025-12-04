@@ -61,7 +61,6 @@ def generate_trade_confirmation_message(flex_query_dict, indices):
 
     df_indexed.loc[:,'TotalAmount'] = round(df_indexed['AccruedInterest'] + df_indexed['NetCash'], 2).astype(float)
 
-    # TODO fix this
     df_indexed.loc[:,'Price (including Commissions)'] = round((df_indexed['NetCash']/df_indexed['Quantity']) * 100, 4).astype(float)
     
     df_indexed['Price'] = df_indexed['Price'].astype(float)
@@ -259,7 +258,6 @@ def generate_excel_file(flex_query_dict, indices):
 
     df_indexed.loc[:,'TotalAmount'] = round(df_indexed['AccruedInterest'] + df_indexed['NetCash'], 2).astype(float)
 
-    # TODO fix this
     df_indexed.loc[:,'Price (including Commissions)'] = round((df_indexed['NetCash']/df_indexed['Quantity']) * 100, 4).astype(float)
     
     df_indexed['Price'] = df_indexed['Price'].astype(float)

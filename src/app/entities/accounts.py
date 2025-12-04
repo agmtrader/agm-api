@@ -113,7 +113,8 @@ def screen_person_route():
     account_id = payload.get('account_id', None)
     holder_name = payload.get('holder_name', None)
     residence_country = payload.get('residence_country', None)
-    return screen_person(account_id=account_id, holder_name=holder_name, residence_country=residence_country)
+    risk_score = payload.get('risk_score', None)
+    return screen_person(account_id=account_id, holder_name=holder_name, residence_country=residence_country, risk_score=risk_score)
 
 # Account Management
 @bp.route('/ibkr/details', methods=['GET'])

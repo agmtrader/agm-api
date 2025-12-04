@@ -82,13 +82,8 @@ def read_account_screenings(account_id: str = None) -> list:
     return db.read(table='account_screening', query={'account_id': account_id})
 
 @handle_exception
-def screen_person(account_id: str = None, holder_name: str = None, residence_country: str = None) -> dict:
-    results = screen_person_utility(name=holder_name, residenceCountry=residence_country)
-    return db.create(table='account_screening', data={'account_id': account_id, 'holder_name': holder_name, 'ofac_results': results['ofac_results'], 'fatf_status': results['fatf_status']})
-
-@handle_exception
-def screen_person_utility(name, residenceCountry):
-
+def screen_person(account_id: str = None, holder_name: str = None, residence_country: str = None, risk_score: float = None) -> dict:
+    
     greylist = [
         'Albania',
         'Armenia',
@@ -129,20 +124,19 @@ def screen_person_utility(name, residenceCountry):
     df = pd.read_csv('ofac_sdn_list.csv')
 
     similarity_threshold = 0.7
-    print(residenceCountry)
-    if residenceCountry in blacklist:
-        country_status = 'Black listed'
-    elif residenceCountry in greylist:
-        country_status = 'Grey listed'
+
+    if residence_country in blacklist:
+        fatf_status = 'Black listed'
+    elif residence_country in greylist:
+        fatf_status = 'Grey listed'
     else:
-        country_status = 'Not listed'
+        fatf_status = 'Not listed'
 
     for index, row in df.iterrows():
-        print(row['name'])
         sdn_name = str(row['name']).strip()
         if sdn_name == '':
             continue
-        similarity = difflib.SequenceMatcher(None, name.lower(), sdn_name.lower()).ratio()
+        similarity = difflib.SequenceMatcher(None, holder_name.lower(), sdn_name.lower()).ratio()
         if similarity >= similarity_threshold:
             data = {
                 'name': sdn_name,
@@ -161,10 +155,8 @@ def screen_person_utility(name, residenceCountry):
             }
 
             ofac_results.append(data)
-    return {
-        'fatf_status': country_status,
-        'ofac_results': ofac_results
-    }
+    return db.create(table='account_screening', data={'account_id': account_id, 'holder_name': holder_name, 'ofac_results': ofac_results, 'fatf_status': fatf_status, 'risk_score': risk_score if risk_score is not None else 0})
+
 
 """
 Account Management API

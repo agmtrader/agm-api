@@ -140,6 +140,7 @@ class Supabase:
             holder_name = Column(Text, nullable=False)
             ofac_results = Column(JSONB, nullable=False)
             fatf_status = Column(Text, nullable=False)
+            risk_score = Column(Text, nullable=True)
 
         class FeeTemplateRequest(self.Base):
             __tablename__ = 'fee_template_request'
