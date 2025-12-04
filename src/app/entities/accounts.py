@@ -2,7 +2,7 @@ from flask import Blueprint, request
 
 from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_instructions, delete_document, read_account_documents, update_account_document, screen_person, read_account_screenings
 
-from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, withdraw_funds, create_user_for_account, transfer_position_internally, transfer_position_externally
+from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, withdraw_funds, create_user_for_account, transfer_position_internally, transfer_position_externally, get_financial_ranges
 
 from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts
 
@@ -193,9 +193,9 @@ def add_trading_permissions_route():
     master_account = payload.get('master_account', None)    
     return add_trading_permissions(account_id=account_id, trading_permissions=trading_permissions, master_account=master_account)
 
-@bp.route('/ibkr/change_financial_information', methods=['POST'])
+@bp.route('/ibkr/change_investment_experience', methods=['POST'])
 @format_response
-def change_financial_information_route():
+def change_investment_experience_route():
     payload = request.get_json(force=True)
     account_id = payload.get('account_id', None)
     investment_experience = payload.get('investment_experience', None)
@@ -318,3 +318,8 @@ def get_forms_route():
 @format_response
 def get_product_country_bundles_route():
     return get_product_country_bundles()
+
+@bp.route('/ibkr/financial_ranges', methods=['GET'])
+@format_response
+def get_financial_ranges_route():
+    return get_financial_ranges()

@@ -328,3 +328,8 @@ def get_forms(forms: list = None, master_account: str = None) -> dict:
 def get_wire_instructions(master_account: str = None, account_id: str = None, currency: str = "USD") -> dict:
     """Get wire instructions via IBKR API."""
     return ibkr_web_api.get_wire_instructions(master_account=master_account, account_id=account_id, currency=currency)
+
+@handle_exception
+def get_financial_ranges() -> dict:
+    """Get financial ranges via IBKR API."""
+    return ibkr_web_api.get_financial_ranges()

@@ -694,7 +694,7 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def change_financial_information(self, account_id: str, investment_experience: dict = None, master_account: str = None):
+    def change_investment_experience(self, account_id: str, investment_experience: dict = None, master_account: str = None):
         """Change the financial information for a given account.
 
         Args:
@@ -706,7 +706,7 @@ class IBKRWebAPI:
         """
         try:
             original_creds = self._apply_credentials(master_account)
-            logger.info(f"Changing financial information for account {account_id}")
+            logger.info(f"Changing investment experience for account {account_id}")
 
             url = f"{self.BASE_URL}/gw/api/v1/accounts"
 
@@ -738,7 +738,7 @@ class IBKRWebAPI:
                 logger.error(f"Error {response.status_code}: {response.text}")
                 raise Exception(f"Error {response.status_code}: {response.text}")
 
-            logger.success("Financial information changed successfully")
+            logger.success("Investment experience changed successfully")
             data = response.json()
             print(data)
             return data
@@ -1481,6 +1481,32 @@ class IBKRWebAPI:
                 raise Exception(f"Error {response.status_code}: {response.text}")
 
             logger.success("Wire instructions fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def get_financial_ranges(self):
+        """Get the account screenings.
+        Args:
+            account_id (str): The account id to get the screenings for.
+        Returns:
+            dict: The account screenings.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/gw/api/v1/enumerations/fin-info-ranges?currency=USD"
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {token}"
+            }
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success("Financial ranges fetched successfully")
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
