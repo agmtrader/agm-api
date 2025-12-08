@@ -91,9 +91,6 @@ def getFlexQuery(queryId):
     
     xml_data = generatedReportResponse.content
     df = binaryXMLtoDF(xml_data)
-    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    df_dict = df.to_dict(orient='records')
-    Drive.upload_file(file_name=f'flex_query_{queryId}_{timestamp}.csv', mime_type='text/csv', file_data=df_dict, parent_folder_id='19kDy7YNptLPPMaYoMG2UmRyzwHSv7h0I')
     logger.success(f"Flex Query generated")
     return df.to_dict(orient='records')
 

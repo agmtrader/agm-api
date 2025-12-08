@@ -171,24 +171,13 @@ def get_ibkr_account_pending_tasks():
 
 @handle_exception
 def get_ofac_sdn_list():
-    sdn_url = 'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV'
-    consolidated_url = 'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/CONS_PRIM.CSV'
-
-    sdn_data = requests.get(sdn_url).content
-    consolidated_data = requests.get(consolidated_url).content
-    csv_data = b'entity_number,name,type,program,title,call_sign,vessel_type,tonnage,gross_registered_tonnage,vessel_flag,vessel_owner,more_info\n' + sdn_data + consolidated_data
-
-    df = pd.read_csv(StringIO(csv_data.decode('utf-8')))
-    df['name'] = df['name'].astype(str)
-
-    # If the column 1 is Individual or individual, then change the name to be 
-    for index, row in df.iterrows():
-        if row['type'] == 'Individual' or row['type'] == 'individual':
-            df.at[index, 'name'] = row['name'].split(',')[1] + ' ' + row['name'].split(',')[0]
-    
-    #Drive.upload_file(file_name='ofac_sdn_list.csv', mime_type='text/csv', file_data=csv_data, parent_folder_id=resources_folder_id)
-    df.to_csv('ofac_sdn_list.csv', index=False)
-    return {'status': 'success'}
+    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
+    ofac_sdn_list_file = [ofac_sdn_list for ofac_sdn_list in files_in_resources_folder if 'ofac_sdn_list' in ofac_sdn_list['name']]
+    if len(ofac_sdn_list_file) != 1:
+        logger.error('OFAC SDN list file not found or multiple files found')
+        raise Exception('OFAC SDN list file not found or multiple files found')
+    ofac_sdn_list = Drive.download_file(file_id=ofac_sdn_list_file[0]['id'], parse=True)
+    return ofac_sdn_list
 
 """
 ETL PIPELINE
@@ -219,6 +208,8 @@ def extract() -> dict:
 
     #extract_ust_bond_snapshot()
     #extract_sovereign_bond_snapshot()
+
+    extract_ofac_sdn_list()
 
     rename_files_in_batch()
     sort_batch_files_to_backup_folders()
@@ -526,6 +517,24 @@ def extract_sovereign_bond_snapshot():
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
     df['Timestamp'] = timestamp
     pass
+
+def extract_ofac_sdn_list():
+    sdn_url = 'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV'
+    consolidated_url = 'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/CONS_PRIM.CSV'
+
+    sdn_data = requests.get(sdn_url).content
+    consolidated_data = requests.get(consolidated_url).content
+    csv_data = b'entity_number,name,type,program,title,call_sign,vessel_type,tonnage,gross_registered_tonnage,vessel_flag,vessel_owner,more_info\n' + sdn_data + consolidated_data
+
+    df = pd.read_csv(StringIO(csv_data.decode('utf-8')))
+    df['name'] = df['name'].astype(str)
+
+    # If the column 1 is Individual or individual, then change the name to be 
+    for index, row in df.iterrows():
+        if row['type'] == 'Individual' or row['type'] == 'individual':
+            df.at[index, 'name'] = row['name'].split(',')[1] + ' ' + row['name'].split(',')[0]
+    
+    Drive.upload_file(file_name='ofac_sdn_list.csv', mime_type='text/csv', file_data=csv_data, parent_folder_id=resources_folder_id)
 
 def rename_files_in_batch():
     """
@@ -901,6 +910,15 @@ def process_client_fees(df):
     """
     return df
 
+def process_ofac_sdn_list(df):
+    """
+    Process the OFAC SDN list file.
+    
+    :param df: Input dataframe
+    :return: Processed dataframe
+    """
+    return df
+
 def get_finance_data():
     """
     Get finance data from the finance folder.
@@ -998,6 +1016,14 @@ report_configs = [
         'backup_name': 'bond' + '_' + today_date + '.csv',
         'transform_func': process_rtd,
         'output_filename': 'ibkr_market_data_snapshot.csv'
+    },
+    {
+        'name': 'ofac_sdn_list',
+        'backup_folder_id': '1miJQJ3e3uOHJ_gHSECa_yNf7VIg3TzeN',
+        'flex': False,
+        'backup_name': 'ofac_sdn_list' + '_' + today_date + '.csv',
+        'transform_func': process_ofac_sdn_list,
+        'output_filename': 'ofac_sdn_list.csv'
     }
 ]
 

@@ -5,6 +5,7 @@ from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 from src.utils.managers.document_manager import DocumentManager
 import pandas as pd
 import difflib
+from src.components.tools.reporting import get_ofac_sdn_list
 
 logger.announcement('Initializing Accounts Service', type='info')
 ibkr_web_api = IBKRWebAPI()
@@ -121,7 +122,8 @@ def screen_person(account_id: str = None, holder_name: str = None, residence_cou
     ]
 
     ofac_results = []
-    df = pd.read_csv('ofac_sdn_list.csv')
+    ofac_sdn_list = get_ofac_sdn_list()
+    df = pd.DataFrame(ofac_sdn_list)
 
     similarity_threshold = 0.7
 

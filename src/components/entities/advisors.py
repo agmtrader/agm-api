@@ -14,3 +14,8 @@ def create_advisor(advisor: dict = None):
 def read_advisors(query=None):
     advisors = db.read(table='advisor', query=query)
     return advisors
+
+@handle_exception
+def update_advisor(query=None, advisor=None):
+    advisor_id = db.update(table='advisor', query=query, data=advisor)
+    return {'id': advisor_id}
