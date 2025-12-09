@@ -1511,6 +1511,43 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @handle_exception
+    def submit_all_agreements(self):
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/gw/api/v1/accounts/documents"
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            headers = {
+                "Authorization": f"Bearer {token}"
+            }
+            documents = []
+            forms = [3024, 4070, 9987, 8001, 3089, 4304, 4404, 6108, 5013, 6112, 4024, 9130, 3074, 3203, 3070, 3094, 3071, 4587, 4837, 2192, 4399, 8002, 2109, 4016, 4289, 4208, 9902, 3081, 3400]
+            form_response = self.get_forms(forms=forms, master_account='br')
+            for form in form_response['formDetails']:
+                documents.append(form)
+
+            body = {
+                "processDocuments": {
+                    "documents": documents,
+                    "inputLanguage": "en",
+                    "translation": False
+                }
+            }
+
+            print(body)
+            response = requests.post(url, headers=headers, data=json.dumps(body))
+
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success("All agreements submitted successfully")
+            return response.json()
+
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
 # Apply the retry decorator to all public methods that make HTTP requests
 for _method_name in [
     'get_bearer_token',
