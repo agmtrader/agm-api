@@ -85,6 +85,7 @@ class Supabase:
             status = Column(Text, nullable=False, default='Started')
             security_questions = Column(JSONB, nullable=True)
             estimated_deposit = Column(BIGINT, nullable=True)
+            risk_profile_id = Column(UUID(as_uuid=True), ForeignKey('risk_profile.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
         
         class Account(self.Base):
             __tablename__ = 'account'
@@ -182,8 +183,6 @@ class Supabase:
         class RiskProfile(self.Base):
             __tablename__ = 'risk_profile'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=True)
-            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             risk_profile_id = Column(Integer, nullable=False)
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
