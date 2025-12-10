@@ -534,7 +534,7 @@ def extract_ofac_sdn_list():
         if row['type'] == 'Individual' or row['type'] == 'individual':
             df.at[index, 'name'] = row['name'].split(',')[1] + ' ' + row['name'].split(',')[0]
     
-    Drive.upload_file(file_name='ofac_sdn_list.csv', mime_type='text/csv', file_data=csv_data, parent_folder_id=resources_folder_id)
+    Drive.upload_file(file_name='ofac_sdn_list.csv', mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=resources_folder_id)
 
 def rename_files_in_batch():
     """
