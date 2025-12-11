@@ -574,7 +574,7 @@ def sort_batch_files_to_backup_folders():
                         for backed_up_file in backup_files:
                             if backed_up_file['createdTime'].split('T')[0] == datetime.now().strftime('%Y-%m-%d'):
                                 logger.warning(f'Deleting backed up file: {backed_up_file}')
-                                #Drive.delete_file(backed_up_file['id'])
+                                Drive.delete_file(backed_up_file['id'])
                     Drive.move_file(f=f, newParentId=new_parent_id)
     except:
         logger.error(f'Error sorting files to backup folders.')
@@ -919,6 +919,24 @@ def process_ofac_sdn_list(df):
     """
     return df
 
+def process_tasks_for_subaccounts(df):
+    """
+    Process the tasks for subaccounts file.
+    
+    :param df: Input dataframe
+    :return: Processed dataframe
+    """
+    return df
+
+def process_contact_list_summary(df):
+    """
+    Process the contact list summary file.
+    
+    :param df: Input dataframe
+    :return: Processed dataframe
+    """
+    return df
+
 def get_finance_data():
     """
     Get finance data from the finance folder.
@@ -966,7 +984,7 @@ report_configs = [
         'backup_folder_id': '1tkfjpKykmbiePg8_aW1Il_YnbDW4sSTt',
         'flex': False,
         'backup_name': 'tasks_for_subaccounts' + ' ' + today_date + ' ' + 'agmtech212.csv',
-        'transform_func': None,
+        'transform_func': process_tasks_for_subaccounts,
         'output_filename': 'ibkr_tasks_for_subaccounts.csv',
     },
     {
@@ -974,7 +992,7 @@ report_configs = [
         'backup_folder_id': '1myxgwZY1oIG4hN6ZjXRFfhYSumzTVkXa',
         'flex': False,
         'backup_name': 'ContactListSummary' + ' ' + today_date + ' ' + 'agmtech212.csv',
-        'transform_func': None,
+        'transform_func': process_contact_list_summary,
         'output_filename': 'ibkr_contact_list_summary.csv',
     },
     {
