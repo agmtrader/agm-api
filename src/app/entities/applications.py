@@ -17,7 +17,6 @@ def create_route():
 def read_route():
     query = {}
     id = request.args.get('id', None)
-    lead_id = request.args.get('lead_id', None)
     user_id = request.args.get('user_id', None)
 
     strip_application_param = request.args.get('strip_application', '0')
@@ -28,8 +27,6 @@ def read_route():
 
     if id:
         query['id'] = id
-    if lead_id:
-        query['lead_id'] = lead_id
     if user_id: 
         query['user_id'] = user_id
     applications = read_applications(query=query, strip_application=strip_application)

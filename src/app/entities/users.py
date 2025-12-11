@@ -43,13 +43,10 @@ def read_users_route():
     query = {}
     id = request.args.get('id', None)
     user_id = request.args.get('user_id', None)
-    lead_id = request.args.get('lead_id', None)
     if id:
         query['id'] = id
     if user_id:
         query['user_id'] = user_id
-    if lead_id:
-        query['lead_id'] = lead_id
     return read_users(query=query)
 
 @bp.route('/update', methods=['POST'])
