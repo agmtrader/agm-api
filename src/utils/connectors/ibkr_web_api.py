@@ -1246,6 +1246,42 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
+    def get_historical_market_data(self, conid: str, period:str, bar:str):
+        """
+        """
+        try:
+            # Ensure we are using brokerage credentials because market data endpoints live there
+            original_creds = self._apply_credentials('br')
+
+            # We need an SSO token to call /iserver endpoints
+            if not self.sso_token:
+                raise Exception("No token found – make sure to initialise an SSO session first")
+
+            url = f"{self.BASE_URL}/v1/api/iserver/marketdata/history"
+            params = {
+                "conid": conid,
+                "period": period,
+                "bar": bar,
+                "outsideRth": True,
+            }
+
+            headers = {
+                "Authorization": f"Bearer {self.sso_token}",
+            }
+
+            logger.info(f"Fetching historical market data for {conid} (period={period}, bar={bar})")
+            response = requests.get(url, headers=headers, params=params)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Historical market data fetched successfully")
+            return response.json()
+        finally:
+            # Always restore original credentials to avoid side-effects
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+        
+    @handle_exception
     def get_securities_by_symbol(self, symbol: str, sec_type: str):
         """
         Get the securities by symbol.
