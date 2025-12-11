@@ -128,15 +128,13 @@ def start_api():
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
 
     # Entities
-    from src.app.entities import accounts, advisors, applications, contacts, documents, fee_template_requests, leads, pending_tasks, users, advisor_changes, management_type_requests
+    from src.app.entities import accounts, advisors, applications, contacts, documents, fee_template_requests, users, advisor_changes, management_type_requests
     app.register_blueprint(accounts.bp, url_prefix='/accounts')
     app.register_blueprint(advisors.bp, url_prefix='/advisors')
     app.register_blueprint(applications.bp, url_prefix='/applications')
     app.register_blueprint(contacts.bp, url_prefix='/contacts')
     app.register_blueprint(documents.bp, url_prefix='/documents')
     app.register_blueprint(fee_template_requests.bp, url_prefix='/fee_template_requests')
-    app.register_blueprint(leads.bp, url_prefix='/leads')
-    app.register_blueprint(pending_tasks.bp, url_prefix='/pending_tasks')
     app.register_blueprint(users.bp, url_prefix='/users')
     app.register_blueprint(advisor_changes.bp, url_prefix='/advisor_changes')
     app.register_blueprint(management_type_requests.bp, url_prefix='/management_type_requests')
