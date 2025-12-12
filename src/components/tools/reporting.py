@@ -137,7 +137,7 @@ def get_open_positions_report():
     :return: Response object with open positions report or error message
     """
     files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
-    open_positions_file = [open_positions for open_positions in files_in_resources_folder if 'ibkr_open_positions_all' in open_positions['name']]
+    open_positions_file = [open_positions for open_positions in files_in_resources_folder if 'ibkr_open_positions_template' in open_positions['name']]
     if len(open_positions_file) != 1:
         logger.error('Open positions file not found or multiple files found')
         raise Exception('Open positions file not found or multiple files found')
@@ -890,7 +890,13 @@ def process_open_positions_template(df):
     concatenated_df = pd.concat([df, formula_df], axis=1)
     concatenated_df = concatenated_df.fillna('')
 
-    return concatenated_df
+    rtd = get_rtd_report()
+    rtd_df = pd.DataFrame(rtd)
+    rtd_df['Symbol'] = rtd_df['Symbol'].astype(str).str.strip().str.replace(r'^IBCID', '', regex=True).astype(int)
+
+    final_df = pd.merge(concatenated_df, rtd_df, left_on='Conid', right_on='Symbol', how='left')
+
+    return final_df
 
 def process_nav(df):
     """
@@ -980,6 +986,14 @@ def get_finance_data():
 
 report_configs = [
     {
+        'name': 'market_data_snapshot',
+        'backup_folder_id': '1luTnQ1qRDNWLrqjMan-kF_eMgH16R-J9',
+        'flex': False,
+        'backup_name': 'bond' + '_' + today_date + '.csv',
+        'transform_func': process_rtd,
+        'output_filename': 'ibkr_market_data_snapshot.csv'
+    },
+    {
         'name': 'tasks_for_subaccounts',
         'backup_folder_id': '1tkfjpKykmbiePg8_aW1Il_YnbDW4sSTt',
         'flex': False,
@@ -1026,14 +1040,6 @@ report_configs = [
         'backup_name': '732383' + '_' + first_date + '_' + yesterday_date + '.csv',
         'transform_func': process_client_fees,
         'output_filename': 'ibkr_client_fees.csv'
-    },
-    {
-        'name': 'market_data_snapshot',
-        'backup_folder_id': '1luTnQ1qRDNWLrqjMan-kF_eMgH16R-J9',
-        'flex': False,
-        'backup_name': 'bond' + '_' + today_date + '.csv',
-        'transform_func': process_rtd,
-        'output_filename': 'ibkr_market_data_snapshot.csv'
     },
     {
         'name': 'ofac_sdn_list',

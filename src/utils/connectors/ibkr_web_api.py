@@ -435,6 +435,7 @@ class IBKRWebAPI:
                 logger.error(f"Error 505: {error_message}")
                 raise ServiceError(error_message[0:50] + '...', status_code=505)
 
+            print(data)
             logger.success("Application sent to Interactive Brokers successfully")
             return data
         finally:
