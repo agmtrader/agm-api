@@ -88,7 +88,7 @@ class Gmail(GmailConnector):
     def send_welcome_email(self, content, client_email, lang="es"):
         """Send welcome email after account approval and funding."""
         subject = (
-            "Bienvenido a AGM Technology (BVI) Inc." if lang == "es" else "Welcome to AGM Technology (BVI) Inc."
+            "Bienvenido a AGM Technology" if lang == "es" else "Welcome to AGM Technology"
         )
         email_template = f"welcome_{lang}"
         return self.send_email(
