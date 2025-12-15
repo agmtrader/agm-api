@@ -303,6 +303,8 @@ def extract_bond_snapshot():
     df['Financial Instrument'] = df['Symbol'] + ' ' + df['Contract_description_2']
     df['Symbol'] = 'IBCID' + df['Conidex']
 
+    df = df.dropna(subset=['Financial Instrument'])
+
     from src.components.tools.trade_tickets import extract_bond_details
     for index, row in df.iterrows():
         bond_details = extract_bond_details(row['Financial Instrument'])

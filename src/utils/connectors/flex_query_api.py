@@ -114,4 +114,5 @@ def binaryXMLtoDF(binaryXMLData):
                 rows.append(row)
     
     df = pd.DataFrame(rows[1:], columns=rows[0])
+    print(len(df))
     return df
