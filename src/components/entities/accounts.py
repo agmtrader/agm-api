@@ -240,9 +240,9 @@ def add_clp_capability(account_id: str = None, document_submission: dict = None,
     return ibkr_web_api.add_clp_capability(account_id=account_id, document_submission=document_submission, master_account=master_account)
 
 @handle_exception
-def change_financial_information(account_id: str = None, investment_experience: dict = None, master_account: str = None) -> dict:
+def change_investment_experience(account_id: str = None, investment_experience: dict = None, master_account: str = None) -> dict:
     """Change account financial information via IBKR API."""
-    return ibkr_web_api.change_financial_information(account_id=account_id, investment_experience=investment_experience, master_account=master_account)
+    return ibkr_web_api.change_investment_experience(account_id=account_id, investment_experience=investment_experience, master_account=master_account)
 
 @handle_exception
 def deposit_funds(master_account: str = None, instruction: dict = None, account_id: str = None) -> dict:

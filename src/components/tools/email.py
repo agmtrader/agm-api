@@ -55,7 +55,7 @@ class Gmail(GmailConnector):
         return self.send_email(content, agm_user_email, subject, email_template, bcc="", cc="")
 
     @handle_exception
-    def send_credentials_email(self, content, client_email, lang="es"):
+    def send_credentials_email(self, content, client_email, lang="es", cc=""):
         subject = (
             "Credenciales de acceso para cuenta AGM"
             if lang == "es"
@@ -68,11 +68,11 @@ class Gmail(GmailConnector):
             subject,
             email_template,
             bcc="",
-            cc="jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com",
+            cc="jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com," + cc,
         )
 
     @handle_exception
-    def send_transfer_instructions_email(self, content, client_email, lang="es"):
+    def send_transfer_instructions_email(self, content, client_email, lang="es", cc=""):
         subject = "Instrucciones de transferencia" if lang == "es" else "Transfer Instructions"
         email_template = f"transfer_instructions_{lang}"
         return self.send_email(
@@ -81,11 +81,11 @@ class Gmail(GmailConnector):
             subject,
             email_template,
             bcc="",
-            cc="jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com",
+            cc="jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com," + cc,
         )
 
     @handle_exception
-    def send_welcome_email(self, content, client_email, lang="es"):
+    def send_welcome_email(self, content, client_email, lang="es", cc=""):
         """Send welcome email after account approval and funding."""
         subject = (
             "Bienvenido a AGM Technology" if lang == "es" else "Welcome to AGM Technology"
@@ -97,5 +97,5 @@ class Gmail(GmailConnector):
             subject,
             email_template,
             bcc="",
-            cc="jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com",
+            cc="jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com," + cc,
         )

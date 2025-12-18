@@ -896,7 +896,7 @@ def process_open_positions_template(df):
     rtd_df = pd.DataFrame(rtd)
     rtd_df['Symbol'] = rtd_df['Symbol'].astype(str).str.strip().str.replace(r'^IBCID', '', regex=True).astype(int)
 
-    final_df = pd.merge(concatenated_df, rtd_df, left_on='Conid', right_on='Symbol', how='left')
+    final_df = pd.merge(concatenated_df, rtd_df, left_on='Conid', right_on='Symbol', how='right')
 
     return final_df
 

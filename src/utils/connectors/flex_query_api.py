@@ -10,7 +10,7 @@ from src.utils.connectors.drive import GoogleDrive
 from datetime import datetime
 
 logger.announcement('Initializing Flex Query Service', type='info')
-Drive = GoogleDrive()
+drive = GoogleDrive()
 version='&v=3'
 url = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest?"
 logger.announcement('Initialized Flex Query Service', type='success')
@@ -102,7 +102,10 @@ def binaryXMLtoDF(binaryXMLData):
     rows = []
     header_row = None
 
+    rows_count = 0
+
     for row in reader:
+        rows_count += 1
         if ('BOA' not in row) and ('BOF' not in row) and ('BOS' not in row) and ('EOS' not in row) and ('EOA' not in row) and ('EOF' not in row) and ('MSG' not in row):
             # Capture the header row once and ignore subsequent duplicates
             if header_row is None:
@@ -114,5 +117,6 @@ def binaryXMLtoDF(binaryXMLData):
                 rows.append(row)
     
     df = pd.DataFrame(rows[1:], columns=rows[0])
+    print(rows_count)
     print(len(df))
     return df
