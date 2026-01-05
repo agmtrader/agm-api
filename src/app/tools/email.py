@@ -39,13 +39,13 @@ def send_lead_reminder_email_route():
 @format_response
 def send_credentials_email_route():
   payload = request.get_json(force=True)
-  return Email.send_credentials_email(payload['content'], payload['client_email'], payload['lang'])
+  return Email.send_credentials_email(content=payload['content'], client_email=payload['client_email'], lang=payload['lang'], cc=payload['cc'])
 
 @bp.route('/send_email/transfer_instructions', methods=['POST'])
 @format_response
 def send_transfer_instructions_email_route():
   payload = request.get_json(force=True)
-  return Email.send_transfer_instructions_email(payload['content'], payload['client_email'], payload['lang'])
+  return Email.send_transfer_instructions_email(content=payload['content'], client_email=payload['client_email'], lang=payload['lang'], cc=payload['cc'])
 
 @bp.route('/send_email/welcome', methods=['POST'])
 @format_response
