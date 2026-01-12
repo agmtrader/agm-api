@@ -294,10 +294,11 @@ def extract_bond_snapshot():
         retry_count += 1
         time.sleep(2)
 
-    first_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[:350]))
-    second_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[351:699]))
-    third_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[700:]))
-    df = pd.DataFrame(first_snapshot + second_snapshot + third_snapshot)
+    first_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[:250]))
+    second_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[251:500]))
+    third_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[501:]))
+    fourth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[751:]))
+    df = pd.DataFrame(first_snapshot + second_snapshot + third_snapshot + fourth_snapshot)
     df.columns = df.columns.str.capitalize()
 
     df['Financial Instrument'] = df['Symbol'] + ' ' + df['Contract_description_2']
