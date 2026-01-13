@@ -202,14 +202,13 @@ def extract() -> dict:
     logger.announcement('Extracting information for reports.', type='info')
 
     Drive.clear_folder(folder_id=batch_folder_id)
-
+    
     extract_flex_queries()
     extract_bond_snapshot()
 
     #extract_ust_bond_snapshot()
     #extract_sovereign_bond_snapshot()
-
-    extract_ofac_sdn_list()
+    #extract_ofac_sdn_list()
 
     rename_files_in_batch()
     sort_batch_files_to_backup_folders()
