@@ -204,8 +204,8 @@ def extract() -> dict:
     Drive.clear_folder(folder_id=batch_folder_id)
     
     extract_flex_queries()
-    extract_bond_snapshot()
-
+    
+    #extract_bond_snapshot()
     #extract_ust_bond_snapshot()
     #extract_sovereign_bond_snapshot()
     #extract_ofac_sdn_list()
