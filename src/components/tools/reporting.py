@@ -204,8 +204,8 @@ def extract() -> dict:
     Drive.clear_folder(folder_id=batch_folder_id)
     
     extract_flex_queries()
-    
-    #extract_bond_snapshot()
+    extract_bond_snapshot()
+
     #extract_ust_bond_snapshot()
     #extract_sovereign_bond_snapshot()
     #extract_ofac_sdn_list()
@@ -292,12 +292,16 @@ def extract_bond_snapshot():
             
         retry_count += 1
         time.sleep(2)
+    
+    print(len(conids))
 
-    first_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[:250]))
-    second_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[251:500]))
-    third_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[501:]))
-    fourth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[751:]))
-    df = pd.DataFrame(first_snapshot + second_snapshot + third_snapshot + fourth_snapshot)
+    first_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[:100]))
+    second_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[101:200]))
+    third_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[201:300]))
+    fourth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[301:400]))
+    fifth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[401:500]))
+    sixth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[501:600]))
+    df = pd.DataFrame(first_snapshot + second_snapshot + third_snapshot + fourth_snapshot + fifth_snapshot + sixth_snapshot + seventh_snapshot + eighth_snapshot + ninth_snapshot + tenth_snapshot)
     df.columns = df.columns.str.capitalize()
 
     df['Financial Instrument'] = df['Symbol'] + ' ' + df['Contract_description_2']
