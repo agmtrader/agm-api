@@ -13,5 +13,8 @@ def create_trade_request(side: str, quantity: int, order_type: str, time_in_forc
 
 @handle_exception
 def read_trade_request(id: str):
-    trade_request = db.read(table='trade_request', query={'id': id})
+    query = {}
+    if id:
+        query['id'] = id
+    trade_request = db.read(table='trade_request', query=query)
     return trade_request
