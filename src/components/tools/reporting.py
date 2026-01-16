@@ -193,9 +193,9 @@ def run():
     try:
         extract()
         transform()
-    except:
-        logger.error(f'Error running ETL pipeline')
-        raise Exception(f'Error running ETL pipeline')
+    except Exception as e:
+        logger.error(f'Error running ETL pipeline: {e}')
+        raise Exception(f'Error running ETL pipeline: {e}')
     return {'status': 'success'}
 
 def extract() -> dict:
@@ -204,11 +204,13 @@ def extract() -> dict:
     Drive.clear_folder(folder_id=batch_folder_id)
     
     extract_flex_queries()
+    
     extract_bond_snapshot()
 
     #extract_ust_bond_snapshot()
     #extract_sovereign_bond_snapshot()
-    #extract_ofac_sdn_list()
+
+    extract_ofac_sdn_list()
 
     rename_files_in_batch()
     sort_batch_files_to_backup_folders()
@@ -272,111 +274,113 @@ def extract_bond_snapshot():
     
     :return: Response object with bond snapshot or error message
     """
-    ip = requests.get('https://api.ipify.org').content.decode('utf8')
-    ibkr_web_api.create_sso_session('agmtech212', ip)
-    ibkr_web_api.initialize_brokerage_session()
-    time.sleep(2)
-
-    retry_count = 0
-    conids = []
-
-    while retry_count < 5:
-        watchlist_information = ibkr_web_api.get_watchlist_information('100')
-
-        for watchlist_item in watchlist_information['instruments']:
-            if 'assetClass' in watchlist_item.keys() and watchlist_item['assetClass'] == 'BOND':
-                conids.append(str(watchlist_item['conid']))
-
-        if len(conids) > 500:
-            break
-            
-        retry_count += 1
+    try:
+        ip = requests.get('https://api.ipify.org').content.decode('utf8')
+        ibkr_web_api.create_sso_session('agmtech212', ip)
+        ibkr_web_api.initialize_brokerage_session()
         time.sleep(2)
-    
-    print(len(conids))
 
-    first_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[:100]))
-    second_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[101:200]))
-    third_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[201:300]))
-    fourth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[301:400]))
-    fifth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[401:500]))
-    sixth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[501:600]))
-    df = pd.DataFrame(first_snapshot + second_snapshot + third_snapshot + fourth_snapshot + fifth_snapshot + sixth_snapshot + seventh_snapshot + eighth_snapshot + ninth_snapshot + tenth_snapshot)
-    df.columns = df.columns.str.capitalize()
+        retry_count = 0
+        conids = []
 
-    df['Financial Instrument'] = df['Symbol'] + ' ' + df['Contract_description_2']
-    df['Symbol'] = 'IBCID' + df['Conidex']
+        while retry_count < 5:
+            watchlist_information = ibkr_web_api.get_watchlist_information('100')
 
-    df = df.dropna(subset=['Financial Instrument'])
+            for watchlist_item in watchlist_information['instruments']:
+                if 'assetClass' in watchlist_item.keys() and watchlist_item['assetClass'] == 'BOND':
+                    conids.append(str(watchlist_item['conid']))
 
-    from src.components.tools.trade_tickets import extract_bond_details
-    for index, row in df.iterrows():
-        bond_details = extract_bond_details(row['Financial Instrument'])
-        df.at[index, 'Coupon'] = float(bond_details['coupon']) if bond_details['coupon'] != '' else 0.0
-        df.at[index, 'Maturity'] = bond_details['maturity']
-        df.at[index, 'ISIN'] = bond_details['isin']
-    
-    # 
-    df['Next Option Date'] = ''
-    df['Payment Frequency'] = ''
-    df['Trading Currency'] = 'USD'
-    df['Sector'] = ''
+            if len(conids) > 500:
+                break
+                
+            retry_count += 1
+            time.sleep(2)
 
-    # Parse the last price robustly: try float, then int, discard zeros/invalids
-    def _parse_last_price(value):
-        """Return price as float or int; None if it cannot be parsed or equals zero."""
-        if value is None:
-            return None
-        # Extract numeric characters (including decimal point)
-        numeric_match = re.findall(r"[\d\.]+", str(value))
-        if not numeric_match:
-            return None
-        numeric_str = numeric_match[0]
+        first_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[:100]))
+        second_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[101:200]))
+        third_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[201:300]))
+        fourth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[301:400]))
+        fifth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[401:500]))
+        sixth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[501:600]))
+        df = pd.DataFrame(first_snapshot + second_snapshot + third_snapshot + fourth_snapshot + fifth_snapshot + sixth_snapshot + seventh_snapshot + eighth_snapshot + ninth_snapshot + tenth_snapshot)
+        df.columns = df.columns.str.capitalize()
 
-        # Attempt float conversion first
-        try:
-            price_val = float(numeric_str)
-            if price_val != 0:
-                return price_val
-        except (ValueError, TypeError):
-            pass
+        df['Financial Instrument'] = df['Symbol'] + ' ' + df['Contract_description_2']
+        df['Symbol'] = 'IBCID' + df['Conidex']
 
-        # Fallback to int conversion
-        try:
-            price_val = int(numeric_str)
-            if price_val != 0:
-                return price_val
-        except (ValueError, TypeError):
-            pass
+        df = df.dropna(subset=['Financial Instrument'])
 
-        return None  # Could not parse or value is zero
+        from src.components.tools.trade_tickets import extract_bond_details
+        for index, row in df.iterrows():
+            bond_details = extract_bond_details(row['Financial Instrument'])
+            df.at[index, 'Coupon'] = float(bond_details['coupon']) if bond_details['coupon'] != '' else 0.0
+            df.at[index, 'Maturity'] = bond_details['maturity']
+            df.at[index, 'ISIN'] = bond_details['isin']
+        
+        # 
+        df['Next Option Date'] = ''
+        df['Payment Frequency'] = ''
+        df['Trading Currency'] = 'USD'
+        df['Sector'] = ''
 
-    df['Last'] = df['Last_price'].apply(_parse_last_price)
-    df['Last'] = pd.to_numeric(df['Last'], errors='coerce')
-    df = df[df['Last'].notnull()]
+        # Parse the last price robustly: try float, then int, discard zeros/invalids
+        def _parse_last_price(value):
+            """Return price as float or int; None if it cannot be parsed or equals zero."""
+            if value is None:
+                return None
+            # Extract numeric characters (including decimal point)
+            numeric_match = re.findall(r"[\d\.]+", str(value))
+            if not numeric_match:
+                return None
+            numeric_str = numeric_match[0]
 
-    df['Current Yield'] = ((100 * df['Coupon'].astype(float)) / df['Last'].astype(float))
+            # Attempt float conversion first
+            try:
+                price_val = float(numeric_str)
+                if price_val != 0:
+                    return price_val
+            except (ValueError, TypeError):
+                pass
 
-    rename_map = {
-        'Company_name': 'Company Name',
-        'Bid_size': 'Bid Size',
-        'Bid_price': 'Bid',
-        'Bid_yield': 'Bid Yield',
-        'Ask_size': 'Ask Size',
-        'Ask_price': 'Ask',
-        'Ask_yield': 'Ask Yield',
-        'Issue_date': 'Issue Date',
-        'Last_trading_date': 'Last Trading Date',
-    }
+            # Fallback to int conversion
+            try:
+                price_val = int(numeric_str)
+                if price_val != 0:
+                    return price_val
+            except (ValueError, TypeError):
+                pass
 
-    df = df.rename(columns=rename_map)
-    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    df['Timestamp'] = timestamp
+            return None  # Could not parse or value is zero
 
-    market_data_snapshot_config = next((config for config in report_configs if config['name'] == 'market_data_snapshot'), None)
-    file_name = market_data_snapshot_config['backup_name']
-    Drive.upload_file(file_name=file_name, mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=market_data_snapshot_config['backup_folder_id'])
-    return df
+        df['Last'] = df['Last_price'].apply(_parse_last_price)
+        df['Last'] = pd.to_numeric(df['Last'], errors='coerce')
+        df = df[df['Last'].notnull()]
+
+        df['Current Yield'] = ((100 * df['Coupon'].astype(float)) / df['Last'].astype(float))
+
+        rename_map = {
+            'Company_name': 'Company Name',
+            'Bid_size': 'Bid Size',
+            'Bid_price': 'Bid',
+            'Bid_yield': 'Bid Yield',
+            'Ask_size': 'Ask Size',
+            'Ask_price': 'Ask',
+            'Ask_yield': 'Ask Yield',
+            'Issue_date': 'Issue Date',
+            'Last_trading_date': 'Last Trading Date',
+        }
+
+        df = df.rename(columns=rename_map)
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        df['Timestamp'] = timestamp
+
+        market_data_snapshot_config = next((config for config in report_configs if config['name'] == 'market_data_snapshot'), None)
+        file_name = market_data_snapshot_config['backup_name']
+        Drive.upload_file(file_name=file_name, mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=market_data_snapshot_config['backup_folder_id'])
+        return df
+    except Exception as e:
+        logger.error(f'Error extracting bond snapshot: {e}')
+        raise Exception(f'Error extracting bond snapshot: {e}')
 
 def extract_ust_bond_snapshot():
     
@@ -522,6 +526,9 @@ def extract_sovereign_bond_snapshot():
     df = df.rename(columns=rename_map)
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
     df['Timestamp'] = timestamp
+    pass
+
+def extract_etf_snapshot():
     pass
 
 def extract_ofac_sdn_list():
