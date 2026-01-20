@@ -179,6 +179,16 @@ def get_ofac_sdn_list():
     ofac_sdn_list = Drive.download_file(file_id=ofac_sdn_list_file[0]['id'], parse=True)
     return ofac_sdn_list
 
+@handle_exception
+def get_deposits_withdrawals():
+    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
+    deposits_withdrawals_file = [deposits_withdrawals for deposits_withdrawals in files_in_resources_folder if 'ibkr_deposits_withdrawals' in deposits_withdrawals['name']]
+    if len(deposits_withdrawals_file) != 1:
+        logger.error('Deposits and withdrawals file not found or multiple files found')
+        raise Exception('Deposits and withdrawals file not found or multiple files found')
+    deposits_withdrawals = Drive.download_file(file_id=deposits_withdrawals_file[0]['id'], parse=True)
+    return deposits_withdrawals
+
 """
 ETL PIPELINE
 """
@@ -302,7 +312,7 @@ def extract_bond_snapshot():
         fourth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[301:400]))
         fifth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[401:500]))
         sixth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[501:600]))
-        df = pd.DataFrame(first_snapshot + second_snapshot + third_snapshot + fourth_snapshot + fifth_snapshot + sixth_snapshot + seventh_snapshot + eighth_snapshot + ninth_snapshot + tenth_snapshot)
+        df = pd.DataFrame(first_snapshot + second_snapshot + third_snapshot + fourth_snapshot + fifth_snapshot + sixth_snapshot)
         df.columns = df.columns.str.capitalize()
 
         df['Financial Instrument'] = df['Symbol'] + ' ' + df['Contract_description_2']
@@ -956,6 +966,15 @@ def process_contact_list_summary(df):
     """
     return df
 
+def process_deposits_withdrawals(df):
+    """
+    Process the deposits and withdrawals file.
+    
+    :param df: Input dataframe
+    :return: Processed dataframe
+    """
+    return df
+
 def get_finance_data():
     """
     Get finance data from the finance folder.
@@ -1053,6 +1072,14 @@ report_configs = [
         'backup_name': '732383' + '_' + first_date + '_' + yesterday_date + '.csv',
         'transform_func': process_client_fees,
         'output_filename': 'ibkr_client_fees.csv'
+    },
+    {
+        'name': '794867',
+        'backup_folder_id': '1jY3DTtUxQf9MAU7Ypw0vKKXOz6kx3Cii',
+        'flex': True,
+        'backup_name': '794867' + '_' + first_date + '_' + yesterday_date + '.csv',
+        'transform_func': process_deposits_withdrawals,
+        'output_filename': 'ibkr_deposits_withdrawals.csv'
     },
     {
         'name': 'ofac_sdn_list',

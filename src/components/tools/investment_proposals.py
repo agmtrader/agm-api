@@ -19,7 +19,7 @@ def create_investment_proposal(risk_profile: dict = None):
 
         # Extract all unique bonds
         bonds_df = open_positions_df[open_positions_df['AssetClass'] == 'BOND']
-        bonds_df_no_duplicates = bonds_df.drop_duplicates(subset=['Symbol'])
+        bonds_df_no_duplicates = bonds_df.drop_duplicates(subset=['Symbol_y'])
         logger.announcement(f'Total bonds: {len(bonds_df)}')
         logger.announcement(f'Total unique bonds: {len(bonds_df_no_duplicates)}')
 
@@ -79,6 +79,7 @@ def create_investment_proposal(risk_profile: dict = None):
         rtd_df = pd.DataFrame(rtd_report)
 
         # Remove IBCID Symbol column
+        logger.announcement(rtd_df['Symbol'].head(10))
         rtd_df['Symbol'] = (
             rtd_df['Symbol']
                 .astype(str)
@@ -93,7 +94,7 @@ def create_investment_proposal(risk_profile: dict = None):
 
         # Post processing
         #merged_df = merged_df[merged_df['Current Yield'].notna() & (merged_df['Current Yield'] != '')]
-        merged_df = merged_df[merged_df['Current Yield'] != '']
+        merged_df = merged_df[merged_df['Current Yield_x'] != '']
 
         # Extract ticker (issuer) — first token in Symbol_x — for deduplication across coupons/maturities
         merged_df['Ticker'] = (
@@ -104,8 +105,8 @@ def create_investment_proposal(risk_profile: dict = None):
                 .str[0]
         )
 
-        merged_df['Current Yield'] = (
-            merged_df['Current Yield']
+        merged_df['Current Yield_x'] = (
+            merged_df['Current Yield_x']
                 .astype(str)
                 .str.replace('%', '', regex=False)
                 .astype(float)
@@ -114,7 +115,7 @@ def create_investment_proposal(risk_profile: dict = None):
 
         merged_df = (
             merged_df
-                .sort_values(by='Current Yield', ascending=False)
+                .sort_values(by='Current Yield_x', ascending=False)
                 .reset_index(drop=True)
         )
 
@@ -172,15 +173,15 @@ def create_investment_proposal(risk_profile: dict = None):
             if asset_type['name'] == 'etfs':
                 asset_type['bonds'].append({
                     'Symbol_x': 'SPY',
-                    'Current Yield': float(avg_yield) if avg_yield is not None else 0.0,
-                    'S&P Equivalent': 'ETF',
+                    'Current Yield_x': float(avg_yield) if avg_yield is not None else 0.0,
+                    'S&P Equivalent_x': 'ETF',
                 })
                 used_symbols.add('SPY')
 
             # Build a combined dataframe for all equivalents that belong to this asset type
             sanitized_equivalents = asset_type['equivalents']
             combined_df = merged_df[
-                merged_df['S&P Equivalent']
+                merged_df['S&P Equivalent_x']
                     .astype(str)
                     .str.replace(r'[+\-]', '', regex=True)
                     .isin(sanitized_equivalents)
@@ -189,7 +190,7 @@ def create_investment_proposal(risk_profile: dict = None):
             # Deduplicate by ticker and order by yield
             combined_df = (
                 combined_df
-                    .sort_values(by='Current Yield', ascending=False)
+                    .sort_values(by='Current Yield_x', ascending=False)
                     .groupby('Ticker')  # one bond per issuer ticker across coupons/maturities
                     .head(1)
             )
@@ -202,7 +203,7 @@ def create_investment_proposal(risk_profile: dict = None):
 
             # Append to bucket and register symbols as used
             asset_type['bonds'].extend(
-                top_bonds[['Symbol_x', 'Current Yield', 'S&P Equivalent']].to_dict(orient='records')
+                top_bonds[['Symbol_x', 'Current Yield_x', 'S&P Equivalent_x']].to_dict(orient='records')
             )
             used_symbols.update(top_bonds['Ticker'].tolist())
 
@@ -225,7 +226,7 @@ def create_investment_proposal(risk_profile: dict = None):
             # Candidate pool: not yet used tickers, highest yield first, unique per ticker
             remaining_pool = (
                 merged_df[~merged_df['Ticker'].isin(used_symbols)]
-                    .sort_values(by='Current Yield', ascending=False)
+                    .sort_values(by='Current Yield_x', ascending=False)
                     .groupby('Ticker')
                     .head(1)
             )
@@ -234,7 +235,7 @@ def create_investment_proposal(risk_profile: dict = None):
                 if remaining_needed == 0:
                     break
 
-                rating_key = str(row['S&P Equivalent']).replace('+', '').replace('-', '')
+                rating_key = str(row['S&P Equivalent_x']).replace('+', '').replace('-', '')
                 bucket = rating_to_bucket.get(rating_key)
                 if not bucket:
                     # default to lowest grade bucket
@@ -245,8 +246,8 @@ def create_investment_proposal(risk_profile: dict = None):
 
                 bucket['bonds'].append({
                     'Symbol_x': row['Symbol_x'],
-                    'Current Yield': row['Current Yield'],
-                    'S&P Equivalent': row['S&P Equivalent'],
+                    'Current Yield_x': row['Current Yield_x'],
+                    'S&P Equivalent_x': row['S&P Equivalent_x'],
                 })
 
                 used_symbols.add(row['Ticker'])
@@ -259,7 +260,7 @@ def create_investment_proposal(risk_profile: dict = None):
             logger.announcement(f'Percentage: {risk_archetype[asset_type["name"]]}')
             logger.announcement(f'Assets to invest: {len(asset_type["bonds"])}')
             for bond in asset_type['bonds']:
-                logger.info(f'Bond: {bond["Symbol_x"]} - {bond["Current Yield"]} - {bond["S&P Equivalent"]}')
+                logger.info(f'Bond: {bond["Symbol_x"]} - {bond["Current Yield_x"]} - {bond["S&P Equivalent_x"]}')
 
     except Exception as exc:
         logger.error(f'Failed creating investment proposal: {exc}')
@@ -269,8 +270,8 @@ def create_investment_proposal(risk_profile: dict = None):
     def normalize_bond(record: dict):
         return {
             'symbol': str(record.get('Symbol_x', '')),
-            'current_yield': float(record.get('Current Yield', 0) or 0),
-            'equivalent': str(record.get('S&P Equivalent', '')),
+            'current_yield': float(record.get('Current Yield_x', 0) or 0),
+            'equivalent': str(record.get('S&P Equivalent_x', '')),
         }
 
     def get_bucket(name: str):
