@@ -311,8 +311,7 @@ def extract_bond_snapshot():
         third_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[201:300]))
         fourth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[301:400]))
         fifth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[401:500]))
-        sixth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[501:600]))
-        df = pd.DataFrame(first_snapshot + second_snapshot + third_snapshot + fourth_snapshot + fifth_snapshot + sixth_snapshot)
+        df = pd.DataFrame(first_snapshot + second_snapshot + third_snapshot + fourth_snapshot + fifth_snapshot)
         df.columns = df.columns.str.capitalize()
 
         df['Financial Instrument'] = df['Symbol'] + ' ' + df['Contract_description_2']
@@ -388,6 +387,7 @@ def extract_bond_snapshot():
         file_name = market_data_snapshot_config['backup_name']
         Drive.upload_file(file_name=file_name, mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=market_data_snapshot_config['backup_folder_id'])
         return df
+
     except Exception as e:
         logger.error(f'Error extracting bond snapshot: {e}')
         raise Exception(f'Error extracting bond snapshot: {e}')
@@ -1019,7 +1019,7 @@ def get_finance_data():
 report_configs = [
     {
         'name': 'market_data_snapshot',
-        'backup_folder_id': '1luTnQ1qRDNWLrqjMan-kF_eMgH16R-J9',
+        'backup_folder_id': '12L3NKflYtMiisnZOpU9aa1syx2ZJA6JC',
         'flex': False,
         'backup_name': 'bond' + '_' + today_date + '.csv',
         'transform_func': process_rtd,
@@ -1027,7 +1027,7 @@ report_configs = [
     },
     {
         'name': 'tasks_for_subaccounts',
-        'backup_folder_id': '1tkfjpKykmbiePg8_aW1Il_YnbDW4sSTt',
+        'backup_folder_id': '1u0IUkD7-lBUy9uhgHD-5xzw3l8OePJdE',
         'flex': False,
         'backup_name': 'tasks_for_subaccounts' + ' ' + today_date + ' ' + 'agmtech212.csv',
         'transform_func': process_tasks_for_subaccounts,
@@ -1035,7 +1035,7 @@ report_configs = [
     },
     {
         'name': 'ContactListSummary',
-        'backup_folder_id': '1myxgwZY1oIG4hN6ZjXRFfhYSumzTVkXa',
+        'backup_folder_id': '11rmflCuYs7seB2z1xBGo1n51dGB15L6-',
         'flex': False,
         'backup_name': 'ContactListSummary' + ' ' + today_date + ' ' + 'agmtech212.csv',
         'transform_func': process_contact_list_summary,
@@ -1043,7 +1043,7 @@ report_configs = [
     },
     {
         'name': 'clients',
-        'backup_folder_id': '1T1a8n43ZbhmTUpJglZG715jb_ex5BMny',
+        'backup_folder_id': '1FNcbWNptK-A5IhmLws-R2Htl85OSFrIn',
         'flex': False,
         'backup_name': 'clients' + ' ' + today_date +  ' ' + 'agmtech212.xls',
         'transform_func': process_clients,
@@ -1051,7 +1051,7 @@ report_configs = [
     },
     {
         'name': '742588',
-        'backup_folder_id': '1FJSGaj4tXyjp1otRyBayJIX6M7TVBxbJ',
+        'backup_folder_id': '1JL4__mr1XgOtnesYihHo-netWKMIGMet',
         'flex': True,
         'backup_name': '742588' + '_' + yesterday_date + '.csv',
         'transform_func': process_open_positions_template,
@@ -1059,7 +1059,7 @@ report_configs = [
     },
     {
         'name': '734782',
-        'backup_folder_id': '1focfkCCzycuhpCwVsMcNKF8s9hAhvBWk',
+        'backup_folder_id': '1WgYA-Q9mnPYrbbLfYLuJZwUIWBYjiD4c',
         'flex': True,
         'backup_name': '734782' + '_' + yesterday_date + '.csv',
         'transform_func': process_nav,
@@ -1067,7 +1067,7 @@ report_configs = [
     },
     {
         'name': '732383',
-        'backup_folder_id': '1iiX9rBfDJGjDSpkCWNutnWbV5-ZxIgAl',
+        'backup_folder_id': '1OnSEo8B2VUF5u-VkhtzZVIzx6ABe_YB7',
         'flex': True,
         'backup_name': '732383' + '_' + first_date + '_' + yesterday_date + '.csv',
         'transform_func': process_client_fees,
@@ -1075,7 +1075,7 @@ report_configs = [
     },
     {
         'name': '794867',
-        'backup_folder_id': '1jY3DTtUxQf9MAU7Ypw0vKKXOz6kx3Cii',
+        'backup_folder_id': '1ZCJfH2hxvMLuP470HMa-D33_R_l-Lhtx',
         'flex': True,
         'backup_name': '794867' + '_' + first_date + '_' + yesterday_date + '.csv',
         'transform_func': process_deposits_withdrawals,
@@ -1083,7 +1083,7 @@ report_configs = [
     },
     {
         'name': 'ofac_sdn_list',
-        'backup_folder_id': '1miJQJ3e3uOHJ_gHSECa_yNf7VIg3TzeN',
+        'backup_folder_id': '13W9sXMbFvWtXPsEy6FiZJrQDHV3WYDD6',
         'flex': False,
         'backup_name': 'ofac_sdn_list' + '_' + today_date + '.csv',
         'transform_func': process_ofac_sdn_list,
