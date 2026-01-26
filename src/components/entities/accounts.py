@@ -327,3 +327,8 @@ def get_wire_instructions(master_account: str = None, account_id: str = None, cu
 def get_financial_ranges() -> dict:
     """Get financial ranges via IBKR API."""
     return ibkr_web_api.get_financial_ranges()
+
+@handle_exception
+def get_business_and_occupation() -> dict:
+    """Get business and occupation via IBKR API."""
+    return ibkr_web_api.get_business_and_occupation()

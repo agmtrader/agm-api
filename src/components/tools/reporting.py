@@ -194,51 +194,78 @@ ETL PIPELINE
 """
 
 @handle_exception
-def run():
+def run_clients_pipeline():
     """
-    Run the ETL pipeline.
+    Extract the data.
     
     :return: Response object with success message or error message
     """
     try:
-        extract()
-        transform()
+        extract_clients_data()
+        backup_data(pipeline='clients')
+        transform(pipeline='clients')
     except Exception as e:
         logger.error(f'Error running ETL pipeline: {e}')
         raise Exception(f'Error running ETL pipeline: {e}')
     return {'status': 'success'}
 
-def extract() -> dict:
+@handle_exception
+def run_market_data_pipeline():
+    """
+    Run the market data pipeline.
+    
+    :return: Response object with success message or error message
+    """
+    try:
+        extract_market_data()
+        backup_data(pipeline='market_data')
+        transform(pipeline='market_data')
+    except Exception as e:
+        logger.error(f'Error running market data pipeline: {e}')
+        raise Exception(f'Error running market data pipeline: {e}')
+    return {'status': 'success'}
+
+def extract_market_data():
+    """
+    Run the market data pipeline.
+    
+    :return: Response object with success message or error message
+    """
+    try:
+        extract_bond_snapshot()
+        extract_ust_bond_snapshot()
+        extract_sovereign_bond_snapshot()
+    except Exception as e:
+        logger.error(f'Error running market data pipeline: {e}')
+        raise Exception(f'Error running market data pipeline: {e}')
+    return {'status': 'success'}
+
+def extract_clients_data() -> dict:
     logger.announcement('Extracting information for reports.', type='info')
 
     Drive.clear_folder(folder_id=batch_folder_id)
     
     extract_flex_queries()
-    
-    extract_bond_snapshot()
-
-    #extract_ust_bond_snapshot()
-    #extract_sovereign_bond_snapshot()
-
     extract_ofac_sdn_list()
-
-    rename_files_in_batch()
-    sort_batch_files_to_backup_folders()
 
     logger.announcement('Information successfully extracted for reports.', type='success')
     return {'status': 'success'}
 
-def transform() -> dict:
-    logger.announcement('Transforming backups into reports.', type='info')
+def backup_data(pipeline=None):
+    rename_files_in_batch(pipeline)
+    sort_batch_files_to_backup_folders(pipeline)
 
-    # Clear resources folder
-    logger.announcement('Clearing resources folder.', type='info')
-    Drive.clear_folder(folder_id=resources_folder_id)
-    logger.announcement('Resources folder cleared.', type='success')
+def transform(pipeline=None) -> dict:
+    logger.announcement('Transforming backups into reports.', type='info')
 
     # Process files in each backup folder
     logger.announcement('Processing files.', type='info')
-    for config in report_configs:
+    
+    configs_to_process = report_configs
+    if pipeline:
+        configs_to_process = [config for config in report_configs if config.get('pipeline') == pipeline]
+
+    for config in configs_to_process:
         process_report(config)
     logger.announcement('Files processed.', type='success')
 
@@ -559,7 +586,7 @@ def extract_ofac_sdn_list():
     
     Drive.upload_file(file_name='ofac_sdn_list.csv', mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=batch_folder_id)
 
-def rename_files_in_batch():
+def rename_files_in_batch(pipeline=None):
     """
     Rename files in the batch folder based on specific naming conventions.
     :return: Response object with updated batch files or error message
@@ -567,8 +594,13 @@ def rename_files_in_batch():
     logger.announcement('Renaming files in batch folder.', type='info')
     try:
         batch_files = Drive.get_files_in_folder(batch_folder_id)
+        
+        configs_to_process = report_configs
+        if pipeline:
+            configs_to_process = [config for config in report_configs if config.get('pipeline') == pipeline]
+
         for f in batch_files:
-            for config in report_configs:
+            for config in configs_to_process:
                 if config['name'] in f['name']:
                     new_name = config['backup_name']
                     Drive.rename_file(file_id=f['id'], new_name=new_name)
@@ -578,7 +610,7 @@ def rename_files_in_batch():
     logger.announcement('Files renamed successfully.', type='success')
     return {'status': 'success'}
 
-def sort_batch_files_to_backup_folders():
+def sort_batch_files_to_backup_folders(pipeline=None):
     """
     Sort files from the batch folder into their respective backup folders.
     
@@ -588,8 +620,13 @@ def sort_batch_files_to_backup_folders():
     logger.announcement('Sorting files to backup folders.', type='info')
     try:
         batch_files = Drive.get_files_in_folder(batch_folder_id)
+        
+        configs_to_process = report_configs
+        if pipeline:
+            configs_to_process = [config for config in report_configs if config.get('pipeline') == pipeline]
+
         for f in batch_files:
-            for config in report_configs:
+            for config in configs_to_process:
                 if config['name'] in f['name']:
                     new_parent_id = config['backup_folder_id']
                     backup_files = Drive.get_files_in_folder(new_parent_id)
@@ -646,6 +683,14 @@ def process_report(config):
         if 'transform_func' in config.keys() and config['transform_func'] is not None:
             file_df = config['transform_func'](file_df)
             file_dict = file_df.to_dict(orient='records')
+            
+            # Check if file exists in resources folder and delete it if it does
+            try:
+                existing_file = Drive.get_file_info(parent_id=resources_folder_id, file_name=output_filename)
+                Drive.delete_file(file_id=existing_file['id'])
+            except:
+                pass
+
             Drive.upload_file(file_name=output_filename, mime_type='text/csv', file_data=file_dict, parent_folder_id=resources_folder_id)
     except:
         logger.error(f'Error processing {config} file.')
@@ -1019,6 +1064,7 @@ def get_finance_data():
 report_configs = [
     {
         'name': 'market_data_snapshot',
+        'pipeline': 'market_data',
         'backup_folder_id': '1luTnQ1qRDNWLrqjMan-kF_eMgH16R-J9',
         'flex': False,
         'backup_name': 'bond' + '_' + today_date + '.csv',
@@ -1027,6 +1073,7 @@ report_configs = [
     },
     {
         'name': 'tasks_for_subaccounts',
+        'pipeline': 'clients',
         'backup_folder_id': '1u0IUkD7-lBUy9uhgHD-5xzw3l8OePJdE',
         'flex': False,
         'backup_name': 'tasks_for_subaccounts' + ' ' + today_date + ' ' + 'agmtech212.csv',
@@ -1035,6 +1082,7 @@ report_configs = [
     },
     {
         'name': 'ContactListSummary',
+        'pipeline': 'clients',
         'backup_folder_id': '11rmflCuYs7seB2z1xBGo1n51dGB15L6-',
         'flex': False,
         'backup_name': 'ContactListSummary' + ' ' + today_date + ' ' + 'agmtech212.csv',
@@ -1043,6 +1091,7 @@ report_configs = [
     },
     {
         'name': 'clients',
+        'pipeline': 'clients',
         'backup_folder_id': '1FNcbWNptK-A5IhmLws-R2Htl85OSFrIn',
         'flex': False,
         'backup_name': 'clients' + ' ' + today_date +  ' ' + 'agmtech212.xls',
@@ -1051,6 +1100,7 @@ report_configs = [
     },
     {
         'name': '742588',
+        'pipeline': 'clients',
         'backup_folder_id': '1JL4__mr1XgOtnesYihHo-netWKMIGMet',
         'flex': True,
         'backup_name': '742588' + '_' + yesterday_date + '.csv',
@@ -1059,6 +1109,7 @@ report_configs = [
     },
     {
         'name': '734782',
+        'pipeline': 'clients',
         'backup_folder_id': '1WgYA-Q9mnPYrbbLfYLuJZwUIWBYjiD4c',
         'flex': True,
         'backup_name': '734782' + '_' + yesterday_date + '.csv',
@@ -1067,6 +1118,7 @@ report_configs = [
     },
     {
         'name': '732383',
+        'pipeline': 'clients',
         'backup_folder_id': '1OnSEo8B2VUF5u-VkhtzZVIzx6ABe_YB7',
         'flex': True,
         'backup_name': '732383' + '_' + first_date + '_' + yesterday_date + '.csv',
@@ -1075,6 +1127,7 @@ report_configs = [
     },
     {
         'name': '794867',
+        'pipeline': 'clients',
         'backup_folder_id': '1ZCJfH2hxvMLuP470HMa-D33_R_l-Lhtx',
         'flex': True,
         'backup_name': '794867' + '_' + first_date + '_' + yesterday_date + '.csv',
@@ -1083,6 +1136,7 @@ report_configs = [
     },
     {
         'name': 'ofac_sdn_list',
+        'pipeline': 'clients',
         'backup_folder_id': '13W9sXMbFvWtXPsEy6FiZJrQDHV3WYDD6',
         'flex': False,
         'backup_name': 'ofac_sdn_list' + '_' + today_date + '.csv',

@@ -2,7 +2,7 @@ from flask import Blueprint, request
 
 from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_instructions, delete_document, read_account_documents, update_account_document, screen_person, read_account_screenings
 
-from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_investment_experience, withdraw_funds, create_user_for_account, transfer_position_internally, transfer_position_externally, get_financial_ranges
+from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_security_questions, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_investment_experience, withdraw_funds, create_user_for_account, transfer_position_internally, transfer_position_externally, get_financial_ranges, get_business_and_occupation
 
 from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts
 
@@ -324,3 +324,8 @@ def get_product_country_bundles_route():
 @format_response
 def get_financial_ranges_route():
     return get_financial_ranges()
+
+@bp.route('/ibkr/business_and_occupation', methods=['GET'])
+@format_response
+def get_business_and_occupation_route():
+    return get_business_and_occupation()

@@ -1,0 +1,87 @@
+name: Clients ETL Pipeline
+
+on:
+  schedule:
+    - cron: '30 10 * * *'   # Every day at 10 AM UTC (4:00 AM CST)
+  workflow_dispatch:
+
+jobs:
+  etl:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ─────────────────────────────────────────────────────────────
+      - name: Request token and trigger reporting run
+        id: reporting
+        uses: Wandalen/wretry.action@v2
+        with:
+          command: |
+            # Fetch access token
+            response=$(curl -s -w "\n%{http_code}" -X POST \
+              -H "Content-Type: application/json" \
+              -d '{"token":"all"}' \
+              https://api.agmtechnology.com/token)
+
+            http_status=$(echo "$response" | tail -n1)
+            body=$(echo "$response" | sed '$d')
+
+            if [ "$http_status" != "200" ]; then
+              echo "Token request failed with status $http_status"
+              exit 1
+            fi
+
+            access_token=$(echo "$body" | jq -r '.access_token')
+            if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
+              echo "access_token not found in response"
+              exit 1
+            fi
+
+            # Trigger clients reporting run
+            status_clients=$(curl -s -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Bearer $access_token" \
+              -X GET https://api.agmtechnology.com/reporting/run/clients)
+
+            if [ "$status_clients" != "200" ]; then
+              echo "Clients reporting run request failed with status $status_clients"
+              exit 1
+            fi
+            
+            echo "http_status=200" >> "$GITHUB_OUTPUT"
+          attempt_limit: 12 # 1 original + 11 retries (2 hours)
+          attempt_delay: 600000 # 10-minute pause (ms)
+          
+  notify-success:
+    needs: etl
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send success email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "✅ Clients ETL Pipeline SUCCEEDED"
+          to: cr@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: |
+            The Clients ETL Pipeline completed successfully.
+          
+  notify-failure:
+    needs: etl
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send failure email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "🚨 Clients ETL Pipeline FAILED"
+          to: cr@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: |
+            The Clients ETL Pipeline failed.

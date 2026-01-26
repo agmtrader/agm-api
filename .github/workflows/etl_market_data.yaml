@@ -1,8 +1,8 @@
-name: Daily ETL Pipeline
+name: Market Data ETL Pipeline
 
 on:
   schedule:
-    - cron: '30 10 * * *'   # Every day at 10 AM UTC (4:00 AM CST)
+    - cron: '35 14 * * *'   # Every day at 2:35 PM UTC (7:35 AM CST)
   workflow_dispatch:
 
 jobs:
@@ -36,17 +36,17 @@ jobs:
               exit 1
             fi
 
-            # Trigger reporting run
-            status=$(curl -s -o /dev/null -w "%{http_code}" \
+            # Trigger market data reporting run
+            status_market=$(curl -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer $access_token" \
-              -X GET https://api.agmtechnology.com/reporting/run)
+              -X GET https://api.agmtechnology.com/reporting/run/market_data)
 
-            echo "http_status=$status" >> "$GITHUB_OUTPUT"
-
-            if [ "$status" != "200" ]; then
-              echo "Reporting run request failed with status $status"
+            if [ "$status_market" != "200" ]; then
+              echo "Market data reporting run request failed with status $status_market"
               exit 1
             fi
+            
+            echo "http_status=200" >> "$GITHUB_OUTPUT"
           attempt_limit: 12 # 1 original + 11 retries (2 hours)
           attempt_delay: 600000 # 10-minute pause (ms)
           
@@ -62,11 +62,11 @@ jobs:
           server_port: 465
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "✅ Daily ETL Pipeline SUCCEEDED"
+          subject: "✅ Market Data ETL Pipeline SUCCEEDED"
           to: cr@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
-            The ETL Pipeline completed successfully.
+            The Market Data ETL Pipeline completed successfully.
           
   notify-failure:
     needs: etl
@@ -80,8 +80,8 @@ jobs:
           server_port: 465
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "🚨 Daily ETL Pipeline FAILED"
+          subject: "🚨 Market Data ETL Pipeline FAILED"
           to: cr@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
-            The ETL Pipeline failed.
+            The Market Data ETL Pipeline failed.

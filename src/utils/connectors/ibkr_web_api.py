@@ -1549,6 +1549,30 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
+    def get_business_and_occupation(self):
+        """Get the business and occupation.
+        Returns:
+            dict: The business and occupation.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/gw/api/v1/enumerations/business-and-occupation"
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {token}"
+            }
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success("Business and occupation fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
     def submit_all_agreements(self):
         try:
             original_creds = self._apply_credentials('br')
