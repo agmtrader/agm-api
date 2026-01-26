@@ -72,9 +72,14 @@ class Gmail(GmailConnector):
         )
 
     @handle_exception
-    def send_transfer_instructions_email(self, content, client_email, lang="es", cc=""):
+    def send_transfer_instructions_email(self, content, client_email, lang="es", cc="", initial=True):
         subject = "Instrucciones de transferencia" if lang == "es" else "Transfer Instructions"
-        email_template = f"transfer_instructions_{lang}"
+        
+        template_name = "transfer_instructions"
+        if not initial:
+            template_name = "transfer_instructions_existing"
+            
+        email_template = f"{template_name}_{lang}"
         return self.send_email(
             content,
             client_email,

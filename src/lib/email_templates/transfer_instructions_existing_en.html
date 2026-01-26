@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ subject }}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.8;
+            color: #2D3748;
+            margin: 0;
+            padding: 0;
+            background-color: #F7FAFC;
+        }
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 40px;
+            background-color: #FFFFFF;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+        .logo {
+            text-align: center;
+            margin: 0 auto 40px;
+            max-width: 240px;
+        }
+        .logo img {
+            max-width: 100%;
+            height: auto;
+        }
+        .content {
+            padding: 0 20px;
+        }
+        h1 {
+            color: #1A365D;
+            font-size: 24px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        .bank-details {
+            background-color: #F8F9FA;
+            border: 1px solid #E2E8F0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 16px 0;
+        }
+        .bank-details p {
+            margin: 8px 0;
+        }
+        .bank-details strong {
+            color: #1A365D;
+        }
+        .important-note {
+            background-color: #FFF5F5;
+            border-left: 4px solid #F56565;
+            padding: 16px;
+            margin: 16px 0;
+            border-radius: 4px;
+        }
+        .signature {
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <img src="cid:logo" alt="AGM Logo">
+        </div>
+        <div class="content">
+            <h1>Transfer Instructions</h1>
+
+            <div class="section">
+                <p>Dear client,</p>
+                <p>Please find attached the transfer instructions to fund your brokerage account <strong># {{ content.account_number }}</strong> (see below and attached file).</p>
+            </div>
+
+            <div class="section">
+                <p>Please provide the following instructions to your bank so that the transfer is executed as accurately as possible:</p>
+            </div>
+
+            <div class="bank-details">
+                <p><strong>Correspondent bank:</strong> JPMorgan Chase Bank, N.A. (New York Branch)</p>
+                <p><strong>Address:</strong> 383 Madison Avenue, New York 10179, NY, United States</p>
+                <p><strong>Phone:</strong> (212) 248-6605</p>
+                <p><strong>SWIFT / BIC:</strong> CHAS US 33</p>
+                <p><strong>ABA:</strong> 021000021</p>
+                <hr>
+                <p><strong>Beneficiary account name:</strong> Interactive Brokers LLC</p>
+                <p><strong>Beneficiary address:</strong> One Pickwick Plaza, Greenwich CT 06830 USA</p>
+                <p><strong>Beneficiary account number:</strong> 633736902</p>
+                <p><strong>Payment reference / For Further Credit to:</strong> {{ content.account_number }} / {{ content.client_name }}</p>
+            </div>
+
+            <div class="important-note">
+                <p><strong>REMEMBER:</strong> Funds must come from a bank account in your name (owner of the brokerage account). Under U.S. regulations, transfers to/from third parties are NOT permitted.</p>
+            </div>
+
+            <div class="section">
+                <p>It is important that, when you initiate the transfer at your bank, you send us a draft of the instructions so our support team can validate them. This applies to this and future transfers.</p>
+                <p>Additionally, once the order is placed with your bank, please notify us with the following details so we can monitor the allocation of the funds:</p>
+                <ul>
+                    <li>1) Amount sent</li>
+                    <li>2) Currency sent (e.g. USD)</li>
+                    <li>3) Name of sending bank (optional: reference number)</li>
+                </ul>
+            </div>
+
+            <div class="section">
+                <p>Please do not hesitate to contact us if you need additional information about your account or placing orders.</p>
+                <p>Best regards,</p>
+                <p class="signature">AGM Team</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

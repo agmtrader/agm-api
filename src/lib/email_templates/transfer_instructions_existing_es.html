@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ subject }}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.8;
+            color: #2D3748;
+            margin: 0;
+            padding: 0;
+            background-color: #F7FAFC;
+        }
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 40px;
+            background-color: #FFFFFF;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+        .logo {
+            text-align: center;
+            margin: 0 auto 40px;
+            max-width: 240px;
+        }
+        .logo img {
+            max-width: 100%;
+            height: auto;
+        }
+        .content {
+            padding: 0 20px;
+        }
+        h1 {
+            color: #1A365D;
+            font-size: 24px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        .bank-details {
+            background-color: #F8F9FA;
+            border: 1px solid #E2E8F0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 16px 0;
+        }
+        .bank-details p {
+            margin: 8px 0;
+        }
+        .bank-details strong {
+            color: #1A365D;
+        }
+        .important-note {
+            background-color: #FFF5F5;
+            border-left: 4px solid #F56565;
+            padding: 16px;
+            margin: 16px 0;
+            border-radius: 4px;
+        }
+        .signature {
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <img src="cid:logo" alt="AGM Logo">
+        </div>
+        <div class="content">
+            <h1>Instrucciones de Transferencia</h1>
+
+            <div class="section">
+                <p>Estimado cliente,</p>
+                <p>Adjunto encontrará las instrucciones de transferencia para fondear su cuenta bursátil <strong># {{ content.account_number }}</strong> (ver abajo y archivo adjunto).</p>
+            </div>
+
+            <div class="section">
+                <p>Por favor entregue las siguientes instrucciones a su banco para que ejecute la transferencia con la mayor precisión:</p>
+            </div>
+
+            <div class="bank-details">
+                <p><strong>Banco corresponsal:</strong> JPMorgan Chase Bank, N.A. (New York Branch)</p>
+                <p><strong>Dirección:</strong> 383 Madison Avenue, New York 10179, NY, United States</p>
+                <p><strong>Teléfono:</strong> (212) 248-6605</p>
+                <p><strong>SWIFT / BIC:</strong> CHAS US 33</p>
+                <p><strong>ABA:</strong> 021000021</p>
+                <hr>
+                <p><strong>Nombre de la cuenta beneficiaria:</strong> Interactive Brokers LLC</p>
+                <p><strong>Dirección del beneficiario:</strong> One Pickwick Plaza, Greenwich CT 06830 USA</p>
+                <p><strong>Número de cuenta beneficiaria:</strong> 633736902</p>
+                <p><strong>Referencia de pago / For Further Credit to:</strong> {{ content.account_number }} / {{ content.client_name }}</p>
+            </div>
+
+            <div class="important-note">
+                <p><strong>RECUERDE:</strong> Los fondos deben provenir de una cuenta bancaria a su nombre (titular de la cuenta bursátil). Por regulaciones norteamericanas NO se permiten traslados a/de terceros.</p>
+            </div>
+
+            <div class="section">
+                <p>Es importante que, al momento de realizar la transferencia en su banco, nos envíe un preliminar de las instrucciones para que nuestro equipo de soporte las valide. Esto aplica a esta y futuras transferencias.</p>
+                <p>Adicionalmente, una vez emitida la orden con su banco, le solicitamos nos notifique con los siguientes datos para dar seguimiento a la asignación de los fondos:</p>
+                <ul>
+                    <li>1) Monto enviado</li>
+                    <li>2) Moneda en que se envía (ej. USD)</li>
+                    <li>3) Nombre del banco remitente (opcional: número de referencia)</li>
+                </ul>
+            </div>
+
+            <div class="section">
+                <p>No dude en contactarnos si requiere información adicional sobre su cuenta o la colocación de órdenes.</p>
+                <p>Saludos,</p>
+                <p class="signature">Equipo AGM</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

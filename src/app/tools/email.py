@@ -45,7 +45,7 @@ def send_credentials_email_route():
 @format_response
 def send_transfer_instructions_email_route():
   payload = request.get_json(force=True)
-  return Email.send_transfer_instructions_email(content=payload['content'], client_email=payload['client_email'], lang=payload['lang'], cc=payload['cc'])
+  return Email.send_transfer_instructions_email(content=payload['content'], client_email=payload['client_email'], lang=payload['lang'], cc=payload['cc'], initial=payload['initial'])
 
 @bp.route('/send_email/welcome', methods=['POST'])
 @format_response
