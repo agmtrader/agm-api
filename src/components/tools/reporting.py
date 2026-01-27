@@ -242,8 +242,6 @@ def extract_market_data():
 
 def extract_clients_data() -> dict:
     logger.announcement('Extracting information for reports.', type='info')
-
-    Drive.clear_folder(folder_id=batch_folder_id)
     
     extract_flex_queries()
     extract_ofac_sdn_list()
@@ -254,6 +252,7 @@ def extract_clients_data() -> dict:
 def backup_data(pipeline=None):
     rename_files_in_batch(pipeline)
     sort_batch_files_to_backup_folders(pipeline)
+    Drive.clear_folder(folder_id=batch_folder_id)
 
 def transform(pipeline=None) -> dict:
     logger.announcement('Transforming backups into reports.', type='info')
