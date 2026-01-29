@@ -47,7 +47,7 @@ jobs:
             fi
             
             echo "http_status=200" >> "$GITHUB_OUTPUT"
-          attempt_limit: 12 # 1 original + 11 retries (2 hours)
+          attempt_limit: 1 # 1 original + 1 retry (10 minutos)
           attempt_delay: 600000 # 10-minute pause (ms)
           
   notify-success:
