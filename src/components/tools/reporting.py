@@ -233,8 +233,8 @@ def extract_market_data():
     """
     try:
         extract_bond_snapshot()
-        extract_ust_bond_snapshot()
-        extract_sovereign_bond_snapshot()
+        #extract_ust_bond_snapshot()
+        #extract_sovereign_bond_snapshot()
     except Exception as e:
         logger.error(f'Error running market data pipeline: {e}')
         raise Exception(f'Error running market data pipeline: {e}')
