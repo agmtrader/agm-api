@@ -78,32 +78,41 @@ def create_investment_proposal(risk_profile: dict = None):
         rtd_report = get_rtd_report()
         rtd_df = pd.DataFrame(rtd_report)
 
-        # Remove IBCID Symbol column
-        logger.announcement(rtd_df['Symbol'].head(10))
-        rtd_df['Symbol'] = (
-            rtd_df['Symbol']
-                .astype(str)
-                .str.strip()
-                .str.replace(r'^IBCID', '', regex=True)
-        )
-        rtd_df['Symbol'] = pd.to_numeric(rtd_df['Symbol'], errors='coerce').astype('Int64')
+        # Remove IBCID Symbol column if it exists and clean it (though not strictly used for merge anymore)
+        if 'Symbol' in rtd_df.columns:
+             # logger.announcement(rtd_df['Symbol'].head(10))
+             pass
 
-        # Merge bonds with RTD
-        merged_df = pd.merge(bonds_df_no_duplicates, rtd_df, left_on='Conid', right_on='Symbol', how='left')
-        logger.announcement(f'Total bonds with RTD: {len(merged_df)}')
+        # Use RTD report as the base for candidates
+        merged_df = rtd_df.copy()
+        
+        # Rename columns to match expected format (using _x suffix as legacy from previous merge)
+        merged_df = merged_df.rename(columns={
+            'Financial Instrument': 'Symbol_x',
+            'Current Yield': 'Current Yield_x',
+            'S&P Equivalent': 'S&P Equivalent_x',
+            'Issuer': 'Ticker' # Or derived below
+        })
+        
+        logger.announcement(f'Total bonds from RTD: {len(merged_df)}')
+        logger.info(f"Merged DF columns: {merged_df.columns.tolist()}")
+
+        if 'S&P Equivalent_x' in merged_df.columns:
+             logger.info(f"S&P Equivalent_x unique values: {merged_df['S&P Equivalent_x'].unique()}")
 
         # Post processing
-        #merged_df = merged_df[merged_df['Current Yield'].notna() & (merged_df['Current Yield'] != '')]
         merged_df = merged_df[merged_df['Current Yield_x'] != '']
-
-        # Extract ticker (issuer) — first token in Symbol_x — for deduplication across coupons/maturities
-        merged_df['Ticker'] = (
-            merged_df['Symbol_x']
-                .astype(str)
-                .str.strip()
-                .str.split()  # split by whitespace
-                .str[0]
-        )
+        
+        # Extract ticker (issuer) if not already present or correct
+        # Depending on RTD content, Issuer column might be sufficient or we extract from Financial Instrument
+        if 'Ticker' not in merged_df.columns or merged_df['Ticker'].isnull().all():
+             merged_df['Ticker'] = (
+                merged_df['Symbol_x']
+                    .astype(str)
+                    .str.strip()
+                    .str.split()  # split by whitespace
+                    .str[0]
+            )
 
         merged_df['Current Yield_x'] = (
             merged_df['Current Yield_x']
@@ -164,10 +173,23 @@ def create_investment_proposal(risk_profile: dict = None):
         # Populate bonds for each asset type
         # Keep track of already selected tickers to avoid duplicates across buckets
         used_symbols: set[str] = set()
+        
+        # Initialize used_symbols with tickers from open positions to avoid recommending what is already owned
+        if not bonds_df_no_duplicates.empty:
+             # Assuming 'Issuer_x' or 'Symbol_x' contains the ticker in open_positions
+             # Based on previous code, Ticker was derived from Symbol_x
+             if 'Symbol_x' in bonds_df_no_duplicates.columns:
+                 existing_tickers = bonds_df_no_duplicates['Symbol_x'].astype(str).str.strip().str.split().str[0].tolist()
+                 used_symbols.update(existing_tickers)
+                 logger.info(f"Initialized used_symbols with {len(used_symbols)} existing tickers.")
 
         for asset_type in investment_proposal:
             percentage = risk_archetype[asset_type['name']]
             assets_to_invest = int(total_assets * percentage)
+
+            logger.info(f"--- Processing bucket: {asset_type['name']} ---")
+            logger.info(f"Assets to invest: {assets_to_invest}")
+            logger.info(f"Current bonds in bucket: {len(asset_type['bonds'])}")
 
             # Special handling for ETF bucket – always add SPY first
             if asset_type['name'] == 'etfs':
@@ -180,12 +202,23 @@ def create_investment_proposal(risk_profile: dict = None):
 
             # Build a combined dataframe for all equivalents that belong to this asset type
             sanitized_equivalents = asset_type['equivalents']
+            
+            # Log what we are looking for
+            logger.info(f"Sanitized equivalents for {asset_type['name']}: {sanitized_equivalents}")
+            
             combined_df = merged_df[
                 merged_df['S&P Equivalent_x']
                     .astype(str)
                     .str.replace(r'[+\-]', '', regex=True)
                     .isin(sanitized_equivalents)
             ]
+            
+            logger.info(f"Found {len(combined_df)} matches for {asset_type['name']}")
+            if len(combined_df) == 0:
+                 # Debug why no matches if we expected some
+                 logger.info("Debugging first 5 sanitized S&P values from merged_df:")
+                 debug_vals = merged_df['S&P Equivalent_x'].astype(str).str.replace(r'[+\-]', '', regex=True).head()
+                 logger.info(debug_vals)
 
             # Deduplicate by ticker and order by yield
             combined_df = (
