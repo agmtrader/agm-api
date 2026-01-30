@@ -153,9 +153,6 @@ def extract_bond_details(description: str):
 
     The function is designed to be resilient to minor format variations.
     """
-
-    logger.info(f'Extracting bond details from description: {description}')
-
     # -----------------------------
     # Symbol (take everything before the coupon figure)
     # -----------------------------
