@@ -281,6 +281,31 @@ def view_active_bank_instructions(master_account: str = None, account_id: str = 
     """View the active bank instructions for the given account via IBKR API."""
     return ibkr_web_api.view_active_bank_instructions(master_account=master_account, account_id=account_id, client_instruction_id=client_instruction_id, bank_instruction_method=bank_instruction_method)
 
+@handle_exception
+def get_wire_instructions(master_account: str = None, account_id: str = None, currency: str = "USD") -> dict:
+    """Get wire instructions via IBKR API."""
+    return ibkr_web_api.get_wire_instructions(master_account=master_account, account_id=account_id, currency=currency)
+
+# Enums
+@handle_exception
+def get_product_country_bundles() -> dict:
+    """Get product country bundles enumeration via IBKR API."""
+    return ibkr_web_api.get_product_country_bundles()
+
+@handle_exception
+def get_forms(forms: list = None, master_account: str = None) -> dict:
+    return ibkr_web_api.get_forms(forms=forms, master_account=master_account)
+
+@handle_exception
+def get_financial_ranges() -> dict:
+    """Get financial ranges via IBKR API."""
+    return ibkr_web_api.get_financial_ranges()
+
+@handle_exception
+def get_business_and_occupation() -> dict:
+    """Get business and occupation via IBKR API."""
+    return ibkr_web_api.get_business_and_occupation()
+
 # Trading API
 @handle_exception
 def create_sso_session(credential: str = None, ip: str = None) -> dict:
@@ -301,34 +326,3 @@ def logout_of_brokerage_session() -> dict:
 def get_brokerage_accounts() -> dict:
     """Get brokerage accounts via IBKR API."""
     return ibkr_web_api.get_brokerage_accounts()
-
-# Enums
-@handle_exception
-def get_security_questions() -> dict:
-    """Get security questions via IBKR API."""
-    return ibkr_web_api.get_security_questions()
-
-@handle_exception
-def get_product_country_bundles() -> dict:
-    """Get product country bundles enumeration via IBKR API."""
-    return ibkr_web_api.get_product_country_bundles()
-
-@handle_exception
-def get_forms(forms: list = None, master_account: str = None) -> dict:
-    return ibkr_web_api.get_forms(forms=forms, master_account=master_account)
-
-# Wire instructions
-@handle_exception
-def get_wire_instructions(master_account: str = None, account_id: str = None, currency: str = "USD") -> dict:
-    """Get wire instructions via IBKR API."""
-    return ibkr_web_api.get_wire_instructions(master_account=master_account, account_id=account_id, currency=currency)
-
-@handle_exception
-def get_financial_ranges() -> dict:
-    """Get financial ranges via IBKR API."""
-    return ibkr_web_api.get_financial_ranges()
-
-@handle_exception
-def get_business_and_occupation() -> dict:
-    """Get business and occupation via IBKR API."""
-    return ibkr_web_api.get_business_and_occupation()
