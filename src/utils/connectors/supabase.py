@@ -102,6 +102,7 @@ class Supabase:
             fee_template = Column(Text, nullable=True)
             master_account = Column(Text, nullable=True)
             management_type = Column(Text, nullable=True)
+            emailed_credentials = Column(Boolean, nullable=False, default=False)
 
         class AccountScreening(self.Base):
             __tablename__ = 'account_screening'
@@ -218,6 +219,13 @@ class Supabase:
             quantity = Column(Integer, nullable=False)
             order_type = Column(Text, nullable=False)
             time_in_force = Column(Text, nullable=False)
+
+        class FlaggedDeposit(self.Base):
+            __tablename__ = 'flagged_deposit'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
         
         # Contacts
         self.User = User
@@ -246,6 +254,12 @@ class Supabase:
 
         # Trade Tickets
         self.TradeTicket = TradeTicket
+
+        # Trade Requests
+        self.TradeRequest = TradeRequest
+
+        # Flagged Deposits
+        self.FlaggedDeposit = FlaggedDeposit
 
 # Create a single instance that can be imported and used throughout the application
 db = Supabase().db
