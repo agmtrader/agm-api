@@ -208,6 +208,7 @@ def update_pending_aliases(master_account: str = None) -> dict:
     for account in pending_accounts:
         account_id = account.get('Account ID')
         title = account.get('Title')
+        old_alias = account.get('Alias')
         if account_id and title is not None:
             new_alias = f"{account_id} {title}"
             try:
@@ -215,9 +216,10 @@ def update_pending_aliases(master_account: str = None) -> dict:
                 update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
                 updated_accounts.append({
                     'account_id': account_id,
+                    'old_alias': old_alias,
                     'new_alias': new_alias
                 })
-                logger.success(f"Updated alias for {account_id} to {new_alias}")
+                logger.success(f"Updated alias for {account_id}: {old_alias} -> {new_alias}")
             except Exception as e:
                 logger.error(f"Failed to update alias for {account_id}: {e}")
     return {

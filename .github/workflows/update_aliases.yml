@@ -66,19 +66,21 @@ jobs:
               exit 1
             fi
 
-            updated=$(echo "$body" | jq -r '.updated')
+            updated=$(echo "$body" | jq -r '.updated // 0')
             echo "✅ Aliases updated: $updated"
 
-            # Build markdown list of updated accounts
+            # Build readable list: old alias -> new alias, plus total
             if [ "$updated" -gt 0 ]; then
-              accounts_md=$(echo "$body" | jq -r '.accounts[] | "- [" + .account_id + "] " + .new_alias')
+              accounts_lines=$(echo "$body" | jq -r '.accounts[] | ((.old_alias // "None") + " -> " + .new_alias)')
+              accounts_output=$(printf "%s\nTotal: %s" "$accounts_lines" "$updated")
             else
-              accounts_md="No aliases were updated."
+              accounts_output="No aliases were updated."
             fi
 
             # Pass list to next job via step output
             # Write multi-line output without leading spaces on delimiter lines
-            printf "accounts_list<<EOF\n%s\nEOF\n" "$accounts_md" >> "$GITHUB_OUTPUT"
+            printf "accounts_list<<EOF\n%s\nEOF\n" "$accounts_output" >> "$GITHUB_OUTPUT"
+            echo "$accounts_output"
 
   notify-success:
     needs: update-aliases
