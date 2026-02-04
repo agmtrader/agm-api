@@ -267,18 +267,16 @@ def create_investment_proposal_with_assets(assets: list[dict]):
         if total_percentage <= 0:
             raise Exception('Asset percentages must include at least one positive value.')
 
+        # Normalize to 1.0; accept either 0-1 fractions or 0-100 percentages
+        assets = [{**asset} for asset in assets]
         if total_percentage > 1.5:
-            assets = [
-                {**asset, 'percentage': float(asset.get('percentage', 0)) / 100.0}
-                for asset in assets
-            ]
+            for asset in assets:
+                asset['percentage'] = float(asset.get('percentage', 0)) / 100.0
             total_percentage = sum(float(asset.get('percentage', 0)) for asset in assets)
 
-        if not np.isclose(total_percentage, 1.0):
-            assets = [
-                {**asset, 'percentage': float(asset.get('percentage', 0)) / total_percentage}
-                for asset in assets
-            ]
+        if not np.isclose(total_percentage, 1.0) and total_percentage > 0:
+            for asset in assets:
+                asset['percentage'] = float(asset.get('percentage', 0)) / total_percentage
 
         for asset in assets:
             if not isinstance(asset, dict):
@@ -308,8 +306,8 @@ def create_investment_proposal_with_assets(assets: list[dict]):
                 'Symbol_x': str(rtd_row.get('Financial Instrument') or symbol),
                 'Current Yield_x': float(rtd_row.get('Current Yield') or 0),
                 'S&P Equivalent_x': str(rating),
-                'percentage': float(percentage),
                 'ibcid': str(symbol),
+                'percentage': float(percentage),
             })
             print(f'Bucket: {bucket_name}')
 
