@@ -226,6 +226,8 @@ class Supabase:
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            transaction_id = Column(Text, nullable=False)
+            comment = Column(Text, nullable=False)
         
         # Contacts
         self.User = User
