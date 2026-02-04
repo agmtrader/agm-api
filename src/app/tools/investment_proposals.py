@@ -8,7 +8,7 @@ from src.utils.response import format_response
 
 bp = Blueprint('investment_proposals', __name__)
 
-@bp.route('/create/risk-profile', methods=['POST'])
+@bp.route('/create/risk', methods=['POST'])
 @format_response
 def create_with_risk_profile_route():
     payload = request.get_json(force=True)
