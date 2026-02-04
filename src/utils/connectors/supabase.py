@@ -200,6 +200,7 @@ class Supabase:
             bbb = Column(ARRAY(JSONB), nullable=False)
             bb = Column(ARRAY(JSONB), nullable=False)
             etfs = Column(ARRAY(JSONB), nullable=False)
+            distribution = Column(JSONB, nullable=True)
 
         class TradeTicket(self.Base):
             __tablename__ = 'trade_ticket'

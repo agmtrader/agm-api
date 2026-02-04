@@ -1,16 +1,26 @@
 from flask import Blueprint, request
-from src.components.tools.investment_proposals import create_investment_proposal, read_investment_proposals
+from src.components.tools.investment_proposals import (
+    create_investment_proposal_with_assets,
+    create_investment_proposal_with_risk_profile,
+    read_investment_proposals,
+)
 from src.utils.response import format_response
 
 bp = Blueprint('investment_proposals', __name__)
 
-@bp.route('/create', methods=['POST'])
+@bp.route('/create/risk-profile', methods=['POST'])
 @format_response
-def create_route():
+def create_with_risk_profile_route():
     payload = request.get_json(force=True)
     risk_profile = payload.get('risk_profile', None)
+    return create_investment_proposal_with_risk_profile(risk_profile=risk_profile)
+
+@bp.route('/create/assets', methods=['POST'])
+@format_response
+def create_with_assets_route():
+    payload = request.get_json(force=True)
     assets = payload.get('assets', None)
-    return create_investment_proposal(risk_profile=risk_profile, assets=assets)
+    return create_investment_proposal_with_assets(assets=assets)
 
 @bp.route('/read', methods=['GET'])
 @format_response
