@@ -9,7 +9,8 @@ bp = Blueprint('investment_proposals', __name__)
 def create_route():
     payload = request.get_json(force=True)
     risk_profile = payload.get('risk_profile', None)
-    return create_investment_proposal(risk_profile=risk_profile)
+    assets = payload.get('assets', None)
+    return create_investment_proposal(risk_profile=risk_profile, assets=assets)
 
 @bp.route('/read', methods=['GET'])
 @format_response
