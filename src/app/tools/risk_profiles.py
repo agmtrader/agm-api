@@ -17,8 +17,11 @@ def create():
 def read():
     query = {}
     id = request.args.get('id', None)
+    risk_profile_id = request.args.get('risk_profile_id', None)
     if id:
         query['id'] = id
+    if risk_profile_id:
+        query['risk_profile_id'] = risk_profile_id
     return read_risk_profiles(query=query)
 
 @bp.route('/list', methods=['GET'])
