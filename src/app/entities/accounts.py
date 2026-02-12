@@ -30,10 +30,13 @@ def read_route():
     query = {}
     id = request.args.get('id', None)
     user_id = request.args.get('user_id', None)
+    code = request.args.get('advisor_code', None)
     if id:
         query['id'] = id
     if user_id:
         query['user_id'] = user_id
+    if code:
+        query['advisor_code'] = code
     return read_accounts(query=query)
 
 @bp.route('/update', methods=['POST'])
