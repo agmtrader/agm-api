@@ -1247,6 +1247,68 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
+    def get_market_scanner_params(self) -> dict:
+        """
+        Fetch available market scanner parameters, instruments, filters, and locations.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/v1/api/iserver/scanner/params"
+            if not self.sso_token:
+                raise Exception("No token found – make sure to initialise an SSO session first")
+            headers = {
+                "Authorization": f"Bearer {self.sso_token}",
+                "Content-Type": "application/json",
+            }
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success("Market scanner params fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def run_market_scanner(
+        self,
+        instrument: str,
+        scan_type: str,
+        location: str,
+        filters: list = None,
+    ) -> dict:
+        """
+        Run the IBKR market scanner with the provided parameters.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/v1/api/iserver/scanner/run"
+            if not self.sso_token:
+                raise Exception("No token found – make sure to initialise an SSO session first")
+            headers = {
+                "Authorization": f"Bearer {self.sso_token}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "instrument": instrument,
+                "type": scan_type,
+                "location": location
+            }
+            if filters:
+                payload["filter"] = filters
+            else:
+                payload["filter"] = []
+            
+            response = requests.post(url, headers=headers, data=json.dumps(payload))
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success("Market scanner run successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
     def get_historical_market_data(self, conid: str, period:str, bar:str):
         """
         """
@@ -1632,6 +1694,8 @@ for _method_name in [
     'get_brokerage_accounts',
     'get_watchlist_information',
     'get_market_data_snapshot',
+    'get_market_scanner_params',
+    'run_market_scanner',
     'deposit_funds',
     'get_wire_instructions',
     'change_financial_information',
