@@ -63,6 +63,7 @@ class Supabase:
             __tablename__ = 'advisor'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             code = Column(Integer, nullable=False, unique=True, server_default='SELECT MAX(1, MAX(code)) FROM advisor')
