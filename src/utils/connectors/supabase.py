@@ -85,6 +85,7 @@ class Supabase:
             security_questions = Column(JSONB, nullable=True)
             estimated_deposit = Column(BIGINT, nullable=True)
             risk_profile_id = Column(UUID(as_uuid=True), ForeignKey('risk_profile.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            referrer = Column(Text, nullable=True)
         
         class Account(self.Base):
             __tablename__ = 'account'
