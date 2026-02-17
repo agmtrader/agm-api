@@ -1429,6 +1429,144 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @handle_exception
+    def get_contract_info(self, conid: int) -> dict:
+        """
+        Get contract details for a given conid.
+        May include lot size, trading rules, and other metadata.
+        Args:
+            conid (int): The contract ID.
+        Returns:
+            dict: Contract details.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/v1/api/iserver/contract/{conid}/info"
+            if not self.sso_token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {self.sso_token}",
+                "Content-Type": "application/json"
+            }
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success(f"Contract info fetched for conid {conid}")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def place_order(self, account_id: str, orders: list) -> dict:
+        """
+        Place one or more orders for the given account.
+        Args:
+            account_id (str): The IBKR account ID.
+            orders (list): List of order dicts. Each dict should contain at
+                minimum: conid, orderType, side, quantity, tif, and price
+                (for limit orders).
+        Returns:
+            dict: API response (may contain order IDs or reply prompts).
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/v1/api/iserver/account/{account_id}/orders"
+            if not self.sso_token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {self.sso_token}",
+                "Content-Type": "application/json"
+            }
+            payload = {"orders": orders}
+            response = requests.post(url, headers=headers, data=json.dumps(payload))
+            logger.info(f"Place order response [{response.status_code}]: {response.text}")
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def reply_to_order(self, reply_id: str, confirmed: bool = True) -> dict:
+        """
+        Respond to an order confirmation prompt from IBKR.
+        Args:
+            reply_id (str): The reply ID returned by the place_order call.
+            confirmed (bool): Whether to confirm the order.
+        Returns:
+            dict: API response after replying.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/v1/api/iserver/reply/{reply_id}"
+            if not self.sso_token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {self.sso_token}",
+                "Content-Type": "application/json"
+            }
+            payload = {"confirmed": confirmed}
+            response = requests.post(url, headers=headers, data=json.dumps(payload))
+            logger.info(f"Reply response [{response.status_code}]: {response.text}")
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def cancel_order(self, account_id: str, order_id: str) -> dict:
+        """
+        Cancel an existing order.
+        Args:
+            account_id (str): The IBKR account ID.
+            order_id (str): The order ID to cancel.
+        Returns:
+            dict: API response after cancellation.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/v1/api/iserver/account/{account_id}/order/{order_id}"
+            if not self.sso_token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {self.sso_token}",
+                "Content-Type": "application/json"
+            }
+            response = requests.delete(url, headers=headers)
+            logger.info(f"Cancel order response [{response.status_code}]: {response.text}")
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success(f"Order {order_id} cancelled successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def get_open_orders(self) -> dict:
+        """
+        Retrieve all live (open) orders.
+        Returns:
+            dict: Open orders.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/v1/api/iserver/account/orders"
+            if not self.sso_token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {self.sso_token}",
+                "Content-Type": "application/json"
+            }
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success("Open orders fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
     # Enums
     @handle_exception
     def get_forms(self, forms: list = None, master_account: str = None):
@@ -1699,6 +1837,11 @@ for _method_name in [
     'deposit_funds',
     'get_wire_instructions',
     'change_financial_information',
+    'get_contract_info',
+    'place_order',
+    'reply_to_order',
+    'cancel_order',
+    'get_open_orders',
 ]:
     if 'IBKRWebAPI' in globals() and hasattr(IBKRWebAPI, _method_name):
         setattr(
