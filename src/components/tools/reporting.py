@@ -137,7 +137,7 @@ def get_open_positions_report():
     :return: Response object with open positions report or error message
     """
     files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
-    open_positions_file = [open_positions for open_positions in files_in_resources_folder if 'ibkr_open_positions_template' in open_positions['name']]
+    open_positions_file = [open_positions for open_positions in files_in_resources_folder if 'ibkr_open_positions_all' in open_positions['name']]
     if len(open_positions_file) != 1:
         logger.error('Open positions file not found or multiple files found')
         raise Exception('Open positions file not found or multiple files found')
