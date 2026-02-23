@@ -199,19 +199,36 @@ def get_accounts_not_funded():
 
     nav_data = get_nav_report()
     accounts_data = read_accounts({})
-
+    clients_data = get_clients_report()
+    
     nav_df = pd.DataFrame(nav_data)
+    accounts_df = pd.DataFrame(accounts_data)
+    clients_df = pd.DataFrame(clients_data)
 
-    numeric_cols = nav_df.select_dtypes(include='number').columns.tolist()
-    if not numeric_cols:
-        raise Exception('No numeric columns found in NAV report')
 
-    nav_df[numeric_cols] = nav_df[numeric_cols].fillna(0)
-    zero_nav_mask = (nav_df[numeric_cols] == 0).all(axis=1)
-    zero_nav_accounts = nav_df.loc[zero_nav_mask, 'ClientAccountID'].unique().tolist()
+    no_nav_df = nav_df[nav_df['Total'] == 0]
 
-    not_funded = [a for a in accounts_data if a.get('ibkr_account_number') in zero_nav_accounts]
-    return not_funded
+    # Save all accounts that have no NAV or dont even appear in the NAV report
+    accounts_not_in_nav = accounts_df[~accounts_df['ibkr_account_number'].isin(nav_df['ClientAccountID'])]
+    accounts_with_no_nav = accounts_df[accounts_df['ibkr_account_number'].isin(no_nav_df['ClientAccountID'])]
+    
+    total_accounts = pd.concat([accounts_not_in_nav, accounts_with_no_nav])
+
+    # Filter for only accounts that have Status Open in clients
+    clients_with_open_status = clients_df[clients_df['Status'] == 'Open']
+    total_accounts = total_accounts[total_accounts['ibkr_account_number'].isin(clients_with_open_status['Account ID'])]
+
+    # Filter for accounts opened in the last 3 months (approx 66 business days)
+    clients_df['Date Opened'] = pd.to_datetime(clients_df['Date Opened'], errors='coerce')
+    cutoff_date = pd.Timestamp.now().normalize() - BDay(66)
+    recent_clients = clients_df[clients_df['Date Opened'] >= cutoff_date]
+    
+    total_accounts = total_accounts[total_accounts['ibkr_account_number'].isin(recent_clients['Account ID'])]
+
+    # Merge Date Opened into total_accounts
+    total_accounts = total_accounts.merge(clients_df[['Account ID', 'Date Opened']], left_on='ibkr_account_number', right_on='Account ID', how='left')
+
+    return total_accounts.to_dict(orient='records')
 
 """
 ETL PIPELINE
