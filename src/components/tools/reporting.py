@@ -189,6 +189,30 @@ def get_deposits_withdrawals():
     deposits_withdrawals = Drive.download_file(file_id=deposits_withdrawals_file[0]['id'], parse=True)
     return deposits_withdrawals
 
+@handle_exception
+def get_accounts_not_funded():
+    """
+    Cross-references the NAV report with the accounts table to find
+    accounts that have zero NAV (not funded).
+    """
+    from src.components.entities.accounts import read_accounts
+
+    nav_data = get_nav_report()
+    accounts_data = read_accounts({})
+
+    nav_df = pd.DataFrame(nav_data)
+
+    numeric_cols = nav_df.select_dtypes(include='number').columns.tolist()
+    if not numeric_cols:
+        raise Exception('No numeric columns found in NAV report')
+
+    nav_df[numeric_cols] = nav_df[numeric_cols].fillna(0)
+    zero_nav_mask = (nav_df[numeric_cols] == 0).all(axis=1)
+    zero_nav_accounts = nav_df.loc[zero_nav_mask, 'ClientAccountID'].unique().tolist()
+
+    not_funded = [a for a in accounts_data if a.get('ibkr_account_number') in zero_nav_accounts]
+    return not_funded
+
 """
 ETL PIPELINE
 """

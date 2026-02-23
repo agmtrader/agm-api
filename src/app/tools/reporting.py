@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.tools.reporting import get_clients_report, get_nav_report, get_rtd_report, get_proposals_equity_report, get_open_positions_report, get_ibkr_account_details, get_ibkr_account_pending_tasks, get_deposits_withdrawals
+from src.components.tools.reporting import get_clients_report, get_nav_report, get_rtd_report, get_proposals_equity_report, get_open_positions_report, get_ibkr_account_details, get_ibkr_account_pending_tasks, get_deposits_withdrawals, get_accounts_not_funded
 from src.components.tools.reporting import run_clients_pipeline, run_market_data_pipeline
 from src.utils.response import format_response
 
@@ -54,3 +54,8 @@ def get_ibkr_account_pending_tasks_route():
 @format_response
 def get_deposits_withdrawals_route():
     return get_deposits_withdrawals()
+
+@bp.route('/accounts_not_funded', methods=['GET'])
+@format_response
+def get_accounts_not_funded_route():
+    return get_accounts_not_funded()
