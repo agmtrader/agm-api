@@ -4,7 +4,7 @@ from src.components.entities.accounts import create_account, read_accounts, subm
 
 from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_investment_experience, withdraw_funds, create_user_for_account, transfer_position_internally, transfer_position_externally, get_financial_ranges, get_business_and_occupation
 
-from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts
+from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts, get_account_statements, get_available_statements
 
 from src.utils.response import format_response
 
@@ -303,6 +303,33 @@ def logout_of_brokerage_session_route():
 @format_response
 def get_brokerage_accounts_route():
     return get_brokerage_accounts()
+
+@bp.route('/ibkr/statements', methods=['POST'])
+@format_response
+def get_account_statements_route():
+    payload = request.get_json(force=True)
+
+    account_id = payload.get('account_id', None)
+    start_date = payload.get('start_date', None)
+    end_date = payload.get('end_date', None)
+    master_account = payload.get('master_account', None)
+    
+    if not account_id or not start_date or not end_date or not master_account:
+        return {"error": "Missing account_id, start_date, end_date, or master_account"}, 400
+        
+    return get_account_statements(account_id=account_id, start_date=start_date, end_date=end_date, master_account=master_account)
+
+@bp.route('/ibkr/statements/available', methods=['GET'])
+@format_response
+def get_available_statements_route():
+    account_id = request.args.get('account_id', None)
+    master_account = request.args.get('master_account', None)
+    
+    if not account_id:
+        return {"error": "Missing account_id"}, 400
+        
+    return get_available_statements(account_id=account_id, master_account=master_account)
+
 
 # Enums
 @bp.route('/ibkr/forms', methods=['POST'])

@@ -328,3 +328,14 @@ def logout_of_brokerage_session() -> dict:
 def get_brokerage_accounts() -> dict:
     """Get brokerage accounts via IBKR API."""
     return ibkr_web_api.get_brokerage_accounts()
+
+@handle_exception
+def get_account_statements(account_id: str = None, start_date: str = None, end_date: str = None, master_account: str = None) -> dict:
+    """Get account statements via IBKR API."""
+    print(account_id, start_date, end_date, master_account)
+    return ibkr_web_api.get_account_statements(account_id=account_id, start_date=start_date, end_date=end_date, master_account=master_account)
+
+@handle_exception
+def get_available_statements(account_id: str = None, master_account: str = None) -> dict:
+    """Get available statements via IBKR API."""
+    return ibkr_web_api.get_available_statements(account_id=account_id, master_account=master_account)

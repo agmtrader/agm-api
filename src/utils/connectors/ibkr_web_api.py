@@ -1773,6 +1773,91 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
+    def get_account_statements(self, account_id: str, start_date: str, end_date: str, master_account: str = None):
+        """Get account statements via IBKR API."""
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Fetching statements for account {account_id} from {start_date} to {end_date}")
+
+            url = f"{self.BASE_URL}/gw/api/v1/statements"
+            
+            body = {
+                "accountId": account_id,
+                "startDate": start_date,
+                "endDate": end_date,
+                "mimeType": "application/pdf"
+            }
+
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            signed_jwt = self.sign_request(body)
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt"
+            }
+
+            response = requests.post(url, headers=headers, data=signed_jwt)
+            
+            if response.status_code != 200:
+                 logger.error(f"Error {response.status_code}: {response.text}")
+                 raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Statements fetched successfully")
+            
+            # Check content type to decide how to return
+            content_type = response.headers.get("Content-Type", "")
+            if "application/json" in content_type:
+                 return response.json()
+            else:
+                 # Return raw bytes for PDF/other formats, encoded in base64 to be JSON serializable if needed, 
+                 # or just return the raw bytes/response object depending on how this is used.
+                 # The user just asked to call it. existing functions return dicts (json).
+                 # If I return bytes, it might break callers expecting dicts if they blindly serialize.
+                 # For now, I'll return the raw content, but wrapped in a helper or just return as is?
+                 # Given the other methods return dicts, maybe I should return a dict with base64 data if it's a file.
+                 import base64
+                 return {
+                     "data": base64.b64encode(response.content).decode('utf-8'),
+                     "mime_type": content_type,
+                     "file_name": f"statement_{account_id}_{start_date}_{end_date}.{mime_type.split('/')[-1]}"
+                 }
+
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def get_available_statements(self, account_id: str, master_account: str = None):
+        """Get available statements via IBKR API."""
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Fetching available statements for account {account_id}")
+
+            url = f"{self.BASE_URL}/gw/api/v1/statements/available?accountId={account_id}"
+            
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            headers = {
+                "Authorization": f"Bearer {token}"
+            }
+
+            response = requests.get(url, headers=headers)
+            
+            if response.status_code != 200:
+                 logger.error(f"Error {response.status_code}: {response.text}")
+                 raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Available statements fetched successfully")
+            return response.json()
+
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
     def submit_all_agreements(self):
         try:
             original_creds = self._apply_credentials('br')
@@ -1842,6 +1927,8 @@ for _method_name in [
     'reply_to_order',
     'cancel_order',
     'get_open_orders',
+    'get_account_statements',
+    'get_available_statements',
 ]:
     if 'IBKRWebAPI' in globals() and hasattr(IBKRWebAPI, _method_name):
         setattr(
