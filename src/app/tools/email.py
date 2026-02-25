@@ -53,3 +53,10 @@ def send_welcome_email_route():
   """HTTP POST body must include: content (dict), client_email (str), lang ('en'|'es')"""
   payload = request.get_json(force=True)
   return Email.send_welcome_email(payload['content'], payload['client_email'], payload.get('lang', 'es'))
+
+@bp.route('/send_email/funding_notification', methods=['POST'])
+@format_response
+def send_funding_notification_email_route():
+  """HTTP POST body must include: content (dict), client_email (str), lang ('en'|'es')"""
+  payload = request.get_json(force=True)
+  return Email.send_funding_notification_email(payload['content'], payload['client_email'], payload.get('lang', 'es'), payload.get('cc', ''))

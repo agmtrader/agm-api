@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ subject }}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.8;
+            color: #2D3748;
+            margin: 0;
+            padding: 0;
+            background-color: #F7FAFC;
+        }
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 40px;
+            background-color: #FFFFFF;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+        .logo {
+            text-align: center;
+            margin: 0 auto 40px;
+            max-width: 240px;
+        }
+        .logo img {
+            max-width: 100%;
+            height: auto;
+        }
+        .content {
+            padding: 0 20px;
+        }
+        h1 {
+            color: #1A365D;
+            font-size: 24px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <img src="cid:logo" alt="AGM Logo">
+        </div>
+        <div class="content">
+            <h1>Funding Reminder</h1>
+
+            <div class="section">
+                <p>Hi {{ content.client_name }},</p>
+                <p>We hope you're doing well.</p>
+                <p>We’re reaching out to give you a quick update on your new international investment account with AGM.</p>
+                <p>We noticed that your account hasn't been funded yet, and we wanted to kindly remind you that, per our Custodian’s policies, accounts are automatically closed if they remain unfunded for 60 days.</p>
+                <p>If your account is closed, you won’t be able to trade or access the benefits of investing in the international market with us.</p>
+                <p>Our team is here to help with any questions you might have about funding your account. We’d appreciate it if you could let us know as soon as you’re ready to make your first transfer.</p>
+                <p>We're here if you need us.</p>
+            </div>
+
+            <div class="section">
+                <p>Best regards,</p>
+                <p>AGM Customer Service</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -104,3 +104,19 @@ class Gmail(GmailConnector):
             bcc="",
             cc="jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com," + cc,
         )
+
+    @handle_exception
+    def send_funding_notification_email(self, content, client_email, lang="es", cc=""):
+        """Send funding notification email."""
+        subject = (
+            "Primer Aviso: Recordatorio de Fondeo" if lang == "es" else "First Notice: Funding Reminder"
+        )
+        email_template = f"funding_notification_{lang}"
+        return self.send_email(
+            content,
+            client_email,
+            subject,
+            email_template,
+            bcc="",
+            cc="jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com," + cc,
+        )
