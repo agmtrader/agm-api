@@ -1822,7 +1822,7 @@ class IBKRWebAPI:
                  return {
                      "data": base64.b64encode(response.content).decode('utf-8'),
                      "mime_type": content_type,
-                     "file_name": f"statement_{account_id}_{start_date}_{end_date}.{mime_type.split('/')[-1]}"
+                     "file_name": f"statement_{account_id}_{start_date}_{end_date}.{content_type.split('/')[-1]}"
                  }
 
         finally:
