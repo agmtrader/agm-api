@@ -230,6 +230,144 @@ def get_accounts_not_funded():
 
     return total_accounts.to_dict(orient='records')
 
+@handle_exception
+def get_trades_report(years: list, months: list):
+    """
+    Extract trades information grouped by year and month.
+    
+    :param years: List of years to include
+    :param months: List of months to include (as strings, e.g., '01', '02')
+    :return: List of trade records
+    """
+    trades_root_folder_id = '1Sx3zEykoK--cBolbQBEtSudGCrvJPLaY'
+
+    # Normalize years and months to zero-padded strings for consistent comparison
+    years = [str(y).strip() for y in years]
+    months = [str(m).strip().zfill(2) for m in months]
+
+    print(f'[get_trades_report] years={years}, months={months}')
+    
+    # 1. Get all year folders in the root trades folder
+    try:
+        root_contents = Drive.get_files_in_folder(trades_root_folder_id)
+    except Exception as e:
+        logger.error(f'Could not fetch contents of trades root folder: {trades_root_folder_id}: {e}')
+        print(f'[get_trades_report] ERROR fetching root folder {trades_root_folder_id}: {e}')
+        return []
+
+    print(f'[get_trades_report] root_contents ({len(root_contents)} items):')
+    for item in root_contents:
+        print(f'  name={item["name"]!r}  mimeType={item["mimeType"]}  id={item["id"]}')
+
+    year_folders = {
+        f['name']: f['id'] 
+        for f in root_contents 
+        if f['mimeType'] == 'application/vnd.google-apps.folder'
+    }
+
+    print(f'[get_trades_report] year_folders found: {list(year_folders.keys())}')
+
+    all_trades_dfs = []
+
+    for year in years:
+        if year not in year_folders:
+            logger.warning(f'Year folder {year} not found in root folder.')
+            print(f'[get_trades_report] WARNING: year folder {year!r} not in {list(year_folders.keys())}')
+            continue
+            
+        year_folder_id = year_folders[year]
+        print(f'[get_trades_report] Processing year={year}, folder_id={year_folder_id}')
+
+        try:
+            year_files = Drive.get_files_in_folder(year_folder_id)
+        except Exception as e:
+            logger.error(f'Could not fetch contents for year folder {year}: {e}')
+            print(f'[get_trades_report] ERROR fetching year folder {year}: {e}')
+            continue
+
+        print(f'[get_trades_report] year={year} has {len(year_files)} files:')
+        for f in year_files:
+            print(f'  {f["name"]}')
+
+        # For each requested month, find the latest file in that month
+        # Filename format: 732385_YYYYMMDD_YYYYMMDD.csv
+        # We look at the second date (end of period) to determine the month
+        
+        latest_files_for_months = {}
+        
+        for f in year_files:
+            name = f['name']
+            if not name.endswith('.csv') or '_' not in name:
+                print(f'  [skip] {name!r} (not a csv or no underscore)')
+                continue
+                
+            parts = name.replace('.csv', '').split('_')
+            if len(parts) < 3:
+                print(f'  [skip] {name!r} (only {len(parts)} parts after split)')
+                continue
+                
+            end_date_str = parts[2]
+            if len(end_date_str) < 6:
+                print(f'  [skip] {name!r} (end_date_str={end_date_str!r} too short)')
+                continue
+                
+            file_year = end_date_str[:4]
+            file_month = end_date_str[4:6]
+
+            print(f'  [parse] {name!r} -> end_date={end_date_str}, file_year={file_year}, file_month={file_month}')
+            
+            if file_year == year and file_month in months:
+                if file_month not in latest_files_for_months or end_date_str > latest_files_for_months[file_month]['end_date']:
+                    latest_files_for_months[file_month] = {
+                        'id': f['id'],
+                        'end_date': end_date_str
+                    }
+                    print(f'  [match] Selecting {name!r} as latest for month {file_month}')
+            else:
+                print(f'  [no match] file_year={file_year!r} vs year={year!r}, file_month={file_month!r} vs months={months}')
+
+        print(f'[get_trades_report] latest_files_for_months={latest_files_for_months}')
+
+        # Download and parse each latest file
+        for month, info in latest_files_for_months.items():
+            try:
+                logger.info(f'Downloading trades for {year}-{month} from file {info["end_date"]}')
+                print(f'[get_trades_report] Downloading {year}-{month}, file_id={info["id"]}')
+                f_data = Drive.download_file(file_id=info['id'], parse=True)
+                if f_data:
+                    df = pd.DataFrame(f_data)
+                    df['Year'] = year
+                    df['Month'] = month
+                    all_trades_dfs.append(df)
+                    print(f'[get_trades_report] Loaded {len(df)} rows for {year}-{month}')
+                else:
+                    print(f'[get_trades_report] WARNING: empty file for {year}-{month}')
+            except Exception as e:
+                logger.error(f'Error downloading/parsing file for {year}-{month}: {e}')
+                print(f'[get_trades_report] ERROR downloading {year}-{month}: {e}')
+
+    if not all_trades_dfs:
+        return []
+
+    # Combine all dataframes
+    combined_trades_df = pd.concat(all_trades_dfs, ignore_index=True)
+    
+    # Optional: ensure Year and Month columns are at the front for visibility
+    cols = ['Year', 'Month'] + [c for c in combined_trades_df.columns if c not in ['Year', 'Month']]
+    combined_trades_df = combined_trades_df[cols]
+    
+    # Sort by Year, Month, and any relevant date column if present (e.g., 'TradeDate' or 'ExecutionTime')
+    sort_cols = ['Year', 'Month']
+    if 'TradeDate' in combined_trades_df.columns:
+        sort_cols.append('TradeDate')
+    elif 'Date' in combined_trades_df.columns:
+        sort_cols.append('Date')
+        
+    combined_trades_df = combined_trades_df.sort_values(by=sort_cols, ascending=[False, False] + [False] * (len(sort_cols)-2))
+
+    combined_trades_df = combined_trades_df.fillna('')
+    return combined_trades_df.to_dict(orient='records')
+
 """
 ETL PIPELINE
 """
