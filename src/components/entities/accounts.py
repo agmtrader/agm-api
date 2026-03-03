@@ -180,56 +180,24 @@ def get_registration_tasks(account_id: str = None, master_account: str = None) -
     return ibkr_web_api.get_registration_tasks(account_id=account_id, master_account=master_account)
 
 @handle_exception
-def apply_fee_template(account_id: str = None, template_name: str = None, master_account: str = None) -> dict:
-    """Apply a fee template to an account via IBKR API."""
-    return ibkr_web_api.apply_fee_template(account_id=account_id, template_name=template_name, master_account=master_account)
+def get_account_statements(account_id: str = None, start_date: str = None, end_date: str = None, master_account: str = None) -> dict:
+    """Get account statements via IBKR API."""
+    print(account_id, start_date, end_date, master_account)
+    return ibkr_web_api.get_account_statements(account_id=account_id, start_date=start_date, end_date=end_date, master_account=master_account)
 
 @handle_exception
-def update_account_alias(account_id: str = None, new_alias: str = None, master_account: str = None) -> dict:
-    """Update account alias via IBKR API."""
-    return ibkr_web_api.update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
+def get_available_statements(account_id: str = None, master_account: str = None) -> dict:
+    """Get available statements via IBKR API."""
+    return ibkr_web_api.get_available_statements(account_id=account_id, master_account=master_account)
 
 @handle_exception
 def submit_documents(document_submission: dict = None, master_account: str = None) -> dict:
     return ibkr_web_api.submit_documents(document_submission=document_submission, master_account=master_account)
 
 @handle_exception
-def update_account_email(reference_user_name: str = None, new_email: str = None, access: bool = True, master_account: str = None) -> dict:
-    """Update account email via IBKR API."""
-    return ibkr_web_api.update_account_email(reference_user_name=reference_user_name, new_email=new_email, access=access, master_account=master_account)
-
-@handle_exception
-def update_pending_aliases(master_account: str = None) -> dict:
-    """Fetch clients report, filter accounts without alias, update each alias, and return list."""
-    from src.components.tools.reporting import get_clients_report
-    clients = get_clients_report()
-    pending_accounts = [c for c in clients if (c.get('Alias') in (None, '')) and c.get('Status') not in ('Rejected', 'Closed', 'Funded Pending')]
-    updated_accounts = []
-    for account in pending_accounts:
-        account_id = account.get('Account ID')
-        title = account.get('Title')
-        old_alias = account.get('Alias')
-        if account_id and title is not None:
-            new_alias = f"{account_id} {title}"
-            try:
-                # Reuse existing helper to update alias via IBKR API
-                update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
-                updated_accounts.append({
-                    'account_id': account_id,
-                    'old_alias': old_alias,
-                    'new_alias': new_alias
-                })
-                logger.success(f"Updated alias for {account_id}: {old_alias} -> {new_alias}")
-            except Exception as e:
-                logger.error(f"Failed to update alias for {account_id}: {e}")
-    return {
-        'updated': len(updated_accounts),
-        'accounts': updated_accounts
-    }
-
-@handle_exception
-def create_user_for_account(account_id: str = None, prefix: str = None, user_name: str = None, external_id: str = None, authorized_trader: bool = False, master_account: str = None) -> dict:
-    return ibkr_web_api.create_user_for_account(account_id=account_id, prefix=prefix, user_name=user_name, external_id=external_id, authorized_trader=authorized_trader, master_account=master_account)
+def apply_fee_template(account_id: str = None, template_name: str = None, master_account: str = None) -> dict:
+    """Apply a fee template to an account via IBKR API."""
+    return ibkr_web_api.apply_fee_template(account_id=account_id, template_name=template_name, master_account=master_account)
 
 @handle_exception
 def add_trading_permissions(account_id: str = None, trading_permissions: list = None, master_account: str = None) -> dict:
@@ -240,6 +208,16 @@ def add_trading_permissions(account_id: str = None, trading_permissions: list = 
 def add_clp_capability(account_id: str = None, document_submission: dict = None, master_account: str = None) -> dict:
     """Add CLP capability to an account via IBKR API."""
     return ibkr_web_api.add_clp_capability(account_id=account_id, document_submission=document_submission, master_account=master_account)
+
+@handle_exception
+def update_account_alias(account_id: str = None, new_alias: str = None, master_account: str = None) -> dict:
+    """Update account alias via IBKR API."""
+    return ibkr_web_api.update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
+
+@handle_exception
+def update_account_email(reference_user_name: str = None, new_email: str = None, access: bool = True, master_account: str = None) -> dict:
+    """Update account email via IBKR API."""
+    return ibkr_web_api.update_account_email(reference_user_name=reference_user_name, new_email=new_email, access=access, master_account=master_account)
 
 @handle_exception
 def change_investment_experience(account_id: str = None, investment_experience: dict = None, master_account: str = None) -> dict:
@@ -328,14 +306,3 @@ def logout_of_brokerage_session() -> dict:
 def get_brokerage_accounts() -> dict:
     """Get brokerage accounts via IBKR API."""
     return ibkr_web_api.get_brokerage_accounts()
-
-@handle_exception
-def get_account_statements(account_id: str = None, start_date: str = None, end_date: str = None, master_account: str = None) -> dict:
-    """Get account statements via IBKR API."""
-    print(account_id, start_date, end_date, master_account)
-    return ibkr_web_api.get_account_statements(account_id=account_id, start_date=start_date, end_date=end_date, master_account=master_account)
-
-@handle_exception
-def get_available_statements(account_id: str = None, master_account: str = None) -> dict:
-    """Get available statements via IBKR API."""
-    return ibkr_web_api.get_available_statements(account_id=account_id, master_account=master_account)

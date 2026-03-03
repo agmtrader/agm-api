@@ -115,6 +115,97 @@ def get_nav_report():
     return nav
 
 @handle_exception
+def get_nav_report_monthly(years: list, months: list):
+    """
+    Extract NAV information grouped by year and month,
+    keeping only the latest file available for each month.
+
+    :param years: List of years to include
+    :param months: List of months to include (as strings, e.g., '01', '02')
+    :return: List of NAV records
+    """
+    nav_root_folder_id = '1WgYA-Q9mnPYrbbLfYLuJZwUIWBYjiD4c'
+
+    years = [str(y).strip() for y in years if str(y).strip()]
+    months = [str(m).strip().zfill(2) for m in months if str(m).strip()]
+
+    # If no months are provided, include all months in each requested year.
+    if not months:
+        months = [str(m).zfill(2) for m in range(1, 13)]
+
+    try:
+        root_contents = Drive.get_files_in_folder(nav_root_folder_id)
+    except Exception as e:
+        logger.error(f'Could not fetch contents of nav root folder: {nav_root_folder_id}: {e}')
+        return []
+
+    year_folders = {
+        f['name']: f['id']
+        for f in root_contents
+        if f['mimeType'] == 'application/vnd.google-apps.folder'
+    }
+
+    all_nav_dfs = []
+
+    for year in years:
+        if year not in year_folders:
+            logger.warning(f'Year folder {year} not found in nav root folder.')
+            continue
+
+        year_folder_id = year_folders[year]
+
+        try:
+            year_files = Drive.get_files_in_folder(year_folder_id)
+        except Exception as e:
+            logger.error(f'Could not fetch contents for nav year folder {year}: {e}')
+            continue
+
+        latest_files_for_months = {}
+
+        for f in year_files:
+            if f['mimeType'] == 'application/vnd.google-apps.folder':
+                continue
+
+            name = f['name']
+            date_matches = re.findall(r'(\d{8})', name)
+            if date_matches:
+                # Use the last 8-digit date found in the filename as the period end date.
+                end_date_str = date_matches[-1]
+            else:
+                # Fallback to Drive metadata if filename does not contain a date.
+                end_date_str = datetime.fromisoformat(f['modifiedTime'].replace('Z', '+00:00')).strftime('%Y%m%d')
+
+            file_year = end_date_str[:4]
+            file_month = end_date_str[4:6]
+
+            if file_year == year and file_month in months:
+                if file_month not in latest_files_for_months or end_date_str > latest_files_for_months[file_month]['end_date']:
+                    latest_files_for_months[file_month] = {
+                        'id': f['id'],
+                        'end_date': end_date_str
+                    }
+
+        for month, info in latest_files_for_months.items():
+            try:
+                nav_data = Drive.download_file(file_id=info['id'], parse=True)
+                if nav_data:
+                    df = pd.DataFrame(nav_data)
+                    df['Year'] = year
+                    df['Month'] = month
+                    df['ReportDate'] = info['end_date']
+                    all_nav_dfs.append(df)
+            except Exception as e:
+                logger.error(f'Error downloading/parsing nav file for {year}-{month}: {e}')
+
+    if not all_nav_dfs:
+        return []
+
+    combined_nav_df = pd.concat(all_nav_dfs, ignore_index=True)
+    combined_nav_df = combined_nav_df.fillna('')
+
+    return combined_nav_df.to_dict(orient='records')
+
+@handle_exception
 def get_rtd_report():
     """
     Get the RTD report.
@@ -153,21 +244,6 @@ def get_proposals_equity_report():
     """
     proposals_equity = Drive.export_file(file_id='1AqpIE7LRV40J-Aew5fA-P6gEfji3Yb-Rp5DohI9BQFY', mime_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', parse=True)
     return proposals_equity
-
-@handle_exception
-def get_ibkr_account_details():
-    """
-    Get the IBKR account details report.
-    
-    :return: Response object with IBKR account details or error message
-    """
-    account_details = Drive.download_file(file_id='10RO_AFG3W5Sv-9CnQ2qmGhikco6cmMCH', parse=True)
-    return account_details
-
-@handle_exception
-def get_ibkr_account_pending_tasks():
-    account_pending_tasks = Drive.download_file(file_id='1JHzd6zqRWY7ED8N_WL-QMtKVLUPLEwaR', parse=True)
-    return account_pending_tasks
 
 @handle_exception
 def get_ofac_sdn_list():
@@ -229,6 +305,39 @@ def get_accounts_not_funded():
     total_accounts = total_accounts.merge(clients_df[['Account ID', 'Date Opened']], left_on='ibkr_account_number', right_on='Account ID', how='left')
 
     return total_accounts.to_dict(orient='records')
+
+@handle_exception
+def update_account_aliases() -> dict:
+    """Fetch clients report, filter accounts without alias, update each alias, and return list."""
+    from src.components.tools.reporting import get_clients_report
+    from src.components.entities.accounts import update_account_alias
+    clients = get_clients_report()
+    pending_accounts = [c for c in clients if (c.get('Alias') in (None, '')) and c.get('Status') not in ('Rejected', 'Closed', 'Funded Pending')]
+    updated_accounts = []
+    for account in pending_accounts:
+        account_id = account.get('Account ID')
+        title = account.get('Title')
+        old_alias = account.get('Alias')
+        master_account = 'ad' if account.get('Master Account') == 'F10740574' else 'br'
+        if account_id == 'U23431519':
+            logger.info(f"old_alias: {old_alias}, {type(old_alias)}, title: {title}, {type(title)}, master_account: {master_account}")
+        if account_id and title is not None:
+            new_alias = f"{account_id} {title}"
+            try:
+                # Reuse existing helper to update alias via IBKR API
+                update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
+                updated_accounts.append({
+                    'account_id': account_id,
+                    'old_alias': old_alias,
+                    'new_alias': new_alias
+                })
+                logger.success(f"Updated alias for {account_id}: {old_alias} -> {new_alias}")
+            except Exception as e:
+                logger.error(f"Failed to update alias for {account_id}: {e}")
+    return {
+        'updated': len(updated_accounts),
+        'accounts': updated_accounts
+    }
 
 @handle_exception
 def get_trades_report(years: list, months: list):

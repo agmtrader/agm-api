@@ -2,20 +2,13 @@ from flask import Blueprint, request
 
 from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_instructions, delete_document, read_account_documents, update_account_document, screen_person, read_account_screenings
 
-from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, update_pending_aliases, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_investment_experience, withdraw_funds, create_user_for_account, transfer_position_internally, transfer_position_externally, get_financial_ranges, get_business_and_occupation
+from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_investment_experience, withdraw_funds, transfer_position_internally, transfer_position_externally, get_financial_ranges, get_business_and_occupation
 
 from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts, get_account_statements, get_available_statements
 
 from src.utils.response import format_response
 
 bp = Blueprint('accounts', __name__)
-
-@bp.route('/ibkr/pending_alias', methods=['PATCH'])
-@format_response
-def update_pending_aliases_route():
-    payload = request.get_json(force=True)
-    master_account = payload.get('master_account', None)
-    return update_pending_aliases(master_account=master_account)
 
 @bp.route('/create', methods=['POST'])
 @format_response
@@ -175,18 +168,6 @@ def update_account_email_route():
     if not reference_user_name or new_email is None:
         return {"error": "Missing reference_user_name or new_email"}, 400
     return update_account_email(reference_user_name=reference_user_name, new_email=new_email, access=access, master_account=master_account)
-
-@bp.route('/ibkr/user', methods=['POST'])
-@format_response
-def create_user_for_account_route():
-    payload = request.get_json(force=True)
-    account_id = payload.get('account_id', None)
-    prefix = payload.get('prefix', None)
-    user_name = payload.get('user_name', None)
-    external_id = payload.get('external_id', None)
-    authorized_trader = payload.get('authorized_trader', False)
-    master_account = payload.get('master_account', None)
-    return create_user_for_account(account_id=account_id, prefix=prefix, user_name=user_name, external_id=external_id, authorized_trader=authorized_trader, master_account=master_account)
 
 @bp.route('/ibkr/trading_permissions', methods=['POST'])
 @format_response

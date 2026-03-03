@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.tools.reporting import get_clients_report, get_nav_report, get_rtd_report, get_proposals_equity_report, get_open_positions_report, get_ibkr_account_details, get_ibkr_account_pending_tasks, get_deposits_withdrawals, get_accounts_not_funded, get_trades_report
+from src.components.tools.reporting import get_clients_report, get_nav_report, get_nav_report_monthly, get_rtd_report, get_proposals_equity_report, get_open_positions_report, get_deposits_withdrawals, get_accounts_not_funded, get_trades_report, update_account_aliases
 from src.components.tools.reporting import run_clients_pipeline, run_market_data_pipeline
 from src.utils.response import format_response
 
@@ -25,6 +25,17 @@ def get_clients_report_route():
 def get_nav_report_route():
     return get_nav_report()
 
+@bp.route('/nav/monthly', methods=['GET'])
+@format_response
+def get_nav_report_monthly_route():
+    years = request.args.get('years', request.args.get('year', '')).split(',')
+    months = request.args.get('months', request.args.get('month', '')).split(',')
+
+    years = [y.strip() for y in years if y.strip()]
+    months = [m.strip() for m in months if m.strip()]
+
+    return get_nav_report_monthly(years, months)
+
 @bp.route('/rtd', methods=['GET'])
 @format_response
 def get_rtd_report_route():
@@ -40,16 +51,6 @@ def get_open_positions_report_route():
 def get_proposals_equity_report_route():
     return get_proposals_equity_report()
 
-@bp.route('/ibkr_account_details', methods=['GET'])
-@format_response
-def get_ibkr_account_details_route():
-    return get_ibkr_account_details()
-
-@bp.route('/ibkr_account_pending_tasks', methods=['GET'])
-@format_response
-def get_ibkr_account_pending_tasks_route():
-    return get_ibkr_account_pending_tasks()
-
 @bp.route('/deposits_withdrawals', methods=['GET'])
 @format_response
 def get_deposits_withdrawals_route():
@@ -59,6 +60,11 @@ def get_deposits_withdrawals_route():
 @format_response
 def get_accounts_not_funded_route():
     return get_accounts_not_funded()
+
+@bp.route('/pending_alias', methods=['PATCH'])
+@format_response
+def update_pending_aliases_route():
+    return update_account_aliases()
 
 @bp.route('/trades', methods=['GET'])
 @format_response

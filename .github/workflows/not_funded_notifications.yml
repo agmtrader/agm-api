@@ -1,0 +1,166 @@
+name: Unfunded Account Notifications
+
+on:
+  workflow_dispatch:
+
+jobs:
+  send-notifications:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Request token and send unfunded account notifications
+        id: notifications
+        uses: Wandalen/wretry.action@v2
+        with:
+          command: |
+            # Fetch access token
+            response=$(curl -s -w "\n%{http_code}" -X POST \
+              -H "Content-Type: application/json" \
+              -d '{"token":"all"}' \
+              https://api.agmtechnology.com/token)
+
+            http_status=$(echo "$response" | tail -n1)
+            body=$(echo "$response" | sed '$d')
+
+            if [ "$http_status" != "200" ]; then
+              echo "Token request failed with status $http_status" >&2
+              exit 1
+            fi
+
+            access_token=$(echo "$body" | jq -r '.access_token')
+            if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
+              echo "access_token not found in response" >&2
+              exit 1
+            fi
+
+            # Fetch accounts not funded
+            response=$(curl -s -w "\n%{http_code}" \
+              -H "Authorization: Bearer $access_token" \
+              -X GET https://api.agmtechnology.com/reporting/accounts_not_funded)
+
+            http_status=$(echo "$response" | tail -n1)
+            accounts=$(echo "$response" | sed '$d')
+
+            if [ "$http_status" != "200" ]; then
+              echo "Accounts not funded request failed with status $http_status" >&2
+              exit 1
+            fi
+
+            if ! echo "$accounts" | jq -e 'type == "array"' > /dev/null; then
+              echo "Accounts not funded response is not a JSON array" >&2
+              exit 1
+            fi
+
+            # Fetch contacts for email/name lookup
+            response=$(curl -s -w "\n%{http_code}" \
+              -H "Authorization: Bearer $access_token" \
+              -X GET https://api.agmtechnology.com/contacts/read)
+
+            http_status=$(echo "$response" | tail -n1)
+            contacts=$(echo "$response" | sed '$d')
+
+            if [ "$http_status" != "200" ]; then
+              echo "Contacts request failed with status $http_status" >&2
+              exit 1
+            fi
+
+            if ! echo "$contacts" | jq -e 'type == "array"' > /dev/null; then
+              echo "Contacts response is not a JSON array" >&2
+              exit 1
+            fi
+
+            sent=0
+            skipped=0
+            failed=0
+            total=$(echo "$accounts" | jq 'length')
+
+            while IFS= read -r account; do
+              contact_id=$(echo "$account" | jq -r '.contact_id // empty')
+
+              if [ -z "$contact_id" ]; then
+                skipped=$((skipped + 1))
+                continue
+              fi
+
+              contact=$(echo "$contacts" | jq -c --arg id "$contact_id" 'map(select((.id | tostring) == $id))[0]')
+
+              if [ "$contact" = "null" ] || [ -z "$contact" ]; then
+                skipped=$((skipped + 1))
+                continue
+              fi
+
+              client_email=$(echo "$contact" | jq -r '.email // empty')
+              client_name=$(echo "$contact" | jq -r '.name // ""')
+
+              if [ -z "$client_email" ]; then
+                skipped=$((skipped + 1))
+                continue
+              fi
+
+              payload=$(jq -nc \
+                --arg client_name "$client_name" \
+                --arg client_email "$client_email" \
+                '{content: {client_name: $client_name}, client_email: $client_email, lang: "es"}')
+
+              email_response=$(curl -s -w "\n%{http_code}" -X POST \
+                -H "Authorization: Bearer $access_token" \
+                -H "Content-Type: application/json" \
+                -d "$payload" \
+                https://api.agmtechnology.com/email/send_email/funding_notification)
+
+              email_status=$(echo "$email_response" | tail -n1)
+
+              if [ "$email_status" = "200" ]; then
+                sent=$((sent + 1))
+                echo "Sent funding notification to $client_email"
+              else
+                failed=$((failed + 1))
+                echo "Failed sending to $client_email (status: $email_status)" >&2
+              fi
+            done < <(echo "$accounts" | jq -c '.[]')
+
+            echo "Finished unfunded notification run. Accounts: $total, Sent: $sent, Skipped: $skipped, Failed: $failed"
+
+            if [ "$failed" -gt 0 ]; then
+              exit 1
+            fi
+
+            echo "http_status=200" >> "$GITHUB_OUTPUT"
+          attempt_limit: 1 # 1 original + 1 retry (10 minutos)
+          attempt_delay: 600000 # 10-minute pause (ms)
+
+  notify-success:
+    needs: send-notifications
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send success email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "✅ Unfunded Account Notifications SUCCEEDED"
+          to: cr@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: |
+            Unfunded account notifications completed successfully.
+
+  notify-failure:
+    needs: send-notifications
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send failure email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "🚨 Unfunded Account Notifications FAILED"
+          to: cr@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: |
+            Unfunded account notifications failed. Review workflow logs for details.
