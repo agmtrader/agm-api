@@ -1,3 +1,3 @@
-from src.components.entities.accounts import update_pending_aliases
+from src.components.tools.reporting import update_account_aliases
 
-update_pending_aliases()
+update_account_aliases()
