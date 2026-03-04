@@ -266,21 +266,26 @@ def get_deposits_withdrawals():
     return deposits_withdrawals
 
 @handle_exception
-def get_accounts_not_funded():
+def send_emails_to_unfunded_accounts():
     """
     Cross-references the NAV report with the accounts table to find
     accounts that have zero NAV (not funded).
     """
     from src.components.entities.accounts import read_accounts
+    from src.components.entities.contacts import read_contacts
+    from src.components.tools.email import Gmail
+
+    email = Gmail()
 
     nav_data = get_nav_report()
     accounts_data = read_accounts({})
     clients_data = get_clients_report()
+    contacts_data = read_contacts({})
     
     nav_df = pd.DataFrame(nav_data)
     accounts_df = pd.DataFrame(accounts_data)
     clients_df = pd.DataFrame(clients_data)
-
+    contacts_df = pd.DataFrame(contacts_data)
 
     no_nav_df = nav_df[nav_df['Total'] == 0]
 
@@ -304,8 +309,34 @@ def get_accounts_not_funded():
     # Merge Date Opened into total_accounts
     total_accounts = total_accounts.merge(clients_df[['Account ID', 'Date Opened']], left_on='ibkr_account_number', right_on='Account ID', how='left')
 
-    return total_accounts.to_dict(orient='records')
+    today = pd.Timestamp.now().normalize()
+    total_accounts['business_days_since_date_opened'] = total_accounts['Date Opened'].apply(
+        lambda date_opened: pd.NA
+        if pd.isna(date_opened)
+        else max(0, len(pd.bdate_range(start=date_opened.normalize(), end=today)) - 1)
+    )
+    total_accounts['notice_number'] = total_accounts['business_days_since_date_opened'].apply(
+        lambda business_days: pd.NA
+        if pd.isna(business_days)
+        else max(1, int((business_days + 4) // 5))
+    )
 
+    contacts_to_email = total_accounts.merge(contacts_df, left_on='contact_id', right_on='id', how='left')
+    contacts_to_email = contacts_to_email[['ibkr_account_number', 'email', 'name', 'business_days_since_date_opened', 'notice_number']]
+    print(contacts_to_email)
+
+    for contact in contacts_to_email.to_dict(orient='records'):
+        email.send_funding_notification_email(
+            content={},
+            client_email=contact['email'],
+            lang='es',
+            cc='',
+            days_since_opened=contact['business_days_since_date_opened'],
+            notice_number=contact['notice_number']
+        )
+
+    return contacts_to_email.to_dict(orient='records')
+    
 @handle_exception
 def update_account_aliases() -> dict:
     """Fetch clients report, filter accounts without alias, update each alias, and return list."""

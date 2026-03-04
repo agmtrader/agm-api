@@ -106,10 +106,25 @@ class Gmail(GmailConnector):
         )
 
     @handle_exception
-    def send_funding_notification_email(self, content, client_email, lang="es", cc=""):
+    def send_funding_notification_email(self, content, client_email, lang="es", cc="", days_since_opened=None, notice_number=None):
         """Send funding notification email."""
+        calculated_notice_number = 1
+        if notice_number is not None:
+            try:
+                calculated_notice_number = max(1, int(notice_number))
+            except (TypeError, ValueError):
+                calculated_notice_number = 1
+        elif days_since_opened is not None:
+            try:
+                # One notice per business week (5 business days), rounded up.
+                calculated_notice_number = max(1, int((int(days_since_opened) + 4) // 5))
+            except (TypeError, ValueError):
+                calculated_notice_number = 1
+
         subject = (
-            "Primer Aviso: Recordatorio de Fondeo" if lang == "es" else "First Notice: Funding Reminder"
+            f"Recordatorio de Fondeo"
+            if lang == "es"
+            else f"Funding Reminder"
         )
         email_template = f"funding_notification_{lang}"
         return self.send_email(

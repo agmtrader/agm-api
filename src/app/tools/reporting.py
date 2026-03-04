@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.tools.reporting import get_clients_report, get_nav_report, get_nav_report_monthly, get_rtd_report, get_proposals_equity_report, get_open_positions_report, get_deposits_withdrawals, get_accounts_not_funded, get_trades_report, update_account_aliases
+from src.components.tools.reporting import get_clients_report, get_nav_report, get_nav_report_monthly, get_rtd_report, get_proposals_equity_report, get_open_positions_report, get_deposits_withdrawals, send_emails_to_unfunded_accounts, get_trades_report, update_account_aliases
 from src.components.tools.reporting import run_clients_pipeline, run_market_data_pipeline
 from src.utils.response import format_response
 
@@ -56,10 +56,10 @@ def get_proposals_equity_report_route():
 def get_deposits_withdrawals_route():
     return get_deposits_withdrawals()
 
-@bp.route('/accounts_not_funded', methods=['GET'])
+@bp.route('/send_emails_to_unfunded_accounts', methods=['GET'])
 @format_response
-def get_accounts_not_funded_route():
-    return get_accounts_not_funded()
+def send_emails_to_unfunded_accounts_route():
+    return send_emails_to_unfunded_accounts()
 
 @bp.route('/pending_alias', methods=['PATCH'])
 @format_response
