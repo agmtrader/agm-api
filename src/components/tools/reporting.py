@@ -508,6 +508,16 @@ def get_trades_report(years: list, months: list):
     combined_trades_df = combined_trades_df.fillna('')
     return combined_trades_df.to_dict(orient='records')
 
+@handle_exception
+def get_ibkr_details():
+    """
+    Get the IBKR details report.
+    
+    :return: Response object with IBKR details report or error message
+    """
+    ibkr_details = Drive.download_file(file_id='10RO_AFG3W5Sv-9CnQ2qmGhikco6cmMCH', parse=True)
+    return ibkr_details
+
 """
 ETL PIPELINE
 """

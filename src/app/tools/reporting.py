@@ -1,6 +1,6 @@
 from flask import Blueprint, request
 from src.components.tools.reporting import get_clients_report, get_nav_report, get_nav_report_monthly, get_rtd_report, get_proposals_equity_report, get_open_positions_report, get_deposits_withdrawals, send_emails_to_unfunded_accounts, get_trades_report, update_account_aliases
-from src.components.tools.reporting import run_clients_pipeline, run_market_data_pipeline
+from src.components.tools.reporting import run_clients_pipeline, run_market_data_pipeline, get_ibkr_details
 from src.utils.response import format_response
 
 bp = Blueprint('reporting', __name__)
@@ -77,3 +77,8 @@ def get_trades_report_route():
     months = [m.strip() for m in months if m.strip()]
     
     return get_trades_report(years, months)
+
+@bp.route('/ibkr_details', methods=['GET'])
+@format_response
+def get_ibkr_details_route():
+    return get_ibkr_details()
