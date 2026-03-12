@@ -54,7 +54,7 @@ def _load_investment_proposal_context() -> dict:
 
     # Extract all unique bonds
     bonds_df = open_positions_df[open_positions_df['AssetClass'] == 'BOND']
-    bonds_df_no_duplicates = bonds_df.drop_duplicates(subset=['Symbol_y'])
+    bonds_df_no_duplicates = bonds_df.drop_duplicates(subset=['Symbol'])
     logger.announcement(f'Total bonds: {len(bonds_df)}')
     logger.announcement(f'Total unique bonds: {len(bonds_df_no_duplicates)}')
 

@@ -446,7 +446,10 @@ def get_ibkr_details():
     
     :return: Response object with IBKR details report or error message
     """
-    ibkr_details = Drive.download_file(file_id='1q5R4naAvPcFAnPmPNVsPlrEKG52jJO2x', parse=True)
+    ibkr_account_details_root_folder_id = '1YCOsFGAb3fZvKbFDBGK6wpjT1S-NIK98'
+    files = Drive.get_files_in_folder(ibkr_account_details_root_folder_id)
+    most_recent_file = get_most_recent_file(files)
+    ibkr_details = Drive.download_file(file_id=most_recent_file['id'], parse=True)
     return ibkr_details
 
 @handle_exception
@@ -645,6 +648,7 @@ def extract_clients_data() -> dict:
     
     extract_flex_queries()
     extract_ofac_sdn_list()
+    extract_account_details_backup()
 
     logger.announcement('Information successfully extracted for reports.', type='success')
     return {'status': 'success'}
@@ -968,6 +972,7 @@ def extract_etf_snapshot():
     pass
 
 def extract_ofac_sdn_list():
+    logger.announcement('Extracting OFAC SDN list.', type='info')
     sdn_url = 'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV'
     consolidated_url = 'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/CONS_PRIM.CSV'
 
@@ -984,6 +989,84 @@ def extract_ofac_sdn_list():
             df.at[index, 'name'] = row['name'].split(',')[1] + ' ' + row['name'].split(',')[0]
     
     Drive.upload_file(file_name='ofac_sdn_list.csv', mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=batch_folder_id)
+    logger.announcement('OFAC SDN list extracted and uploaded to batch folder.', type='success')
+
+def _append_missing_account_details(details: list) -> list:
+    
+    from src.components.entities.accounts import read_accounts, read_account_details
+    accounts = read_accounts({})
+    detail_account_ids = {
+        detail.get('account', {}).get('accountId')
+        for detail in details
+        if isinstance(detail, dict) and isinstance(detail.get('account'), dict) and detail.get('account', {}).get('accountId')
+    }
+
+    missing_accounts = [
+        account for account in accounts
+        if account.get('ibkr_account_number') and account.get('ibkr_account_number') not in detail_account_ids
+    ]
+
+    logger.info(f'Found {len(missing_accounts)} accounts missing account details.')
+
+    for account in missing_accounts:
+        account_id = account.get('ibkr_account_number')
+        master_account = account.get('master_account')
+
+        if master_account is None:
+            logger.warning(f'Skipping account {account_id}: missing master_account.')
+            continue
+
+        try:
+            new_details = read_account_details(account_id=account_id, master_account=master_account)
+            if new_details:
+                details.append(new_details)
+        except Exception as e:
+            logger.error(f'Error fetching details for account {account_id}: {e}')
+            continue
+
+    return details
+
+@handle_exception
+def extract_account_details_backup():
+    logger.announcement('Extracting account details backup.', type='info')
+    account_details_config = next((config for config in report_configs if config['name'] == 'account_details'), None)
+    if account_details_config is None:
+        logger.warning('Account details config not found. Skipping account details extraction.')
+        return {'status': 'skipped'}
+
+    backup_folder_id = account_details_config.get('backup_folder_id')
+    files = Drive.get_files_in_folder(backup_folder_id)
+    account_detail_files = [f for f in files if 'account_details' in f.get('name', '')]
+    candidate_files = account_detail_files if len(account_detail_files) > 0 else files
+
+    if len(candidate_files) == 0:
+        raise Exception('No account details files found in backup folder.')
+
+    most_recent_file = get_most_recent_file(candidate_files)
+
+    raw_details = Drive.download_file(file_id=most_recent_file['id'], parse=True)
+    details = raw_details if isinstance(raw_details, list) else []
+    enriched_details = _append_missing_account_details(details)
+    file_name = account_details_config['backup_name']
+
+    try:
+        existing_file = Drive.get_file_info(parent_id=backup_folder_id, file_name=file_name)
+        Drive.delete_file(file_id=existing_file['id'])
+    except:
+        pass
+
+    json_bytes = json.dumps(enriched_details, default=str).encode('utf-8')
+    json_base64 = base64.b64encode(json_bytes).decode('utf-8')
+    Drive.upload_file(
+        file_name=file_name,
+        mime_type='application/json',
+        file_data=json_base64,
+        parent_folder_id=backup_folder_id
+    )
+
+    logger.announcement('Account details backup extracted, enriched, and uploaded.', type='success')
+
+    return {'status': 'success', 'processed_file': most_recent_file.get('name'), 'saved_file': file_name}
 
 def rename_files_in_batch(pipeline=None):
     """
@@ -1454,41 +1537,7 @@ def process_account_details(df):
     :param df: Input dataframe
     :return: Processed dataframe
     """
-    from src.components.entities.accounts import read_accounts, read_account_details
-
-    details = df.to_dict(orient='records')
-    accounts = read_accounts({})
-
-    detail_account_ids = {
-        detail.get('account', {}).get('accountId')
-        for detail in details
-        if isinstance(detail, dict) and isinstance(detail.get('account'), dict) and detail.get('account', {}).get('accountId')
-    }
-
-    missing_accounts = [
-        account for account in accounts
-        if account.get('ibkr_account_number') and account.get('ibkr_account_number') not in detail_account_ids
-    ]
-
-    logger.info(f'Found {len(missing_accounts)} accounts missing account details.')
-
-    for account in missing_accounts:
-        account_id = account.get('ibkr_account_number')
-        master_account = account.get('master_account')
-
-        if master_account is None:
-            logger.warning(f'Skipping account {account_id}: missing master_account.')
-            continue
-
-        try:
-            new_details = read_account_details(account_id=account_id, master_account=master_account)
-            if new_details:
-                details.append(new_details)
-        except Exception as e:
-            logger.error(f'Error fetching details for account {account_id}: {e}')
-            continue
-
-    return details
+    return df
 
 def get_finance_data():
     """
