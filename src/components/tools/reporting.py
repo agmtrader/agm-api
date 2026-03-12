@@ -12,6 +12,7 @@ import os
 import requests
 import sys
 import re
+import json
 
 from src.utils.connectors.drive import GoogleDrive
 from src.utils.connectors.flex_query_api import getFlexQuery
@@ -1079,8 +1080,30 @@ def process_report(config):
 
         # Apply custom processing if specified
         if 'transform_func' in config.keys() and config['transform_func'] is not None:
-            file_df = config['transform_func'](file_df)
-            file_dict = file_df.to_dict(orient='records')
+            transformed_content = config['transform_func'](file_df)
+            output_mime_type = 'text/csv'
+
+            # Default behavior remains CSV. For .json outputs, store as JSON.
+            if output_filename.lower().endswith('.json'):
+                output_mime_type = 'application/json'
+                if isinstance(transformed_content, pd.DataFrame):
+                    json_content = transformed_content.to_dict(orient='records')
+                else:
+                    json_content = transformed_content
+
+                try:
+                    json_bytes = json.dumps(json_content, default=str).encode('utf-8')
+                except TypeError as json_error:
+                    logger.error(f'Error serializing JSON output for {output_filename}: {json_error}')
+                    raise
+
+                file_payload = base64.b64encode(json_bytes).decode('utf-8')
+            else:
+                if isinstance(transformed_content, pd.DataFrame):
+                    csv_content = transformed_content.to_dict(orient='records')
+                else:
+                    csv_content = pd.DataFrame(transformed_content).to_dict(orient='records')
+                file_payload = csv_content
             
             # Check if file exists in resources folder and delete it if it does
             try:
@@ -1089,7 +1112,7 @@ def process_report(config):
             except:
                 pass
 
-            Drive.upload_file(file_name=output_filename, mime_type='text/csv', file_data=file_dict, parent_folder_id=resources_folder_id)
+            Drive.upload_file(file_name=output_filename, mime_type=output_mime_type, file_data=file_payload, parent_folder_id=resources_folder_id)
     except:
         logger.error(f'Error processing {config} file.')
         raise Exception(f'Error processing {config} file.')
@@ -1424,6 +1447,49 @@ def process_deposits_withdrawals(df):
     """
     return df
 
+def process_account_details(df):
+    """
+    Process the account details file.
+    
+    :param df: Input dataframe
+    :return: Processed dataframe
+    """
+    from src.components.entities.accounts import read_accounts, read_account_details
+
+    details = df.to_dict(orient='records')
+    accounts = read_accounts({})
+
+    detail_account_ids = {
+        detail.get('account', {}).get('accountId')
+        for detail in details
+        if isinstance(detail, dict) and isinstance(detail.get('account'), dict) and detail.get('account', {}).get('accountId')
+    }
+
+    missing_accounts = [
+        account for account in accounts
+        if account.get('ibkr_account_number') and account.get('ibkr_account_number') not in detail_account_ids
+    ]
+
+    logger.info(f'Found {len(missing_accounts)} accounts missing account details.')
+
+    for account in missing_accounts:
+        account_id = account.get('ibkr_account_number')
+        master_account = account.get('master_account')
+
+        if master_account is None:
+            logger.warning(f'Skipping account {account_id}: missing master_account.')
+            continue
+
+        try:
+            new_details = read_account_details(account_id=account_id, master_account=master_account)
+            if new_details:
+                details.append(new_details)
+        except Exception as e:
+            logger.error(f'Error fetching details for account {account_id}: {e}')
+            continue
+
+    return details
+
 def get_finance_data():
     """
     Get finance data from the finance folder.
@@ -1546,6 +1612,15 @@ report_configs = [
         'backup_name': 'ofac_sdn_list' + '_' + today_date + '.csv',
         'transform_func': process_ofac_sdn_list,
         'output_filename': 'ofac_sdn_list.csv'
+    },
+    {
+        'name': 'account_details',
+        'pipeline': 'clients',
+        'backup_folder_id': '',
+        'flex': False,
+        'backup_name': 'account_details' + '_' + yesterday_date + '.json',
+        'transform_func': process_account_details,
+        'output_filename': 'account_details' + '_' + today_date + '.json'
     }
 ]
 
