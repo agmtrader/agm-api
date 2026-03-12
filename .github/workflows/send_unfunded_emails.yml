@@ -1,0 +1,47 @@
+name: Send Unfunded Emails
+
+on:
+  schedule:
+    - cron: '35 13 * * 1'   # Every Monday at 13:35 PM UTC (7:35 AM CST)
+  workflow_dispatch:
+
+jobs:
+  send-unfunded-emails:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request token and call send unfunded emails endpoint
+        shell: bash
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"token":"all"}' \
+            https://api.agmtechnology.com/token)
+
+          http_status=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+
+          if [ "$http_status" != "200" ]; then
+            echo "Token request failed with status $http_status" >&2
+            exit 1
+          fi
+
+          access_token=$(echo "$body" | jq -r '.access_token')
+          if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
+            echo "access_token not found in response" >&2
+            exit 1
+          fi
+
+          response=$(curl -s -w "\n%{http_code}" -X GET \
+            -H "Authorization: Bearer $access_token" \
+            https://api.agmtechnology.com/reporting/send_unfunded_emails)
+
+          http_status=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+
+          if [ "$http_status" != "200" ]; then
+            echo "send_unfunded_emails failed with status $http_status" >&2
+            echo "$body"
+            exit 1
+          fi
+
+          echo "$body"

@@ -17,7 +17,6 @@ from src.utils.connectors.drive import GoogleDrive
 from src.utils.connectors.flex_query_api import getFlexQuery
 from src.utils.exception import handle_exception
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
-import difflib
 from io import StringIO
 
 logger.announcement('Initializing Reporting Service', type='info')
@@ -84,6 +83,9 @@ first_date = cst_time.replace(day=1).strftime('%Y%m%d')
 
 logger.announcement('Initialized Reporting Service', type='success')
 
+"""
+TODAY
+"""
 @handle_exception
 def get_clients_report():
     """
@@ -113,97 +115,6 @@ def get_nav_report():
         raise Exception('Nav file not found or multiple files found')
     nav = Drive.download_file(file_id=nav_file[0]['id'], parse=True)
     return nav
-
-@handle_exception
-def get_nav_report_monthly(years: list, months: list):
-    """
-    Extract NAV information grouped by year and month,
-    keeping only the latest file available for each month.
-
-    :param years: List of years to include
-    :param months: List of months to include (as strings, e.g., '01', '02')
-    :return: List of NAV records
-    """
-    nav_root_folder_id = '1WgYA-Q9mnPYrbbLfYLuJZwUIWBYjiD4c'
-
-    years = [str(y).strip() for y in years if str(y).strip()]
-    months = [str(m).strip().zfill(2) for m in months if str(m).strip()]
-
-    # If no months are provided, include all months in each requested year.
-    if not months:
-        months = [str(m).zfill(2) for m in range(1, 13)]
-
-    try:
-        root_contents = Drive.get_files_in_folder(nav_root_folder_id)
-    except Exception as e:
-        logger.error(f'Could not fetch contents of nav root folder: {nav_root_folder_id}: {e}')
-        return []
-
-    year_folders = {
-        f['name']: f['id']
-        for f in root_contents
-        if f['mimeType'] == 'application/vnd.google-apps.folder'
-    }
-
-    all_nav_dfs = []
-
-    for year in years:
-        if year not in year_folders:
-            logger.warning(f'Year folder {year} not found in nav root folder.')
-            continue
-
-        year_folder_id = year_folders[year]
-
-        try:
-            year_files = Drive.get_files_in_folder(year_folder_id)
-        except Exception as e:
-            logger.error(f'Could not fetch contents for nav year folder {year}: {e}')
-            continue
-
-        latest_files_for_months = {}
-
-        for f in year_files:
-            if f['mimeType'] == 'application/vnd.google-apps.folder':
-                continue
-
-            name = f['name']
-            date_matches = re.findall(r'(\d{8})', name)
-            if date_matches:
-                # Use the last 8-digit date found in the filename as the period end date.
-                end_date_str = date_matches[-1]
-            else:
-                # Fallback to Drive metadata if filename does not contain a date.
-                end_date_str = datetime.fromisoformat(f['modifiedTime'].replace('Z', '+00:00')).strftime('%Y%m%d')
-
-            file_year = end_date_str[:4]
-            file_month = end_date_str[4:6]
-
-            if file_year == year and file_month in months:
-                if file_month not in latest_files_for_months or end_date_str > latest_files_for_months[file_month]['end_date']:
-                    latest_files_for_months[file_month] = {
-                        'id': f['id'],
-                        'end_date': end_date_str
-                    }
-
-        for month, info in latest_files_for_months.items():
-            try:
-                nav_data = Drive.download_file(file_id=info['id'], parse=True)
-                if nav_data:
-                    df = pd.DataFrame(nav_data)
-                    df['Year'] = year
-                    df['Month'] = month
-                    df['ReportDate'] = info['end_date']
-                    all_nav_dfs.append(df)
-            except Exception as e:
-                logger.error(f'Error downloading/parsing nav file for {year}-{month}: {e}')
-
-    if not all_nav_dfs:
-        return []
-
-    combined_nav_df = pd.concat(all_nav_dfs, ignore_index=True)
-    combined_nav_df = combined_nav_df.fillna('')
-
-    return combined_nav_df.to_dict(orient='records')
 
 @handle_exception
 def get_rtd_report():
@@ -236,16 +147,6 @@ def get_open_positions_report():
     return open_positions
 
 @handle_exception
-def get_proposals_equity_report():
-    """
-    Get the proposals equity report.
-    
-    :return: Response object with proposals equity report or error message
-    """
-    proposals_equity = Drive.export_file(file_id='1AqpIE7LRV40J-Aew5fA-P6gEfji3Yb-Rp5DohI9BQFY', mime_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', parse=True)
-    return proposals_equity
-
-@handle_exception
 def get_ofac_sdn_list():
     files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
     ofac_sdn_list_file = [ofac_sdn_list for ofac_sdn_list in files_in_resources_folder if 'ofac_sdn_list' in ofac_sdn_list['name']]
@@ -265,111 +166,9 @@ def get_deposits_withdrawals():
     deposits_withdrawals = Drive.download_file(file_id=deposits_withdrawals_file[0]['id'], parse=True)
     return deposits_withdrawals
 
-@handle_exception
-def send_emails_to_unfunded_accounts():
-    """
-    Cross-references the NAV report with the accounts table to find
-    accounts that have zero NAV (not funded).
-    """
-    from src.components.entities.accounts import read_accounts
-    from src.components.entities.contacts import read_contacts
-    from src.components.tools.email import Gmail
-
-    email = Gmail()
-
-    nav_data = get_nav_report()
-    accounts_data = read_accounts({})
-    clients_data = get_clients_report()
-    contacts_data = read_contacts({})
-    
-    nav_df = pd.DataFrame(nav_data)
-    accounts_df = pd.DataFrame(accounts_data)
-    clients_df = pd.DataFrame(clients_data)
-    contacts_df = pd.DataFrame(contacts_data)
-
-    no_nav_df = nav_df[nav_df['Total'] == 0]
-
-    # Save all accounts that have no NAV or dont even appear in the NAV report
-    accounts_not_in_nav = accounts_df[~accounts_df['ibkr_account_number'].isin(nav_df['ClientAccountID'])]
-    accounts_with_no_nav = accounts_df[accounts_df['ibkr_account_number'].isin(no_nav_df['ClientAccountID'])]
-    
-    total_accounts = pd.concat([accounts_not_in_nav, accounts_with_no_nav])
-
-    # Filter for only accounts that have Status Open in clients
-    clients_with_open_status = clients_df[clients_df['Status'] == 'Open']
-    total_accounts = total_accounts[total_accounts['ibkr_account_number'].isin(clients_with_open_status['Account ID'])]
-
-    # Filter for accounts opened in the last 3 months (approx 66 business days)
-    clients_df['Date Opened'] = pd.to_datetime(clients_df['Date Opened'], errors='coerce')
-    cutoff_date = pd.Timestamp.now().normalize() - BDay(66)
-    recent_clients = clients_df[clients_df['Date Opened'] >= cutoff_date]
-    
-    total_accounts = total_accounts[total_accounts['ibkr_account_number'].isin(recent_clients['Account ID'])]
-
-    # Merge Date Opened into total_accounts
-    total_accounts = total_accounts.merge(clients_df[['Account ID', 'Date Opened']], left_on='ibkr_account_number', right_on='Account ID', how='left')
-
-    today = pd.Timestamp.now().normalize()
-    total_accounts['business_days_since_date_opened'] = total_accounts['Date Opened'].apply(
-        lambda date_opened: pd.NA
-        if pd.isna(date_opened)
-        else max(0, len(pd.bdate_range(start=date_opened.normalize(), end=today)) - 1)
-    )
-    total_accounts['notice_number'] = total_accounts['business_days_since_date_opened'].apply(
-        lambda business_days: pd.NA
-        if pd.isna(business_days)
-        else max(1, int((business_days + 4) // 5))
-    )
-
-    contacts_to_email = total_accounts.merge(contacts_df, left_on='contact_id', right_on='id', how='left')
-    contacts_to_email = contacts_to_email[['ibkr_account_number', 'email', 'name', 'business_days_since_date_opened', 'notice_number']]
-    print(contacts_to_email)
-
-    for contact in contacts_to_email.to_dict(orient='records'):
-        email.send_funding_notification_email(
-            content={},
-            client_email=contact['email'],
-            lang='es',
-            cc='',
-            days_since_opened=contact['business_days_since_date_opened'],
-            notice_number=contact['notice_number']
-        )
-
-    return contacts_to_email.to_dict(orient='records')
-    
-@handle_exception
-def update_account_aliases() -> dict:
-    """Fetch clients report, filter accounts without alias, update each alias, and return list."""
-    from src.components.tools.reporting import get_clients_report
-    from src.components.entities.accounts import update_account_alias
-    clients = get_clients_report()
-    pending_accounts = [c for c in clients if (c.get('Alias') in (None, '')) and c.get('Status') not in ('Rejected', 'Closed', 'Funded Pending')]
-    updated_accounts = []
-    for account in pending_accounts:
-        account_id = account.get('Account ID')
-        title = account.get('Title')
-        old_alias = account.get('Alias')
-        master_account = 'ad' if account.get('Master Account') == 'F10740574' else 'br'
-        if account_id == 'U23431519':
-            logger.info(f"old_alias: {old_alias}, {type(old_alias)}, title: {title}, {type(title)}, master_account: {master_account}")
-        if account_id and title is not None:
-            new_alias = f"{account_id} {title}"
-            try:
-                # Reuse existing helper to update alias via IBKR API
-                update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
-                updated_accounts.append({
-                    'account_id': account_id,
-                    'old_alias': old_alias,
-                    'new_alias': new_alias
-                })
-                logger.success(f"Updated alias for {account_id}: {old_alias} -> {new_alias}")
-            except Exception as e:
-                logger.error(f"Failed to update alias for {account_id}: {e}")
-    return {
-        'updated': len(updated_accounts),
-        'accounts': updated_accounts
-    }
-
+"""
+BACKUPS
+"""
 @handle_exception
 def get_trades_report(years: list, months: list):
     """
@@ -509,14 +308,285 @@ def get_trades_report(years: list, months: list):
     return combined_trades_df.to_dict(orient='records')
 
 @handle_exception
+def get_nav_report_monthly(years: list, months: list):
+    """
+    Extract NAV information grouped by year and month,
+    keeping only the latest file available for each month.
+
+    :param years: List of years to include
+    :param months: List of months to include (as strings, e.g., '01', '02')
+    :return: List of NAV records
+    """
+    nav_root_folder_id = '1WgYA-Q9mnPYrbbLfYLuJZwUIWBYjiD4c'
+
+    years = [str(y).strip() for y in years if str(y).strip()]
+    months = [str(m).strip().zfill(2) for m in months if str(m).strip()]
+
+    # If no months are provided, include all months in each requested year.
+    if not months:
+        months = [str(m).zfill(2) for m in range(1, 13)]
+
+    try:
+        root_contents = Drive.get_files_in_folder(nav_root_folder_id)
+    except Exception as e:
+        logger.error(f'Could not fetch contents of nav root folder: {nav_root_folder_id}: {e}')
+        return []
+
+    all_nav_dfs = []
+    files_in_root = [f for f in root_contents if f['mimeType'] != 'application/vnd.google-apps.folder']
+
+    # NAV files are expected at the root with names like 734782_yyyymmdd.csv.
+    if files_in_root:
+        latest_files_for_period = {}
+
+        for f in files_in_root:
+            name = f['name']
+
+            date_match = re.search(r'_(\d{8})(?:\D|$)', name)
+            if date_match:
+                end_date_str = date_match.group(1)
+            else:
+                date_matches = re.findall(r'(\d{8})', name)
+                if date_matches:
+                    end_date_str = date_matches[-1]
+                else:
+                    end_date_str = datetime.fromisoformat(f['modifiedTime'].replace('Z', '+00:00')).strftime('%Y%m%d')
+
+            file_year = end_date_str[:4]
+            file_month = end_date_str[4:6]
+
+            if file_year in years and file_month in months:
+                key = (file_year, file_month)
+                if key not in latest_files_for_period or end_date_str > latest_files_for_period[key]['end_date']:
+                    latest_files_for_period[key] = {
+                        'id': f['id'],
+                        'end_date': end_date_str
+                    }
+
+        for (year, month), info in latest_files_for_period.items():
+            try:
+                nav_data = Drive.download_file(file_id=info['id'], parse=True)
+                if nav_data:
+                    df = pd.DataFrame(nav_data)
+                    df['Year'] = year
+                    df['Month'] = month
+                    df['ReportDate'] = info['end_date']
+                    all_nav_dfs.append(df)
+            except Exception as e:
+                logger.error(f'Error downloading/parsing nav file for {year}-{month}: {e}')
+    else:
+        # Fallback for structures that keep NAV files under year subfolders.
+        year_folders = {
+            f['name']: f['id']
+            for f in root_contents
+            if f['mimeType'] == 'application/vnd.google-apps.folder'
+        }
+
+        for year in years:
+            if year not in year_folders:
+                logger.warning(f'Year folder {year} not found in nav root folder.')
+                continue
+
+            year_folder_id = year_folders[year]
+
+            try:
+                year_files = Drive.get_files_in_folder(year_folder_id)
+            except Exception as e:
+                logger.error(f'Could not fetch contents for nav year folder {year}: {e}')
+                continue
+
+            latest_files_for_months = {}
+
+            for f in year_files:
+                if f['mimeType'] == 'application/vnd.google-apps.folder':
+                    continue
+
+                name = f['name']
+                date_matches = re.findall(r'(\d{8})', name)
+                if date_matches:
+                    end_date_str = date_matches[-1]
+                else:
+                    end_date_str = datetime.fromisoformat(f['modifiedTime'].replace('Z', '+00:00')).strftime('%Y%m%d')
+
+                file_year = end_date_str[:4]
+                file_month = end_date_str[4:6]
+
+                if file_year == year and file_month in months:
+                    if file_month not in latest_files_for_months or end_date_str > latest_files_for_months[file_month]['end_date']:
+                        latest_files_for_months[file_month] = {
+                            'id': f['id'],
+                            'end_date': end_date_str
+                        }
+
+            for month, info in latest_files_for_months.items():
+                try:
+                    nav_data = Drive.download_file(file_id=info['id'], parse=True)
+                    if nav_data:
+                        df = pd.DataFrame(nav_data)
+                        df['Year'] = year
+                        df['Month'] = month
+                        df['ReportDate'] = info['end_date']
+                        all_nav_dfs.append(df)
+                except Exception as e:
+                    logger.error(f'Error downloading/parsing nav file for {year}-{month}: {e}')
+
+    if not all_nav_dfs:
+        return []
+
+    combined_nav_df = pd.concat(all_nav_dfs, ignore_index=True)
+    combined_nav_df = combined_nav_df.fillna('')
+
+    return combined_nav_df.to_dict(orient='records')
+
+@handle_exception
 def get_ibkr_details():
     """
     Get the IBKR details report.
     
     :return: Response object with IBKR details report or error message
     """
-    ibkr_details = Drive.download_file(file_id='10RO_AFG3W5Sv-9CnQ2qmGhikco6cmMCH', parse=True)
+    ibkr_details = Drive.download_file(file_id='1q5R4naAvPcFAnPmPNVsPlrEKG52jJO2x', parse=True)
     return ibkr_details
+
+@handle_exception
+def get_proposals_equity_report():
+    """
+    Get the proposals equity report.
+    
+    :return: Response object with proposals equity report or error message
+    """
+    proposals_equity = Drive.export_file(file_id='1AqpIE7LRV40J-Aew5fA-P6gEfji3Yb-Rp5DohI9BQFY', mime_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', parse=True)
+    return proposals_equity
+
+"""
+Actions
+"""
+@handle_exception
+def send_unfunded_emails():
+    """
+    Cross-references the NAV report with the accounts table to find
+    accounts that have zero NAV (not funded).
+    """
+    from src.components.entities.accounts import read_accounts
+    from src.components.entities.contacts import read_contacts
+    from src.components.entities.advisors import read_advisors
+    from src.components.tools.email import Gmail
+
+    email = Gmail()
+
+    # Base data
+    nav_data = get_nav_report()
+    accounts_data = read_accounts({})
+
+    # Extract clients report for account status and date opened information
+    clients_data = get_clients_report()
+
+    # Extract contacts and advisors data to get email addresses
+    contacts_data = read_contacts({})
+    advisors_data = read_advisors({})
+    
+    nav_df = pd.DataFrame(nav_data)
+    accounts_df = pd.DataFrame(accounts_data)
+    clients_df = pd.DataFrame(clients_data)
+    contacts_df = pd.DataFrame(contacts_data)
+    advisors_df = pd.DataFrame(advisors_data)
+
+    no_nav_df = nav_df[nav_df['Total'] == 0]
+
+    # Save all accounts that have no NAV or dont even appear in the NAV report
+    accounts_not_in_nav = accounts_df[~accounts_df['ibkr_account_number'].isin(nav_df['ClientAccountID'])]
+    accounts_with_no_nav = accounts_df[accounts_df['ibkr_account_number'].isin(no_nav_df['ClientAccountID'])]
+    
+    total_accounts = pd.concat([accounts_not_in_nav, accounts_with_no_nav])
+
+    # Filter for only accounts that have Status Open in clients
+    clients_with_open_status = clients_df[clients_df['Status'] == 'Open']
+    total_accounts = total_accounts[total_accounts['ibkr_account_number'].isin(clients_with_open_status['Account ID'])]
+
+    # Filter for accounts opened in the last 3 months (approx 66 business days)
+    clients_df['Date Opened'] = pd.to_datetime(clients_df['Date Opened'], errors='coerce')
+    cutoff_date = pd.Timestamp.now().normalize() - BDay(66)
+    recent_clients = clients_df[clients_df['Date Opened'] >= cutoff_date]
+    
+    total_accounts = total_accounts[total_accounts['ibkr_account_number'].isin(recent_clients['Account ID'])]
+
+    # Merge Date Opened into total_accounts
+    total_accounts = total_accounts.merge(clients_df[['Account ID', 'Date Opened']], left_on='ibkr_account_number', right_on='Account ID', how='left')
+
+    today = pd.Timestamp.now().normalize()
+    total_accounts['business_days_since_date_opened'] = total_accounts['Date Opened'].apply(
+        lambda date_opened: pd.NA
+        if pd.isna(date_opened)
+        else max(0, len(pd.bdate_range(start=date_opened.normalize(), end=today)) - 1)
+    )
+    total_accounts['notice_number'] = total_accounts['business_days_since_date_opened'].apply(
+        lambda business_days: pd.NA
+        if pd.isna(business_days)
+        else max(1, int((business_days + 4) // 5))
+    )
+
+    advisor_emails_df = advisors_df[['code', 'contact_id']].merge(
+        contacts_df[['id', 'email']],
+        left_on='contact_id',
+        right_on='id',
+        how='left'
+    ).rename(columns={'email': 'advisor_email'})
+
+    total_accounts = total_accounts.merge(
+        advisor_emails_df[['code', 'advisor_email']],
+        left_on='advisor_code',
+        right_on='code',
+        how='left'
+    )
+
+    contacts_to_email = total_accounts.merge(contacts_df, left_on='contact_id', right_on='id', how='left')
+    contacts_to_email = contacts_to_email[['ibkr_account_number', 'email', 'name', 'advisor_email', 'business_days_since_date_opened', 'notice_number']]
+
+    for contact in contacts_to_email.to_dict(orient='records')[1:]:
+        advisor_email = contact['advisor_email'] if contact['advisor_email'] is not None else ''
+        email.send_funding_notification_email(
+            content={},
+            client_email=contact['email'],
+            lang='es',
+            cc=advisor_email,
+            days_since_opened=contact['business_days_since_date_opened'],
+            notice_number=contact['notice_number']
+        )
+    
+    return contacts_to_email.to_dict(orient='records')
+    
+@handle_exception
+def update_account_aliases() -> dict:
+    """Fetch clients report, filter accounts without alias, update each alias, and return list."""
+    from src.components.tools.reporting import get_clients_report
+    from src.components.entities.accounts import update_account_alias
+    clients = get_clients_report()
+    pending_accounts = [c for c in clients if (c.get('Alias') in (None, '')) and c.get('Status') not in ('Rejected', 'Closed', 'Funded Pending')]
+    updated_accounts = []
+    for account in pending_accounts:
+        account_id = account.get('Account ID')
+        title = account.get('Title')
+        old_alias = account.get('Alias')
+        master_account = 'ad' if account.get('Master Account') == 'F10740574' else 'br'
+        if account_id == 'U23431519':
+            logger.info(f"old_alias: {old_alias}, {type(old_alias)}, title: {title}, {type(title)}, master_account: {master_account}")
+        if account_id and title is not None:
+            new_alias = f"{account_id} {title}"
+            try:
+                # Reuse existing helper to update alias via IBKR API
+                update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
+                updated_accounts.append({
+                    'account_id': account_id,
+                    'old_alias': old_alias,
+                    'new_alias': new_alias
+                })
+                logger.success(f"Updated alias for {account_id}: {old_alias} -> {new_alias}")
+            except Exception as e:
+                logger.error(f"Failed to update alias for {account_id}: {e}")
+    return {
+        'updated': len(updated_accounts),
+        'accounts': updated_accounts
+    }
 
 """
 ETL PIPELINE
