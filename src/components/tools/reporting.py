@@ -1616,7 +1616,7 @@ report_configs = [
     {
         'name': 'account_details',
         'pipeline': 'clients',
-        'backup_folder_id': '',
+        'backup_folder_id': '1YCOsFGAb3fZvKbFDBGK6wpjT1S-NIK98',
         'flex': False,
         'backup_name': 'account_details' + '_' + yesterday_date + '.json',
         'transform_func': process_account_details,
