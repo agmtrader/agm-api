@@ -125,7 +125,7 @@ def screen_person(account_id: str = None, holder_name: str = None, residence_cou
     ofac_sdn_list = get_ofac_sdn_list()
     df = pd.DataFrame(ofac_sdn_list)
 
-    similarity_threshold = 0.7
+    similarity_threshold = 0.8
 
     if residence_country in blacklist:
         fatf_status = 'Black listed'
