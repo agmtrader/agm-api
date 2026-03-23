@@ -116,7 +116,7 @@ class Supabase:
             fatf_status = Column(Text, nullable=False)
             risk_score = Column(Text, nullable=True)
             un_status = Column(Text, nullable=True)
-            uk_status = Column(Text, nullable=True)
+            uk_status = Column(JSONB, nullable=True)
 
         class FeeTemplateRequest(self.Base):
             __tablename__ = 'fee_template_request'

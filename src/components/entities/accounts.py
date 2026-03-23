@@ -5,7 +5,7 @@ from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 from src.utils.managers.document_manager import DocumentManager
 import pandas as pd
 import difflib
-from src.components.tools.reporting import get_ofac_sdn_list
+from src.components.tools.reporting import get_ofac_sdn_list, get_uk_sanctions_list
 
 logger.announcement('Initializing Accounts Service', type='info')
 ibkr_web_api = IBKRWebAPI()
@@ -122,8 +122,12 @@ def screen_person(account_id: str = None, holder_name: str = None, residence_cou
     ]
 
     ofac_results = []
+    uk_results = []
     ofac_sdn_list = get_ofac_sdn_list()
-    df = pd.DataFrame(ofac_sdn_list)
+    ofac_df = pd.DataFrame(ofac_sdn_list)
+
+    uk_sanctions_list = get_uk_sanctions_list()
+    uk_df = pd.DataFrame(uk_sanctions_list)
 
     similarity_threshold = 0.8
 
@@ -134,7 +138,7 @@ def screen_person(account_id: str = None, holder_name: str = None, residence_cou
     else:
         fatf_status = 'Not listed'
 
-    for index, row in df.iterrows():
+    for index, row in ofac_df.iterrows():
         sdn_name = str(row['name']).strip()
         if sdn_name == '':
             continue
@@ -153,11 +157,57 @@ def screen_person(account_id: str = None, holder_name: str = None, residence_cou
                 'gross_registered_tonnage': row['gross_registered_tonnage'],
                 'vessel_flag': row['vessel_flag'],
                 'vessel_owner': row['vessel_owner'],
-                'more_info': row['more_info']
+                'more_info': row['more_info'],
+                'source': 'OFAC'
             }
 
             ofac_results.append(data)
-    return db.create(table='account_screening', data={'account_id': account_id, 'holder_name': holder_name, 'ofac_results': ofac_results, 'fatf_status': fatf_status, 'risk_score': risk_score if risk_score is not None else 0, 'created': created})
+
+    uk_name_columns = ['Name 6', 'Name 1', 'Name 2', 'Name 3', 'Name 4', 'Name 5']
+    for index, row in uk_df.iterrows():
+        candidate_names = []
+        for col in uk_name_columns:
+            value = str(row.get(col, '')).strip()
+            if value != '':
+                candidate_names.append(value)
+
+        if len(candidate_names) == 0:
+            continue
+
+        for candidate_name in candidate_names:
+            similarity = difflib.SequenceMatcher(None, holder_name.lower(), candidate_name.lower()).ratio()
+            if similarity < similarity_threshold:
+                continue
+
+            data = {
+                'name': candidate_name,
+                'entity_number': row.get('Unique ID', ''),
+                'type': row.get('Designation Type', ''),
+                'program': row.get('Regime Name', ''),
+                'title': row.get('Title', ''),
+                'similarity': similarity,
+                'call_sign': '',
+                'vessel_type': row.get('Type of ship', ''),
+                'tonnage': row.get('Tonnage of ship', ''),
+                'gross_registered_tonnage': '',
+                'vessel_flag': row.get('Current believed flag of ship', ''),
+                'vessel_owner': row.get('Current owner/operator (s)', ''),
+                'more_info': row.get('Other Information', ''),
+                'source': 'UK'
+            }
+            uk_results.append(data)
+
+    uk_status = uk_results
+
+    return db.create(table='account_screening', data={
+        'account_id': account_id,
+        'holder_name': holder_name,
+        'ofac_results': ofac_results,
+        'uk_status': uk_status,
+        'fatf_status': fatf_status,
+        'risk_score': risk_score if risk_score is not None else 0,
+        'created': created
+    })
 
 
 """

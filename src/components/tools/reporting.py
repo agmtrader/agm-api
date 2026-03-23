@@ -158,6 +158,16 @@ def get_ofac_sdn_list():
     return ofac_sdn_list
 
 @handle_exception
+def get_uk_sanctions_list():
+    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
+    uk_sanctions_list_file = [uk_sanctions_list for uk_sanctions_list in files_in_resources_folder if 'uk_sanctions_list' in uk_sanctions_list['name']]
+    if len(uk_sanctions_list_file) != 1:
+        logger.error('UK sanctions list file not found or multiple files found')
+        raise Exception('UK sanctions list file not found or multiple files found')
+    uk_sanctions_list = Drive.download_file(file_id=uk_sanctions_list_file[0]['id'], parse=True)
+    return uk_sanctions_list
+
+@handle_exception
 def get_deposits_withdrawals():
     files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
     deposits_withdrawals_file = [deposits_withdrawals for deposits_withdrawals in files_in_resources_folder if 'ibkr_deposits_withdrawals' in deposits_withdrawals['name']]
@@ -648,6 +658,7 @@ def extract_clients_data() -> dict:
     
     extract_flex_queries()
     extract_ofac_sdn_list()
+    extract_uk_sanctions_list()
     extract_account_details_backup()
 
     logger.announcement('Information successfully extracted for reports.', type='success')
@@ -991,6 +1002,37 @@ def extract_ofac_sdn_list():
     Drive.upload_file(file_name='ofac_sdn_list.csv', mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=batch_folder_id)
     logger.announcement('OFAC SDN list extracted and uploaded to batch folder.', type='success')
 
+def extract_uk_sanctions_list():
+    logger.announcement('Extracting UK sanctions list.', type='info')
+    uk_sanctions_url = 'https://sanctionslist.fcdo.gov.uk/docs/UK-Sanctions-List.csv'
+
+    uk_sanctions_data = requests.get(uk_sanctions_url)
+    uk_sanctions_data.raise_for_status()
+    raw_text = uk_sanctions_data.content.decode('utf-8-sig')
+    lines = raw_text.splitlines()
+
+    header_idx = None
+    for i, line in enumerate(lines):
+        if line.startswith('Last Updated,Unique ID,'):
+            header_idx = i
+            break
+
+    if header_idx is None:
+        logger.error('Could not find UK sanctions CSV header row.')
+        raise Exception('Could not find UK sanctions CSV header row.')
+
+    csv_text = '\n'.join(lines[header_idx:])
+    df = pd.read_csv(StringIO(csv_text), dtype=str, keep_default_na=False)
+    df = df.fillna('')
+
+    Drive.upload_file(
+        file_name='uk_sanctions_list.csv',
+        mime_type='text/csv',
+        file_data=df.to_dict(orient='records'),
+        parent_folder_id=batch_folder_id
+    )
+    logger.announcement('UK sanctions list extracted and uploaded to batch folder.', type='success')
+
 def _append_missing_account_details(details: list) -> list:
     
     from src.components.entities.accounts import read_accounts, read_account_details
@@ -1141,6 +1183,7 @@ def process_report(config):
         
         # Get files in the report's backup folder
         files = Drive.get_files_in_folder(folder_id)
+        files = [f for f in files if config['name'] in f.get('name', '')] or files
 
         if len(files) == 0:
             logger.error(f'No files found in backup folder.')
@@ -1503,6 +1546,15 @@ def process_ofac_sdn_list(df):
     """
     return df
 
+def process_uk_sanctions_list(df):
+    """
+    Process the UK sanctions list file.
+    
+    :param df: Input dataframe
+    :return: Processed dataframe
+    """
+    return df
+
 def process_tasks_for_subaccounts(df):
     """
     Process the tasks for subaccounts file.
@@ -1661,6 +1713,15 @@ report_configs = [
         'backup_name': 'ofac_sdn_list' + '_' + today_date + '.csv',
         'transform_func': process_ofac_sdn_list,
         'output_filename': 'ofac_sdn_list.csv'
+    },
+    {
+        'name': 'uk_sanctions_list',
+        'pipeline': 'clients',
+        'backup_folder_id': '13W9sXMbFvWtXPsEy6FiZJrQDHV3WYDD6',
+        'flex': False,
+        'backup_name': 'uk_sanctions_list' + '_' + today_date + '.csv',
+        'transform_func': process_uk_sanctions_list,
+        'output_filename': 'uk_sanctions_list.csv'
     },
     {
         'name': 'account_details',
