@@ -517,12 +517,8 @@ def send_unfunded_emails():
     clients_with_open_status = clients_df[clients_df['Status'] == 'Open']
     total_accounts = total_accounts[total_accounts['ibkr_account_number'].isin(clients_with_open_status['Account ID'])]
 
-    # Filter for accounts opened in the last 3 months (approx 66 business days)
+    # Parse date opened to enrich email context fields
     clients_df['Date Opened'] = pd.to_datetime(clients_df['Date Opened'], errors='coerce')
-    cutoff_date = pd.Timestamp.now().normalize() - BDay(66)
-    recent_clients = clients_df[clients_df['Date Opened'] >= cutoff_date]
-    
-    total_accounts = total_accounts[total_accounts['ibkr_account_number'].isin(recent_clients['Account ID'])]
 
     # Merge Date Opened into total_accounts
     total_accounts = total_accounts.merge(clients_df[['Account ID', 'Date Opened']], left_on='ibkr_account_number', right_on='Account ID', how='left')
