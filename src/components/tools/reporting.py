@@ -1212,6 +1212,39 @@ def process_report(config):
         # Get most recent file
         most_recent_file = get_most_recent_file(files)
 
+        # For very large files that do not require row-level transformations,
+        # avoid parsing into DataFrame/records to reduce memory and runtime.
+        if config.get('raw_passthrough', False):
+            try:
+                raw_file = Drive.download_file(file_id=most_recent_file['id'], parse=False)
+            except:
+                try:
+                    raw_file = Drive.export_file(
+                        file_id=most_recent_file['id'],
+                        mime_type='text/csv',
+                        parse=False
+                    )
+                except:
+                    logger.error(f'Error downloading file: {most_recent_file}')
+                    raise Exception(f'Error downloading file: {most_recent_file}')
+
+            output_mime_type = 'application/json' if output_filename.lower().endswith('.json') else 'text/csv'
+            file_payload = base64.b64encode(raw_file).decode('utf-8')
+
+            try:
+                existing_file = Drive.get_file_info(parent_id=resources_folder_id, file_name=output_filename)
+                Drive.delete_file(file_id=existing_file['id'])
+            except:
+                pass
+
+            Drive.upload_file(
+                file_name=output_filename,
+                mime_type=output_mime_type,
+                file_data=file_payload,
+                parent_folder_id=resources_folder_id
+            )
+            return
+
         # Download file and read into dataframe
         try:
             f = Drive.download_file(file_id=most_recent_file['id'], parse=True)
@@ -1741,7 +1774,8 @@ report_configs = [
         'flex': False,
         'backup_name': 'uk_sanctions_list' + '_' + today_date + '.csv',
         'transform_func': process_uk_sanctions_list,
-        'output_filename': 'uk_sanctions_list.csv'
+        'output_filename': 'uk_sanctions_list.csv',
+        'raw_passthrough': True
     },
     {
         'name': 'account_details',
