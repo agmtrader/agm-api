@@ -84,6 +84,27 @@ first_date = cst_time.replace(day=1).strftime('%Y%m%d')
 
 logger.announcement('Initialized Reporting Service', type='success')
 
+SKIP_ACCOUNT_DETAILS_ACCOUNT_IDS = {
+    'Paper Trading account', 'U11255020', 'JJJJ', 'mgflt1245', '.', 'U5667692', 'U6545558', 'U6601533',
+    'U6481241', 'U6514132', 'U6456839', 'U6343218', 'U6299911', 'U6201107', 'U6192519', '?', 'U5974991',
+    'U6017743', 'U5961489', 'U5959931', 'U5862172', 'U5885640', 'U5704986', 'U5667734', 'U5549845',
+    'U5360244', 'U5360311', 'U5312423', 'U5224474', 'U5212993', 'U5209932', 'U4993318', 'U5176479',
+    'U5866637', 'U4911438', 'U4900285', 'U4838642', 'U5213625', 'U4735325', 'U4668914', 'U4549008',
+    'U4470712', 'U4434708', 'U4346346', 'U4273862', 'U4279195', 'U4319961', 'U4218638', 'U4259153',
+    'U4127849', 'U4196108', 'U4055337', 'U4083153', 'U3965484', 'U4185115', 'U4470860', 'U4605137',
+    'U4625417', 'U4656580', 'U3652992', 'U3633092', 'U3604455', 'U3511434', 'U3511297', 'U3496363',
+    'U3495597', 'U3545775', 'U3535501', 'U3429534', 'U3428791', 'U3464930', 'U3372072', 'U3304536',
+    'U3314477', 'U6077094', 'U3208714', 'U3228034', 'U3315369', 'U3412654', 'U3419606', 'U3528304',
+    'U3604393', 'U3677610', 'U3776509', 'U3224638', 'U3171464', 'U2676460', 'U4714674', 'U2639635',
+    'U2478829', 'U2440709', 'U2447095', 'U2479810', 'U2482465', 'U2677556', 'U2738060', 'U2940074',
+    'U3034848', 'U3160536', 'U3240192', 'U3247007', 'U2245491', 'U2169126', 'U2169127', 'U2358621',
+    'U2112241', 'U2014203', 'U1960643', 'U1809703', 'U1763844', 'U2798255', 'U1753236', 'U1558124',
+    'U1512073', 'U1224910', 'U1213466', 'U1206083', 'U1192065', 'U1180647', 'U1161945', 'U1139038',
+    'U1117382', 'U1114073', 'U7201776', 'U8431354', 'U6061707', 'U4892747', 'U4127415', 'U3320909',
+    'U1037726', 'U928543', 'U918392', 'U877620', 'U758608', 'U743013', 'U528111', 'U471311', 'U450281',
+    'U436576', 'U401595', 'U13388281', 'U2573636', 'U7115856'
+}
+
 """
 TODAY
 """
@@ -654,7 +675,7 @@ def extract_clients_data() -> dict:
     
     extract_flex_queries()
     extract_ofac_sdn_list()
-    #extract_uk_sanctions_list()
+    extract_uk_sanctions_list()
     extract_account_details_backup()
 
     logger.announcement('Information successfully extracted for reports.', type='success')
@@ -1048,6 +1069,9 @@ def _append_missing_account_details(details: list) -> list:
 
     for account in missing_accounts:
         account_id = account.get('ibkr_account_number')
+        if account_id in SKIP_ACCOUNT_DETAILS_ACCOUNT_IDS:
+            continue
+
         master_account = account.get('master_account')
 
         if master_account is None:
