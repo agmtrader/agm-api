@@ -6,11 +6,92 @@ from src.utils.managers.document_manager import DocumentManager
 import pandas as pd
 import difflib
 from src.components.tools.reporting import get_ofac_sdn_list, get_uk_sanctions_list
+from src.components.tools.reporting import get_clients_report, get_nav_report, get_ibkr_details
+import os
+import re
+import time
 
 logger.announcement('Initializing Accounts Service', type='info')
 ibkr_web_api = IBKRWebAPI()
 document_manager = DocumentManager()
 logger.announcement('Initialized Accounts Service', type='success')
+
+_ACCOUNTS_METADATA_CACHE = {}
+_ACCOUNTS_METADATA_CACHE_TTL_SECONDS = int(os.getenv('ACCOUNTS_METADATA_CACHE_TTL_SECONDS', '120'))
+
+
+def _normalize_join_key(value) -> str:
+    if value is None:
+        return ''
+    return str(value).strip()
+
+
+def _get_cached_payload(cache_key: str, producer, force_refresh: bool = False):
+    if force_refresh or _ACCOUNTS_METADATA_CACHE_TTL_SECONDS <= 0:
+        return producer()
+
+    cache_entry = _ACCOUNTS_METADATA_CACHE.get(cache_key)
+    now = time.time()
+
+    if cache_entry and (now - cache_entry['timestamp'] <= _ACCOUNTS_METADATA_CACHE_TTL_SECONDS):
+        return cache_entry['value']
+
+    value = producer()
+    _ACCOUNTS_METADATA_CACHE[cache_key] = {
+        'timestamp': now,
+        'value': value
+    }
+    return value
+
+
+def _parse_fee_template_summary(fee_template) -> str:
+    if not isinstance(fee_template, dict):
+        return '-'
+
+    fee_template_name = str(fee_template.get('feeTemplateName', '')).strip()
+    fee_info = str(fee_template.get('feeInfo', '')).strip()
+    fee_strategy = str(fee_template.get('feeStrategy', '')).strip()
+    broker_fee_info = str(fee_template.get('brokerFeeInfo', '')).strip()
+    fee_effective_date = str(fee_template.get('feeEffectiveDate', '')).strip()
+
+    parts = []
+
+    if fee_template_name:
+        parts.append(fee_template_name)
+    elif fee_strategy:
+        if re.search(r'automated', fee_strategy, re.IGNORECASE) and re.search(r'wrap fee', fee_strategy, re.IGNORECASE):
+            parts.append('Automated Wrap Fee')
+        else:
+            parts.append(fee_strategy.split('.')[0].strip() or 'Custom Fee Strategy')
+
+    percent_match = re.search(r'Percent of Equity:\s*([0-9]+(?:\.[0-9]+)?)', fee_info, re.IGNORECASE)
+    if percent_match and percent_match.group(1):
+        parts.append(f'{percent_match.group(1)}% Equity')
+    elif fee_info:
+        compact_fee_info = re.sub(r'\s+', ' ', fee_info).strip()
+        parts.append(compact_fee_info[:80])
+
+    if broker_fee_info:
+        if re.search(r'no commission schedule has been defined', broker_fee_info, re.IGNORECASE):
+            parts.append('IB Default Commissions')
+        else:
+            asset_classes = []
+            for segment in broker_fee_info.split('||'):
+                segment = segment.strip()
+                match = re.match(r'^([A-Z]{2,10})\s+by\b', segment, re.IGNORECASE)
+                if match:
+                    asset_class = match.group(1).upper()
+                    if asset_class not in asset_classes:
+                        asset_classes.append(asset_class)
+            if asset_classes:
+                parts.append(f"{', '.join(asset_classes)} Commissions")
+            else:
+                parts.append('Custom Commission Schedule')
+
+    if fee_effective_date:
+        parts.append(f'Eff. {fee_effective_date}')
+
+    return ' | '.join(parts) if parts else '-'
 
 @handle_exception
 def create_account(account: dict = None) -> dict:
@@ -26,6 +107,80 @@ def create_instruction(account_id: str = None) -> dict:
 def read_accounts(query: dict = None) -> list:
     accounts = db.read(table='account', query=query)
     return accounts
+
+
+@handle_exception
+def read_accounts_with_metadata(query: dict = None, include_advisor: bool = False, force_refresh: bool = False) -> list:
+    accounts = read_accounts(query=query or {})
+
+    clients = _get_cached_payload('clients_report', get_clients_report, force_refresh=force_refresh)
+    nav_report = _get_cached_payload('nav_report', get_nav_report, force_refresh=force_refresh)
+    ibkr_details = _get_cached_payload('ibkr_details', get_ibkr_details, force_refresh=force_refresh)
+
+    advisors = []
+    advisor_name_by_code = {}
+    if include_advisor:
+        from src.components.entities.advisors import read_advisors
+        advisors = read_advisors({})
+        advisor_name_by_code = {
+            _normalize_join_key(advisor.get('code')): advisor.get('name')
+            for advisor in advisors
+        }
+
+    client_map = {}
+    for client in clients or []:
+        key = _normalize_join_key(client.get('Account ID'))
+        if key and key not in client_map:
+            client_map[key] = client
+
+    nav_map = {}
+    for nav in nav_report or []:
+        key = _normalize_join_key(nav.get('ClientAccountID'))
+        if key and key not in nav_map:
+            nav_map[key] = nav
+
+    fee_template_summary_by_account_id = {}
+    for row in ibkr_details if isinstance(ibkr_details, list) else []:
+        details_list = row.get('ibkrdetails') if isinstance(row, dict) else []
+        if not isinstance(details_list, list):
+            details_list = [row]
+
+        for details in details_list:
+            if not isinstance(details, dict):
+                continue
+            account_data = details.get('account')
+            if not isinstance(account_data, dict):
+                continue
+            account_id = _normalize_join_key(account_data.get('accountId'))
+            summary = _parse_fee_template_summary(account_data.get('feeTemplate'))
+            if account_id and summary != '-' and account_id not in fee_template_summary_by_account_id:
+                fee_template_summary_by_account_id[account_id] = summary
+
+    enriched_accounts = []
+    for account in accounts or []:
+        account_id = _normalize_join_key(account.get('ibkr_account_number'))
+        client = client_map.get(account_id)
+        nav = nav_map.get(account_id)
+        advisor_name = advisor_name_by_code.get(_normalize_join_key(account.get('advisor_code')), '-') if include_advisor else None
+
+        account_enriched = {
+            **account,
+            'alias': client.get('Alias') if client and client.get('Alias') else '-',
+            'status': client.get('Status') if client and client.get('Status') else '-',
+            'nav': nav.get('Total') if nav and nav.get('Total') is not None else 0,
+            'master_account_id': client.get('sheet_name') if client and client.get('sheet_name') else '-',
+            'title': client.get('Title') if client and client.get('Title') else '-',
+            'sls_devices': client.get('SLS Devices') if client and client.get('SLS Devices') else '-',
+            'client_email_address': client.get('Email Address') if client and client.get('Email Address') else '-',
+            'fee_template_summary': fee_template_summary_by_account_id.get(account_id, '-'),
+        }
+
+        if include_advisor:
+            account_enriched['advisor_name'] = advisor_name
+
+        enriched_accounts.append(account_enriched)
+
+    return sorted(enriched_accounts, key=lambda account: str(account.get('created', '')), reverse=True)
 
 @handle_exception
 def read_instructions(query: dict = None) -> list:

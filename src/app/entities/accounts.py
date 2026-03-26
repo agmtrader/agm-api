@@ -1,6 +1,6 @@
 from flask import Blueprint, request
 
-from src.components.entities.accounts import create_account, read_accounts, submit_documents, upload_document, read_instructions, delete_document, read_account_documents, update_account_document, screen_person, read_account_screenings
+from src.components.entities.accounts import create_account, read_accounts, read_accounts_with_metadata, submit_documents, upload_document, read_instructions, delete_document, read_account_documents, update_account_document, screen_person, read_account_screenings
 
 from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_investment_experience, withdraw_funds, transfer_position_internally, transfer_position_externally, get_financial_ranges, get_business_and_occupation
 
@@ -31,6 +31,31 @@ def read_route():
     if code:
         query['advisor_code'] = code
     return read_accounts(query=query)
+
+
+@bp.route('/with_metadata', methods=['GET'])
+@bp.route('/with-metadata', methods=['GET'])
+@format_response
+def read_with_metadata_route():
+    query = {}
+    id = request.args.get('id', None)
+    user_id = request.args.get('user_id', None)
+    code = request.args.get('advisor_code', None)
+    include_advisor = request.args.get('include_advisor', 'false').strip().lower() in ('1', 'true', 'yes')
+    force_refresh = request.args.get('refresh', 'false').strip().lower() in ('1', 'true', 'yes')
+
+    if id:
+        query['id'] = id
+    if user_id:
+        query['user_id'] = user_id
+    if code:
+        query['advisor_code'] = code
+
+    return read_accounts_with_metadata(
+        query=query,
+        include_advisor=include_advisor,
+        force_refresh=force_refresh
+    )
 
 @bp.route('/update', methods=['POST'])
 @format_response
