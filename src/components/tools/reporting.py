@@ -675,7 +675,7 @@ def extract_clients_data() -> dict:
     
     extract_flex_queries()
     extract_ofac_sdn_list()
-    extract_uk_sanctions_list()
+    #extract_uk_sanctions_list()
     extract_account_details_backup()
 
     logger.announcement('Information successfully extracted for reports.', type='success')

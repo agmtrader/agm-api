@@ -356,3 +356,8 @@ def logout_of_brokerage_session() -> dict:
 def get_brokerage_accounts() -> dict:
     """Get brokerage accounts via IBKR API."""
     return ibkr_web_api.get_brokerage_accounts()
+
+@handle_exception
+def get_portfolio_analyst_performance(acct_ids: list = None, freq: str = None) -> dict:
+    """Get Portfolio Analyst performance via IBKR API."""
+    return ibkr_web_api.get_portfolio_analyst_performance(acct_ids=acct_ids, freq=freq)

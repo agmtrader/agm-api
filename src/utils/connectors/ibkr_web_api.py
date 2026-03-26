@@ -1083,6 +1083,31 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds   
 
     @handle_exception
+    def get_portfolio_analyst_performance(self, acct_ids: list = None, freq: str = None):
+        """
+        Get Portfolio Analyst performance data.
+        """
+        try:
+            original_creds = self._apply_credentials('br')
+            url = f"{self.BASE_URL}/v1/api/pa/performance"
+            if not self.sso_token:
+                raise Exception("No token found")
+            headers = {
+                "Authorization": f"Bearer {self.sso_token}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "acctIds": acct_ids or [],
+                "freq": freq
+            }
+            response = requests.post(url, headers=headers, data=json.dumps(payload))
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
     def get_all_watchlists(self):
         """
         Get all watchlists.
@@ -1915,6 +1940,7 @@ for _method_name in [
     'initialize_brokerage_session',
     'logout_of_brokerage_session',
     'get_brokerage_accounts',
+    'get_portfolio_analyst_performance',
     'get_watchlist_information',
     'get_market_data_snapshot',
     'get_market_scanner_params',

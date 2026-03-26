@@ -4,7 +4,7 @@ from src.components.entities.accounts import create_account, read_accounts, subm
 
 from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_investment_experience, withdraw_funds, transfer_position_internally, transfer_position_externally, get_financial_ranges, get_business_and_occupation
 
-from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts, get_account_statements, get_available_statements
+from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts, get_account_statements, get_available_statements, get_portfolio_analyst_performance
 
 from src.utils.response import format_response
 
@@ -284,6 +284,30 @@ def logout_of_brokerage_session_route():
 @format_response
 def get_brokerage_accounts_route():
     return get_brokerage_accounts()
+
+@bp.route('/ibkr/portfolio-analyst', methods=['GET', 'POST'])
+@format_response
+def get_portfolio_analyst_performance_route():
+    if request.method == 'POST':
+        payload = request.get_json(force=True) or {}
+        raw_acct_ids = payload.get('acctIds', [])
+        freq = payload.get('freq')
+    else:
+        query_params = request.args.to_dict(flat=True)
+        raw_acct_ids = request.args.getlist('acctIds') or query_params.get('acctIds', '')
+        freq = query_params.get('freq')
+
+    if isinstance(raw_acct_ids, str):
+        acct_ids = [acct_id.strip() for acct_id in raw_acct_ids.split(',') if acct_id.strip()]
+    elif isinstance(raw_acct_ids, list):
+        acct_ids = [str(acct_id).strip() for acct_id in raw_acct_ids if str(acct_id).strip()]
+    else:
+        acct_ids = []
+
+    if not acct_ids or not freq:
+        return {"error": "Missing acctIds or freq"}, 400
+
+    return get_portfolio_analyst_performance(acct_ids=acct_ids, freq=freq)
 
 @bp.route('/ibkr/statements', methods=['POST'])
 @format_response
