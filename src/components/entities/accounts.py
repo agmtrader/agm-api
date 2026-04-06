@@ -425,9 +425,22 @@ def update_account_email(reference_user_name: str = None, new_email: str = None,
     return ibkr_web_api.update_account_email(reference_user_name=reference_user_name, new_email=new_email, access=access, master_account=master_account)
 
 @handle_exception
-def change_investment_experience(account_id: str = None, investment_experience: dict = None, master_account: str = None) -> dict:
+def change_financial_information(account_id: str = None, new_financial_information: dict = None, master_account: str = None) -> dict:
     """Change account financial information via IBKR API."""
-    return ibkr_web_api.change_investment_experience(account_id=account_id, investment_experience=investment_experience, master_account=master_account)
+    return ibkr_web_api.change_financial_information(
+        account_id=account_id,
+        new_financial_information=new_financial_information,
+        master_account=master_account
+    )
+
+@handle_exception
+def change_investment_experience(account_id: str = None, investment_experience: dict = None, master_account: str = None) -> dict:
+    """Backward-compatible wrapper for legacy callers."""
+    return change_financial_information(
+        account_id=account_id,
+        new_financial_information={"investmentExperience": investment_experience} if investment_experience else {},
+        master_account=master_account
+    )
 
 @handle_exception
 def deposit_funds(master_account: str = None, instruction: dict = None, account_id: str = None) -> dict:

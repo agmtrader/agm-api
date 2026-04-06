@@ -695,33 +695,27 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def change_investment_experience(self, account_id: str, investment_experience: dict = None, master_account: str = None):
-        """Change the financial information for a given account.
-
-        Args:
-            account_id (str): The IBKR account ID.
-            new_financial_information (dict): Dictionary with the new financial information.
-            master_account (str | None): Credential set to use (``ad`` or ``br``).
-        Returns:
-            dict: API response after updating the financial information.
-        """
+    def change_financial_information(self, account_id: str, new_financial_information: dict = None, master_account: str = None):
+        """Change financial information for a given account."""
         try:
             original_creds = self._apply_credentials(master_account)
-            logger.info(f"Changing investment experience for account {account_id}")
+            logger.info(f"Changing financial information for account {account_id}")
 
             url = f"{self.BASE_URL}/gw/api/v1/accounts"
 
             body = {
                 "accountManagementRequests": {
-                    "changeFinancialInformation": {
-                        "accountId": account_id,
-                        "newFinancialInformation": {},
-                    }
+                    "changeFinancialInformation": [
+                        {
+                            "accountId": account_id,
+                            "newFinancialInformation": new_financial_information or {},
+                        }
+                    ]
                 }
             }
 
-            if investment_experience:
-                body['accountManagementRequests']['changeFinancialInformation']['newFinancialInformation']['investmentExperience'] = investment_experience
+            if not body["accountManagementRequests"]["changeFinancialInformation"][0]["newFinancialInformation"]:
+                raise Exception("At least one financial information field is required")
 
             token = self.get_bearer_token()
             if not token:
@@ -739,12 +733,21 @@ class IBKRWebAPI:
                 logger.error(f"Error {response.status_code}: {response.text}")
                 raise Exception(f"Error {response.status_code}: {response.text}")
 
-            logger.success("Investment experience changed successfully")
+            logger.success("Financial information changed successfully")
             data = response.json()
             print(data)
             return data
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def change_investment_experience(self, account_id: str, investment_experience: dict = None, master_account: str = None):
+        """Backward-compatible wrapper for legacy callers."""
+        return self.change_financial_information(
+            account_id=account_id,
+            new_financial_information={"investmentExperience": investment_experience} if investment_experience else {},
+            master_account=master_account,
+        )
 
     @handle_exception
     def add_trading_permissions(self, account_id: str, trading_permissions: list = None, master_account: str = None) -> dict:
