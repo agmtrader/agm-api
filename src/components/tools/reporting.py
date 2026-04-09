@@ -2,9 +2,7 @@ from pandas.tseries.offsets import BDay
 from datetime import datetime
 from src.utils.logger import logger
 import pandas as pd
-from io import BytesIO
 import base64
-import yfinance as yf
 import time
 import pytz
 import pandas as pd
@@ -23,6 +21,40 @@ from io import StringIO
 logger.announcement('Initializing Reporting Service', type='info')
 Drive = GoogleDrive()
 ibkr_web_api = IBKRWebAPI()
+
+batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
+resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+
+# Get the current time in CST
+cst = pytz.timezone('America/Costa_Rica')
+cst_time = datetime.now(cst)
+today_date = cst_time.strftime('%Y%m%d%H%M')
+yesterday_date = (cst_time - BDay(1)).strftime('%Y%m%d')
+first_date = cst_time.replace(day=1).strftime('%Y%m%d')
+
+logger.announcement('Initialized Reporting Service', type='success')
+
+SKIP_ACCOUNT_DETAILS_ACCOUNT_IDS = {
+    'Paper Trading account', 'U11255020', 'JJJJ', 'mgflt1245', '.', 'U5667692', 'U6545558', 'U6601533',
+    'U6481241', 'U6514132', 'U6456839', 'U6343218', 'U6299911', 'U6201107', 'U6192519', '?', 'U5974991',
+    'U6017743', 'U5961489', 'U5959931', 'U5862172', 'U5885640', 'U5704986', 'U5667734', 'U5549845',
+    'U5360244', 'U5360311', 'U5312423', 'U5224474', 'U5212993', 'U5209932', 'U4993318', 'U5176479',
+    'U5866637', 'U4911438', 'U4900285', 'U4838642', 'U5213625', 'U4735325', 'U4668914', 'U4549008',
+    'U4470712', 'U4434708', 'U4346346', 'U4273862', 'U4279195', 'U4319961', 'U4218638', 'U4259153',
+    'U4127849', 'U4196108', 'U4055337', 'U4083153', 'U3965484', 'U4185115', 'U4470860', 'U4605137',
+    'U4625417', 'U4656580', 'U3652992', 'U3633092', 'U3604455', 'U3511434', 'U3511297', 'U3496363',
+    'U3495597', 'U3545775', 'U3535501', 'U3429534', 'U3428791', 'U3464930', 'U3372072', 'U3304536',
+    'U3314477', 'U6077094', 'U3208714', 'U3228034', 'U3315369', 'U3412654', 'U3419606', 'U3528304',
+    'U3604393', 'U3677610', 'U3776509', 'U3224638', 'U3171464', 'U2676460', 'U4714674', 'U2639635',
+    'U2478829', 'U2440709', 'U2447095', 'U2479810', 'U2482465', 'U2677556', 'U2738060', 'U2940074',
+    'U3034848', 'U3160536', 'U3240192', 'U3247007', 'U2245491', 'U2169126', 'U2169127', 'U2358621',
+    'U2112241', 'U2014203', 'U1960643', 'U1809703', 'U1763844', 'U2798255', 'U1753236', 'U1558124',
+    'U1512073', 'U1224910', 'U1213466', 'U1206083', 'U1192065', 'U1180647', 'U1161945', 'U1139038',
+    'U1117382', 'U1114073', 'U7201776', 'U8431354', 'U6061707', 'U4892747', 'U4127415', 'U3320909',
+    'U1037726', 'U928543', 'U918392', 'U877620', 'U758608', 'U743013', 'U528111', 'U471311', 'U450281',
+    'U436576', 'U401595', 'U13388281', 'U2573636', 'U7115856'
+}
+
 ratings = {
     # S&P Ratings
     "AAA": {"Short-term": "A-1+", "NAIC": 1, "Class1": "Prime", "Class2": "Investment-grade", "Class3": "Investment grade", "Level": 1, "S&P Equivalent": "AAA", "Source": "S&P"},
@@ -72,38 +104,6 @@ ratings = {
     "C": {"Short-term": "Not prime", "NAIC": 6, "Class1": "In default", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 21, "S&P Equivalent": "C", "Source": "Moody's"},
     "D": {"Short-term": "Not prime", "NAIC": 6, "Class1": "In default", "Class2": "AKA junk bonds", "Class3": "Non-investment grade", "Level": 22, "S&P Equivalent": "D", "Source": "Moody's"},
 }
-cst = pytz.timezone('America/Costa_Rica')
-cst_time = datetime.now(cst)
-batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
-resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
-
-# Get the current time in CST
-today_date = cst_time.strftime('%Y%m%d%H%M')
-yesterday_date = (cst_time - BDay(1)).strftime('%Y%m%d')
-first_date = cst_time.replace(day=1).strftime('%Y%m%d')
-
-logger.announcement('Initialized Reporting Service', type='success')
-
-SKIP_ACCOUNT_DETAILS_ACCOUNT_IDS = {
-    'Paper Trading account', 'U11255020', 'JJJJ', 'mgflt1245', '.', 'U5667692', 'U6545558', 'U6601533',
-    'U6481241', 'U6514132', 'U6456839', 'U6343218', 'U6299911', 'U6201107', 'U6192519', '?', 'U5974991',
-    'U6017743', 'U5961489', 'U5959931', 'U5862172', 'U5885640', 'U5704986', 'U5667734', 'U5549845',
-    'U5360244', 'U5360311', 'U5312423', 'U5224474', 'U5212993', 'U5209932', 'U4993318', 'U5176479',
-    'U5866637', 'U4911438', 'U4900285', 'U4838642', 'U5213625', 'U4735325', 'U4668914', 'U4549008',
-    'U4470712', 'U4434708', 'U4346346', 'U4273862', 'U4279195', 'U4319961', 'U4218638', 'U4259153',
-    'U4127849', 'U4196108', 'U4055337', 'U4083153', 'U3965484', 'U4185115', 'U4470860', 'U4605137',
-    'U4625417', 'U4656580', 'U3652992', 'U3633092', 'U3604455', 'U3511434', 'U3511297', 'U3496363',
-    'U3495597', 'U3545775', 'U3535501', 'U3429534', 'U3428791', 'U3464930', 'U3372072', 'U3304536',
-    'U3314477', 'U6077094', 'U3208714', 'U3228034', 'U3315369', 'U3412654', 'U3419606', 'U3528304',
-    'U3604393', 'U3677610', 'U3776509', 'U3224638', 'U3171464', 'U2676460', 'U4714674', 'U2639635',
-    'U2478829', 'U2440709', 'U2447095', 'U2479810', 'U2482465', 'U2677556', 'U2738060', 'U2940074',
-    'U3034848', 'U3160536', 'U3240192', 'U3247007', 'U2245491', 'U2169126', 'U2169127', 'U2358621',
-    'U2112241', 'U2014203', 'U1960643', 'U1809703', 'U1763844', 'U2798255', 'U1753236', 'U1558124',
-    'U1512073', 'U1224910', 'U1213466', 'U1206083', 'U1192065', 'U1180647', 'U1161945', 'U1139038',
-    'U1117382', 'U1114073', 'U7201776', 'U8431354', 'U6061707', 'U4892747', 'U4127415', 'U3320909',
-    'U1037726', 'U928543', 'U918392', 'U877620', 'U758608', 'U743013', 'U528111', 'U471311', 'U450281',
-    'U436576', 'U401595', 'U13388281', 'U2573636', 'U7115856'
-}
 
 """
 TODAY
@@ -139,19 +139,34 @@ def get_nav_report():
     return nav
 
 @handle_exception
-def get_rtd_report():
+def get_bond_report():
     """
     Get the RTD report.
     
     :return: Response object with RTD report or error message
     """
     files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
-    rtd_file = [rtd for rtd in files_in_resources_folder if 'ibkr_market_data_snapshot' in rtd['name']]
+    rtd_file = [rtd for rtd in files_in_resources_folder if 'ibkr_bonds_snapshot' in rtd['name']]
     if len(rtd_file) != 1:
         logger.error('RTD file not found or multiple files found')
         raise Exception('RTD file not found or multiple files found')
     rtd = Drive.download_file(file_id=rtd_file[0]['id'], parse=True)
     return rtd  
+
+@handle_exception
+def get_stocks_report():
+    """
+    Get the Stocks report.
+    
+    :return: Response object with RTD report or error message
+    """
+    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
+    rtd_file = [rtd for rtd in files_in_resources_folder if 'ibkr_stocks_snapshot' in rtd['name']]
+    if len(rtd_file) != 1:
+        logger.error('Stocks file not found or multiple files found')
+        raise Exception('Stocks file not found or multiple files found')
+    rtd = Drive.download_file(file_id=rtd_file[0]['id'], parse=True)
+    return rtd
 
 @handle_exception
 def get_open_positions_report():
@@ -663,6 +678,7 @@ def extract_market_data():
     """
     try:
         extract_bond_snapshot()
+        extract_stock_snapshot()
         #extract_ust_bond_snapshot()
         #extract_sovereign_bond_snapshot()
     except Exception as e:
@@ -841,14 +857,64 @@ def extract_bond_snapshot():
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
         df['Timestamp'] = timestamp
 
-        market_data_snapshot_config = next((config for config in report_configs if config['name'] == 'market_data_snapshot'), None)
-        file_name = market_data_snapshot_config['backup_name']
-        Drive.upload_file(file_name=file_name, mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=market_data_snapshot_config['backup_folder_id'])
+        config = next((config for config in report_configs if config['name'] == 'bonds_snapshot'), None)
+        file_name = config['backup_name']
+        backup_folder_id = config['backup_folder_id']
+        Drive.upload_file(file_name=file_name, mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=backup_folder_id)
         return df
 
     except Exception as e:
         logger.error(f'Error extracting bond snapshot: {e}')
         raise Exception(f'Error extracting bond snapshot: {e}')
+
+def extract_stock_snapshot():
+    
+    from src.utils.connectors.ibkr_web_api import IBKRWebAPI
+    ibkr_web_api = IBKRWebAPI()
+    ip = requests.get('https://api.ipify.org').content.decode('utf8')
+    ibkr_web_api.create_sso_session('agmtech212', ip)
+    ibkr_web_api.initialize_brokerage_session()
+    time.sleep(2)
+
+    conids = '13013300,120549668,272093'
+    
+    snapshot = ibkr_web_api.get_market_data_snapshot(conids)
+    df = pd.DataFrame(snapshot)
+    df.columns = df.columns.str.capitalize()
+
+    df['Financial Instrument'] = df['Symbol']
+    df['Symbol'] = 'IBCID' + df['Conidex']
+    df['Next Option Date'] = ''
+    df['Payment Frequency'] = ''
+    df['Trading Currency'] = 'USD'
+    df['Sector'] = ''
+
+    def extract_numbers(text):
+        return ''.join(filter(str.isdigit, text))
+
+    df['Last'] = df['Last_price'].astype(str).apply(extract_numbers)
+    df['Last'] = pd.to_numeric(df['Last'], errors='coerce').fillna(0.0)
+
+    rename_map = {
+        'Company_name': 'Company Name',
+        'Bid_size': 'Bid Size',
+        'Bid_price': 'Bid',
+        'Bid_yield': 'Bid Yield',
+        'Ask_size': 'Ask Size',
+        'Ask_price': 'Ask',
+        'Ask_yield': 'Ask Yield',
+        'Issue_date': 'Issue Date',
+        'Last_trading_date': 'Last Trading Date',
+    }
+
+    df = df.rename(columns=rename_map)
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    df['Timestamp'] = timestamp
+
+    market_data_snapshot_config = next((config for config in report_configs if config['name'] == 'stocks_snapshot'), None)
+    file_name = market_data_snapshot_config['backup_name']
+    Drive.upload_file(file_name=file_name, mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=market_data_snapshot_config['backup_folder_id'])
+    return df
 
 def extract_ust_bond_snapshot():
     
@@ -887,7 +953,11 @@ def extract_ust_bond_snapshot():
     from src.components.tools.trade_tickets import extract_bond_details
     for index, row in df.iterrows():
         bond_details = extract_bond_details(row['Financial Instrument'])
-        df.at[index, 'Coupon'] = float(bond_details['coupon']) if bond_details['coupon'] != '' else 0.0
+        coupon = bond_details.get('coupon')
+        try:
+            df.at[index, 'Coupon'] = float(coupon) if coupon not in (None, '') else 0.0
+        except (TypeError, ValueError):
+            df.at[index, 'Coupon'] = 0.0
         df.at[index, 'Maturity'] = bond_details['maturity']
         df.at[index, 'ISIN'] = bond_details['isin']
     
@@ -996,9 +1066,6 @@ def extract_sovereign_bond_snapshot():
     df['Timestamp'] = timestamp
     pass
 
-def extract_etf_snapshot():
-    pass
-
 def extract_ofac_sdn_list():
     logger.announcement('Extracting OFAC SDN list.', type='info')
     sdn_url = 'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV'
@@ -1088,7 +1155,6 @@ def _append_missing_account_details(details: list) -> list:
 
     return details
 
-@handle_exception
 def extract_account_details_backup():
     logger.announcement('Extracting account details backup.', type='info')
     account_details_config = next((config for config in report_configs if config['name'] == 'account_details'), None)
@@ -1130,6 +1196,9 @@ def extract_account_details_backup():
 
     return {'status': 'success', 'processed_file': most_recent_file.get('name'), 'saved_file': file_name}
 
+"""
+HELPERS
+"""
 def rename_files_in_batch(pipeline=None):
     """
     Rename files in the batch folder based on specific naming conventions.
@@ -1306,9 +1375,9 @@ def process_clients(df):
     """
     return df
 
-def process_rtd(df):
+def process_bonds(df):
     """
-    Process the RTD file.
+    Process the Bonds file.
     
     :param df: Input dataframe
     :return: Processed dataframe
@@ -1433,6 +1502,11 @@ def process_rtd(df):
 
     df['S&P Equivalent'] = df['Rating Level'].apply(get_sp_equivalent)
 
+    return df
+
+def process_stocks(df):
+    """
+    """
     return df
 
 def process_open_positions_template(df):
@@ -1564,7 +1638,7 @@ def process_open_positions_template(df):
     concatenated_df = pd.concat([df, formula_df], axis=1)
     concatenated_df = concatenated_df.fillna('')
 
-    rtd = get_rtd_report()
+    rtd = get_bond_report()
     rtd_df = pd.DataFrame(rtd)
     rtd_df['Symbol'] = rtd_df['Symbol'].astype(str).str.strip().str.replace(r'^IBCID', '', regex=True).astype(int)
 
@@ -1644,56 +1718,33 @@ def process_account_details(df):
     """
     return df
 
-def get_finance_data():
-    """
-    Get finance data from the finance folder.
-    
-    :return: Response object with finance data or error message
-    """
-
-    proposals_equity_list_id = '1AqpIE7LRV40J-Aew5fA-P6gEfji3Yb-Rp5DohI9BQFY'
-    
-    raw_file = Drive.export_file(file_id=proposals_equity_list_id, mime_type='text/csv', parse=False)
-
-    try:
-        # Convert binary response to DataFrame
-        data = pd.read_csv(BytesIO(raw_file))
-    except:
-        raise Exception('Error processing file.')
-    
-    # Rest of your code using 'data' DataFrame instead of previous undefined 'data' variable
-    ticker_list = data['Ticker'].tolist()
-
-    df = yf.download(tickers=ticker_list, period= 'max', interval= '1d')
-    logger.info(f'Downloaded data from Yahoo Finance')
-    df = df.sort_index(ascending=False)
-    logger.info(f'Sorted data from Yahoo Finance')
-    df2 = df.iloc[[0,251,503,755,1007,1259]]
-    logger.info(f'Filtered data from Yahoo Finance')
-
-    # EXPORT DATASET
-    filename =  'dataset_PX_5Y.csv'
-
-    # Instead of writing to file, write to memory
-    csv_buffer = BytesIO()
-    df2.to_csv(csv_buffer, index=True)
-    csv_buffer.seek(0)
-    logger.info(f'Exported data to memory')
-    base64_data = base64.b64encode(csv_buffer.getvalue()).decode('utf-8')
-
-    # Upload the CSV data from memory
-    Drive.upload_file(file_name=filename, mime_type='text/csv', file_data=base64_data, parent_folder_id=resources_folder_id)
-    return {'status': 'success'}
-
 report_configs = [
     {
-        'name': 'market_data_snapshot',
+        'name': 'bonds_snapshot',
         'pipeline': 'market_data',
         'backup_folder_id': '1luTnQ1qRDNWLrqjMan-kF_eMgH16R-J9',
         'flex': False,
         'backup_name': 'bond' + '_' + today_date + '.csv',
-        'transform_func': process_rtd,
-        'output_filename': 'ibkr_market_data_snapshot.csv'
+        'transform_func': process_bonds,
+        'output_filename': 'ibkr_bonds_snapshot.csv'
+    },
+    {
+        'name': 'stocks_snapshot',
+        'pipeline': 'market_data',
+        'backup_folder_id': '1eo9yhD76i2oDf2UhE-GgVRyMsisf6iZO',
+        'flex': False,
+        'backup_name': 'stock' + '_' + today_date + '.csv',
+        'transform_func': process_stocks,
+        'output_filename': 'ibkr_stocks_snapshot.csv'
+    },
+        {
+        'name': 'account_details',
+        'pipeline': 'clients',
+        'backup_folder_id': '1YCOsFGAb3fZvKbFDBGK6wpjT1S-NIK98',
+        'flex': False,
+        'backup_name': 'account_details' + '_' + yesterday_date + '.json',
+        'transform_func': process_account_details,
+        'output_filename': 'ibkr_account_details.json'
     },
     {
         'name': 'tasks_for_subaccounts',
@@ -1776,15 +1827,6 @@ report_configs = [
         'transform_func': process_uk_sanctions_list,
         'output_filename': 'uk_sanctions_list.csv',
         'raw_passthrough': True
-    },
-    {
-        'name': 'account_details',
-        'pipeline': 'clients',
-        'backup_folder_id': '1YCOsFGAb3fZvKbFDBGK6wpjT1S-NIK98',
-        'flex': False,
-        'backup_name': 'account_details' + '_' + yesterday_date + '.json',
-        'transform_func': process_account_details,
-        'output_filename': 'account_details' + '_' + today_date + '.json'
     }
 ]
 

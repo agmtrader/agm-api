@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.tools.reporting import get_clients_report, get_nav_report, get_nav_report_monthly, get_rtd_report, get_proposals_equity_report, get_open_positions_report, get_deposits_withdrawals, get_trades_report, send_unfunded_emails, update_account_aliases
+from src.components.tools.reporting import get_clients_report, get_nav_report, get_nav_report_monthly, get_bond_report, get_stocks_report, get_proposals_equity_report, get_open_positions_report, get_deposits_withdrawals, get_trades_report, send_unfunded_emails, update_account_aliases
 from src.components.tools.reporting import run_clients_pipeline, run_market_data_pipeline, get_ibkr_details
 from src.utils.response import format_response
 
@@ -38,8 +38,13 @@ def get_nav_report_monthly_route():
 
 @bp.route('/rtd', methods=['GET'])
 @format_response
-def get_rtd_report_route():
-    return get_rtd_report()
+def get_bond_report_route():
+    return get_bond_report()
+
+@bp.route('/stocks', methods=['GET'])
+@format_response
+def get_stocks_report_route():
+    return get_stocks_report()
 
 @bp.route('/open_positions', methods=['GET'])
 @format_response

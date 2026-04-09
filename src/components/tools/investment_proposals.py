@@ -1,5 +1,5 @@
 import pandas as pd
-from src.components.tools.reporting import get_open_positions_report, get_proposals_equity_report, get_rtd_report
+from src.components.tools.reporting import get_open_positions_report, get_proposals_equity_report, get_bond_report
 from src.components.tools.risk_profiles import risk_archetypes
 from src.utils.connectors.supabase import db
 from src.utils.exception import handle_exception
@@ -110,7 +110,7 @@ def _load_investment_proposal_context() -> dict:
         logger.warning('Not enough SPY history to compute five 1-year period yields.')
 
     # Get RTD report
-    rtd_report = get_rtd_report()
+    rtd_report = get_bond_report()
     rtd_df = pd.DataFrame(rtd_report)
 
     # Remove IBCID Symbol column if it exists and clean it (though not strictly used for merge anymore)
