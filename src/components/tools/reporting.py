@@ -876,10 +876,30 @@ def extract_stock_snapshot():
     ibkr_web_api.initialize_brokerage_session()
     time.sleep(2)
 
-    conids = '13013300,120549668,272093'
+    stock_snapshot_tickers = [
+        ('SPY', '756733'),
+        ('QQQ', '320227571'),
+        ('AAPL', '265598'),
+        ('AMZN', '3691937'),
+        ('NVDA', '4815747'),
+        ('META', '107113386'),
+        ('MSFT', '272093'),
+        ('GOOGL', '208813720'),
+        ('TSLA', '76792991'),
+        ('NFLX', '15124833'),
+        ('AMD', '4391'),
+        ('COIN', '459530964'),
+        ('BRK.B', '265598'),  # TODO: verify conid
+        ('MA', '38708077'),
+        ('DIS', '6459'),
+        ('XOM', '13977'),
+        ('GLD', '756733'),  # TODO: verify conid
+    ]
+    conids = ','.join([conid for _, conid in stock_snapshot_tickers])
     
     snapshot = ibkr_web_api.get_market_data_snapshot(conids)
     df = pd.DataFrame(snapshot)
+
     df.columns = df.columns.str.capitalize()
 
     df['Financial Instrument'] = df['Symbol']
