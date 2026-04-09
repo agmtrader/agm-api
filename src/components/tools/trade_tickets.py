@@ -214,11 +214,7 @@ def extract_bond_details(description: str):
     # -----------------------------
     ratings_match = re.search(r"\b([A-Z]{1,4}[+-]?\d?/[A-Z]{1,4}[+-]?\d?)\b", description)
     ratings = ratings_match.group(1) if ratings_match else None
-
-    logger.success(
-        f"Extracted bond details: symbol={symbol}, coupon={coupon}, maturity={maturity}, isin={isin}, ratings={ratings}"
-    )
-
+    
     return {
         'symbol': symbol,
         'coupon': coupon,
