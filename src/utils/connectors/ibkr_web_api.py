@@ -884,7 +884,7 @@ class IBKRWebAPI:
             }
             signed_jwt = self.sign_request(body)
             response = requests.post(url, headers=headers, data=signed_jwt)
-            if response.status_code != 200:
+            if response.status_code < 200 or response.status_code >= 300:
                 raise Exception(f"Error {response.status_code}: {response.text}")
             return response.json()
         finally:
@@ -922,8 +922,6 @@ class IBKRWebAPI:
             }
             signed_jwt = self.sign_request(body)
             response = requests.post(url, headers=headers, data=signed_jwt)
-            if response.status_code != 200:
-                raise Exception(f"Error {response.status_code}: {response.text}")
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
