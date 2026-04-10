@@ -52,7 +52,13 @@ SKIP_ACCOUNT_DETAILS_ACCOUNT_IDS = {
     'U1512073', 'U1224910', 'U1213466', 'U1206083', 'U1192065', 'U1180647', 'U1161945', 'U1139038',
     'U1117382', 'U1114073', 'U7201776', 'U8431354', 'U6061707', 'U4892747', 'U4127415', 'U3320909',
     'U1037726', 'U928543', 'U918392', 'U877620', 'U758608', 'U743013', 'U528111', 'U471311', 'U450281',
-    'U436576', 'U401595', 'U13388281', 'U2573636', 'U7115856'
+    'U436576', 'U401595', 'U13388281', 'U2573636', 'U7115856', 'U25243779', 'U13321987', 'U6774207',
+    'U6978407', 'U7107190', 'U7130162', 'U7254887', 'U7250030', 'U7442191', 'U7558648', 'U7585547',
+    'U7692759', 'U7662396', 'U7761674', 'U7779413', 'U7849662', 'U7762995', 'U7811476', 'U7954199',
+    'U7968914', 'U9151583', 'U9074670', 'U9074960', 'U8928849', 'U8944802', 'U8477223', 'U8497149',
+    'U8455007', 'U8334049', 'U8210758', 'U8437534', 'U9324890', 'U9858733', 'U10553677', 'U10509335',
+    'U10748811', 'U10763225', 'U10770438', 'U10977992', 'U10955481', 'U10476251', 'U10545876',
+    'U10565675', 'U10790476', 'U10627439', 'U20020075', 'U13708322'
 }
 
 ratings = {
@@ -1142,20 +1148,26 @@ def _append_missing_account_details(details: list) -> list:
     from src.components.entities.accounts import read_accounts, read_account_details
     accounts = read_accounts({})
     detail_account_ids = {
-        detail.get('account', {}).get('accountId')
+        str(detail.get('account', {}).get('accountId')).strip()
         for detail in details
-        if isinstance(detail, dict) and isinstance(detail.get('account'), dict) and detail.get('account', {}).get('accountId')
+        if (
+            isinstance(detail, dict)
+            and isinstance(detail.get('account'), dict)
+            and detail.get('account', {}).get('accountId')
+        )
     }
 
     missing_accounts = [
         account for account in accounts
-        if account.get('ibkr_account_number') and account.get('ibkr_account_number') not in detail_account_ids
+        if str(account.get('ibkr_account_number') or '').strip()
+        and str(account.get('ibkr_account_number')).strip() not in detail_account_ids
     ]
 
     logger.info(f'Found {len(missing_accounts)} accounts missing account details.')
-
     for account in missing_accounts:
-        account_id = account.get('ibkr_account_number')
+        account_id = str(account.get('ibkr_account_number') or '').strip()
+        if not account_id:
+            continue
         if account_id in SKIP_ACCOUNT_DETAILS_ACCOUNT_IDS:
             continue
 
@@ -1163,6 +1175,7 @@ def _append_missing_account_details(details: list) -> list:
 
         if master_account is None:
             logger.warning(f'Skipping account {account_id}: missing master_account.')
+            print(f'[account_details_failed] {account_id} (missing master_account)')
             continue
 
         try:
@@ -1171,6 +1184,7 @@ def _append_missing_account_details(details: list) -> list:
                 details.append(new_details)
         except Exception as e:
             logger.error(f'Error fetching details for account {account_id}: {e}')
+            print(f'[account_details_failed] {account_id}')
             continue
 
     return details

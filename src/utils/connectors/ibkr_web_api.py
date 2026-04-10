@@ -347,7 +347,6 @@ class IBKRWebAPI:
                 raise Exception(f"Error {response.status_code}: {response.text}")
 
             data = response.json()
-            print(data)
             return data
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
@@ -435,7 +434,6 @@ class IBKRWebAPI:
                 logger.error(f"Error 505: {error_message}")
                 raise ServiceError(error_message[0:50] + '...', status_code=505)
 
-            print(data)
             logger.success("Application sent to Interactive Brokers successfully")
             return data
         finally:
@@ -529,7 +527,6 @@ class IBKRWebAPI:
                 raise Exception(f"Error {response.status_code}: {response.text}")
             logger.success("User created successfully")
             data = response.json()
-            print(data)
             return data
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
@@ -555,7 +552,6 @@ class IBKRWebAPI:
                 "instructionType": "DEPOSIT",
                 "instruction": instruction,
             }
-            print(body)
 
             token = self.get_bearer_token()
             if not token:
@@ -592,7 +588,6 @@ class IBKRWebAPI:
                 "instructionType": "WITHDRAWAL",
                 "instruction": instruction,
             }
-            print(body)
 
             token = self.get_bearer_token()
             if not token:
@@ -735,7 +730,6 @@ class IBKRWebAPI:
 
             logger.success("Financial information changed successfully")
             data = response.json()
-            print(data)
             return data
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
@@ -800,7 +794,6 @@ class IBKRWebAPI:
 
             logger.success("Trading permissions added successfully")
             data = response.json()
-            print(data)
             return data
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
@@ -856,7 +849,6 @@ class IBKRWebAPI:
 
             logger.success("Trading permissions added successfully")
             data = response.json()
-            print(data)
             return data
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
@@ -1911,7 +1903,6 @@ class IBKRWebAPI:
                 }
             }
 
-            print(body)
             response = requests.post(url, headers=headers, data=json.dumps(body))
 
             if response.status_code != 200:
