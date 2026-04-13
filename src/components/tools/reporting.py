@@ -1362,8 +1362,12 @@ def process_report(config):
             file_payload = base64.b64encode(raw_file).decode('utf-8')
 
             try:
-                existing_file = Drive.get_file_info(parent_id=resources_folder_id, file_name=output_filename)
-                Drive.delete_file(file_id=existing_file['id'])
+                existing_files = [
+                    file for file in Drive.get_files_in_folder(resources_folder_id)
+                    if file.get('name') == output_filename
+                ]
+                for existing_file in existing_files:
+                    Drive.delete_file(file_id=existing_file['id'])
             except:
                 pass
 
@@ -1414,10 +1418,14 @@ def process_report(config):
                     csv_content = pd.DataFrame(transformed_content).to_dict(orient='records')
                 file_payload = csv_content
             
-            # Check if file exists in resources folder and delete it if it does
+            # Delete all existing output files with the same name to avoid duplicates.
             try:
-                existing_file = Drive.get_file_info(parent_id=resources_folder_id, file_name=output_filename)
-                Drive.delete_file(file_id=existing_file['id'])
+                existing_files = [
+                    file for file in Drive.get_files_in_folder(resources_folder_id)
+                    if file.get('name') == output_filename
+                ]
+                for existing_file in existing_files:
+                    Drive.delete_file(file_id=existing_file['id'])
             except:
                 pass
 
