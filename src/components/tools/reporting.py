@@ -130,6 +130,21 @@ def get_clients_report():
     return clients
 
 @handle_exception
+def get_client_fees_report():
+    """
+    Get the client fees list.
+    
+    :return: Response object with clients list or error message
+    """
+    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
+    clients_file = [client for client in files_in_resources_folder if 'ibkr_client_fees' in client['name']]
+    if len(clients_file) != 1:
+        logger.error('Clients file not found or multiple files found')
+        raise Exception('Clients file not found or multiple files found')
+    clients = Drive.download_file(file_id=clients_file[0]['id'], parse=True)
+    return clients
+
+@handle_exception
 def get_nav_report():
     """
     Get the NAV report.
@@ -595,10 +610,22 @@ def send_unfunded_emails():
     contacts_to_email = contacts_to_email[['ibkr_account_number', 'email', 'name', 'advisor_email', 'business_days_since_date_opened', 'notice_number']]
 
     for contact in contacts_to_email.to_dict(orient='records')[1:]:
-        advisor_email = contact['advisor_email'] if contact['advisor_email'] is not None else ''
+        client_email = contact.get('email')
+        if pd.isna(client_email) or not isinstance(client_email, str) or not client_email.strip():
+            logger.info(
+                f"Skipping funding notification for account {contact.get('ibkr_account_number')} due to invalid email: {client_email!r}"
+            )
+            continue
+
+        advisor_email = contact.get('advisor_email')
+        if pd.isna(advisor_email) or not isinstance(advisor_email, str) or not advisor_email.strip():
+            advisor_email = ''
+        else:
+            advisor_email = advisor_email.strip()
+
         email.send_funding_notification_email(
             content={},
-            client_email=contact['email'],
+            client_email=client_email.strip(),
             lang='es',
             cc=advisor_email,
             days_since_opened=contact['business_days_since_date_opened'],

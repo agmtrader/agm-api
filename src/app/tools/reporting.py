@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.tools.reporting import get_clients_report, get_nav_report, get_nav_report_monthly, get_bond_report, get_stocks_report, get_proposals_equity_report, get_open_positions_report, get_deposits_withdrawals, get_trades_report, send_unfunded_emails, update_account_aliases
+from src.components.tools.reporting import get_clients_report, get_client_fees_report, get_nav_report, get_nav_report_monthly, get_bond_report, get_stocks_report, get_proposals_equity_report, get_open_positions_report, get_deposits_withdrawals, get_trades_report, send_unfunded_emails, update_account_aliases
 from src.components.tools.reporting import run_clients_pipeline, run_market_data_pipeline, get_ibkr_details
 from src.utils.response import format_response
 
@@ -19,6 +19,11 @@ def run_market_data_pipeline_route():
 @format_response
 def get_clients_report_route():
     return get_clients_report()
+
+@bp.route('/clients/fees', methods=['GET'])
+@format_response
+def get_client_fees_report_route():
+    return get_client_fees_report()
 
 @bp.route('/nav', methods=['GET'])
 @format_response
