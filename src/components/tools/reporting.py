@@ -507,6 +507,133 @@ def get_nav_report_monthly(years: list, months: list):
     return combined_nav_df.to_dict(orient='records')
 
 @handle_exception
+def get_monthly_client_fees(years: list, months: list):
+    """
+    Extract client fees information grouped by year and month,
+    keeping only the latest file available for each month.
+
+    :param years: List of years to include
+    :param months: List of months to include (as strings, e.g., '01', '02')
+    :return: List of client fees records
+    """
+    client_fees_root_folder_id = '1OnSEo8B2VUF5u-VkhtzZVIzx6ABe_YB7'
+
+    years = [str(y).strip() for y in years if str(y).strip()]
+    months = [str(m).strip().zfill(2) for m in months if str(m).strip()]
+
+    # If no months are provided, include all months in each requested year.
+    if not months:
+        months = [str(m).zfill(2) for m in range(1, 13)]
+
+    try:
+        root_contents = Drive.get_files_in_folder(client_fees_root_folder_id)
+    except Exception as e:
+        logger.error(f'Could not fetch contents of client fees root folder: {client_fees_root_folder_id}: {e}')
+        return []
+
+    all_client_fees_dfs = []
+    files_in_root = [f for f in root_contents if f['mimeType'] != 'application/vnd.google-apps.folder']
+
+    # Client fees files are expected as files named like 732383_YYYYMMDD_YYYYMMDD.csv.
+    # Use the last date in the filename as the period end.
+    if files_in_root:
+        latest_files_for_period = {}
+
+        for f in files_in_root:
+            name = f['name']
+            date_matches = re.findall(r'(\d{8})', name)
+            if date_matches:
+                end_date_str = date_matches[-1]
+            else:
+                end_date_str = datetime.fromisoformat(f['modifiedTime'].replace('Z', '+00:00')).strftime('%Y%m%d')
+
+            file_year = end_date_str[:4]
+            file_month = end_date_str[4:6]
+
+            if file_year in years and file_month in months:
+                key = (file_year, file_month)
+                if key not in latest_files_for_period or end_date_str > latest_files_for_period[key]['end_date']:
+                    latest_files_for_period[key] = {
+                        'id': f['id'],
+                        'end_date': end_date_str
+                    }
+
+        for (year, month), info in latest_files_for_period.items():
+            try:
+                fees_data = Drive.download_file(file_id=info['id'], parse=True)
+                if fees_data:
+                    df = pd.DataFrame(fees_data)
+                    df['Year'] = year
+                    df['Month'] = month
+                    df['ReportDate'] = info['end_date']
+                    all_client_fees_dfs.append(df)
+            except Exception as e:
+                logger.error(f'Error downloading/parsing client fees file for {year}-{month}: {e}')
+    else:
+        # Fallback for structures that keep client fees files under year subfolders.
+        year_folders = {
+            f['name']: f['id']
+            for f in root_contents
+            if f['mimeType'] == 'application/vnd.google-apps.folder'
+        }
+
+        for year in years:
+            if year not in year_folders:
+                logger.warning(f'Year folder {year} not found in client fees root folder.')
+                continue
+
+            year_folder_id = year_folders[year]
+
+            try:
+                year_files = Drive.get_files_in_folder(year_folder_id)
+            except Exception as e:
+                logger.error(f'Could not fetch contents for client fees year folder {year}: {e}')
+                continue
+
+            latest_files_for_months = {}
+
+            for f in year_files:
+                if f['mimeType'] == 'application/vnd.google-apps.folder':
+                    continue
+
+                name = f['name']
+                date_matches = re.findall(r'(\d{8})', name)
+                if date_matches:
+                    end_date_str = date_matches[-1]
+                else:
+                    end_date_str = datetime.fromisoformat(f['modifiedTime'].replace('Z', '+00:00')).strftime('%Y%m%d')
+
+                file_year = end_date_str[:4]
+                file_month = end_date_str[4:6]
+
+                if file_year == year and file_month in months:
+                    if file_month not in latest_files_for_months or end_date_str > latest_files_for_months[file_month]['end_date']:
+                        latest_files_for_months[file_month] = {
+                            'id': f['id'],
+                            'end_date': end_date_str
+                        }
+
+            for month, info in latest_files_for_months.items():
+                try:
+                    fees_data = Drive.download_file(file_id=info['id'], parse=True)
+                    if fees_data:
+                        df = pd.DataFrame(fees_data)
+                        df['Year'] = year
+                        df['Month'] = month
+                        df['ReportDate'] = info['end_date']
+                        all_client_fees_dfs.append(df)
+                except Exception as e:
+                    logger.error(f'Error downloading/parsing client fees file for {year}-{month}: {e}')
+
+    if not all_client_fees_dfs:
+        return []
+
+    combined_client_fees_df = pd.concat(all_client_fees_dfs, ignore_index=True)
+    combined_client_fees_df = combined_client_fees_df.fillna('')
+
+    return combined_client_fees_df.to_dict(orient='records')
+
+@handle_exception
 def get_ibkr_details():
     """
     Get the IBKR details report.
