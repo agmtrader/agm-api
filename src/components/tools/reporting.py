@@ -14,7 +14,7 @@ import json
 
 from src.utils.connectors.drive import GoogleDrive
 from src.utils.connectors.flex_query_api import getFlexQuery
-from src.utils.exception import handle_exception
+from src.utils.exception import ServiceError, handle_exception
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 from io import StringIO
 
@@ -114,6 +114,7 @@ ratings = {
 """
 TODAY
 """
+
 @handle_exception
 def get_clients_report():
     """
@@ -234,9 +235,20 @@ def get_deposits_withdrawals():
     deposits_withdrawals = Drive.download_file(file_id=deposits_withdrawals_file[0]['id'], parse=True)
     return deposits_withdrawals
 
+@handle_exception
+def get_ibkr_details():
+    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
+    ibkr_account_details_file = [ibkr_account_details for ibkr_account_details in files_in_resources_folder if 'ibkr_account_details' in ibkr_account_details['name']]
+    if len(ibkr_account_details_file) != 1:
+        logger.error('IBKR account details file not found or multiple files found')
+        raise Exception('IBKR account details file not found or multiple files found')
+    ibkr_details = Drive.download_file(file_id=ibkr_account_details_file[0]['id'], parse=True)
+    return ibkr_details
+
 """
 BACKUPS
 """
+
 @handle_exception
 def get_trades_report(years: list, months: list):
     """
@@ -633,19 +645,95 @@ def get_monthly_client_fees(years: list, months: list):
 
     return combined_client_fees_df.to_dict(orient='records')
 
-@handle_exception
-def get_ibkr_details():
-    """
-    Get the IBKR details report.
-    
-    :return: Response object with IBKR details report or error message
-    """
-    ibkr_account_details_root_folder_id = '1YCOsFGAb3fZvKbFDBGK6wpjT1S-NIK98'
-    files = Drive.get_files_in_folder(ibkr_account_details_root_folder_id)
-    most_recent_file = get_most_recent_file(files)
-    ibkr_details = Drive.download_file(file_id=most_recent_file['id'], parse=True)
-    return ibkr_details
+"""
+HARDCODED BACKUPS
+"""
 
+@handle_exception
+def get_brokerage_commissions():
+    """
+    Get the brokerage commissions report.
+    
+    :return: Response object with brokerage commissions report or error message
+    """
+    brokerage_commissions_root_folder_id = '1s1s6p0tcr3uw-AyHoVO68wDne586ukkY'
+    files = Drive.get_files_in_folder(brokerage_commissions_root_folder_id)
+    most_recent_file = get_most_recent_file(files)
+    brokerage_commissions = Drive.download_file(file_id=most_recent_file['id'], parse=True)
+    brokerage_commissions = _extract_named_sheet_rows(brokerage_commissions, 'brokerage')
+    logger.info(f'Brokerage commissions report loaded with {len(brokerage_commissions)} rows')
+    return _stringify_dict_keys(brokerage_commissions)
+
+@handle_exception
+def get_management_commissions():
+    """
+    Get the management commissions report.
+    
+    :return: Response object with management commissions report or error message
+    """
+    management_commissions_root_folder_id = '1J4M5ppbt0CZzgQ88woKmuoRunLxgdQ-I'
+    files = Drive.get_files_in_folder(management_commissions_root_folder_id)
+    most_recent_file = get_most_recent_file(files)
+    management_commissions = Drive.download_file(file_id=most_recent_file['id'], parse=True)
+    management_commissions = _extract_named_sheet_rows(management_commissions, 'management commissions')
+    logger.info(f'Management commissions report loaded with {len(management_commissions)} rows')
+    return _stringify_dict_keys(management_commissions)
+
+
+def _extract_named_sheet_rows(rows, expected_sheet_name):
+    """
+    Return only rows from one Excel worksheet (case-insensitive), removing helper metadata.
+    """
+    if not isinstance(rows, list):
+        raise ServiceError(f'Unexpected report format for sheet "{expected_sheet_name}"', status_code=500)
+
+    normalized_expected = expected_sheet_name.strip().lower()
+    filtered_rows = []
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        sheet_name = str(row.get('sheet_name', '')).strip().lower()
+        if sheet_name != normalized_expected:
+            continue
+
+        clean_row = {k: v for k, v in row.items() if k != 'sheet_name'}
+        filtered_rows.append(clean_row)
+
+    if not filtered_rows:
+        raise ServiceError(f'Sheet "{expected_sheet_name}" not found in latest report', status_code=404)
+
+    return filtered_rows
+
+
+def _stringify_dict_keys(value):
+    """
+    Recursively convert payloads to JSON-safe data:
+    - dict keys -> strings
+    - pandas null-likes (NaT/NaN) -> None
+    - timestamps/datetimes -> ISO strings
+    """
+    if isinstance(value, dict):
+        return {str(k): _stringify_dict_keys(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_stringify_dict_keys(item) for item in value]
+    if isinstance(value, tuple):
+        return [_stringify_dict_keys(item) for item in value]
+    try:
+        if pd.isna(value):
+            return None
+    except Exception:
+        pass
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
+"""
+HARDCODED FILES
+"""
 @handle_exception
 def get_proposals_equity_report():
     """
@@ -659,6 +747,7 @@ def get_proposals_equity_report():
 """
 Actions
 """
+
 @handle_exception
 def send_unfunded_emails():
     """
@@ -1675,8 +1764,12 @@ def process_bonds(df):
     df['SP_Level'] = df['SP'].apply(get_rating_level)
     df['Moodys_Level'] = df['Moodys'].apply(get_rating_level)
 
+    # Coerce to numeric before row-wise max to avoid float/string comparison errors.
+    level_columns = ['SP_Level', 'Moodys_Level']
+    df[level_columns] = df[level_columns].apply(pd.to_numeric, errors='coerce')
+
     # Get the lowest (highest number) level between SP and Moodys
-    df['Rating Level'] = df[['SP_Level', 'Moodys_Level']].max(axis=1)
+    df['Rating Level'] = df[level_columns].max(axis=1)
 
     # Drop the temporary columns
     df = df.drop(['SP_Level', 'Moodys_Level'], axis=1)
