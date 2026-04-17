@@ -679,6 +679,21 @@ def get_management_commissions():
     logger.info(f'Management commissions report loaded with {len(management_commissions)} rows')
     return _stringify_dict_keys(management_commissions)
 
+@handle_exception
+def get_ending_balances_from_statements():
+    """
+    Get the ending balances from statements report.
+    
+    :return: Response object with ending balances from statements report or error message
+    """
+    ending_balances_root_folder_id = '1VPEFxk4kRMWTYgj7NbJ3Ytpn2t5AGKpa'
+    files = Drive.get_files_in_folder(ending_balances_root_folder_id)
+    most_recent_file = get_most_recent_file(files)
+    ending_balances = Drive.download_file(file_id=most_recent_file['id'], parse=True)
+    ending_balances = _extract_named_sheet_rows(ending_balances, 'Ending Balances')
+    logger.info(f'Ending balances from statements report loaded with {len(ending_balances)} rows')
+    return _stringify_dict_keys(ending_balances)
+
 
 def _extract_named_sheet_rows(rows, expected_sheet_name):
     """
