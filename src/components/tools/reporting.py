@@ -191,6 +191,21 @@ def get_stocks_report():
     return rtd
 
 @handle_exception
+def get_ust_bond_report():
+    """
+    Get the UST Bonds report.
+
+    :return: Response object with UST Bonds report or error message
+    """
+    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
+    rtd_file = [rtd for rtd in files_in_resources_folder if 'ibkr_ust_bonds_snapshot' in rtd['name']]
+    if len(rtd_file) != 1:
+        logger.error('UST Bonds file not found or multiple files found')
+        raise Exception('UST Bonds file not found or multiple files found')
+    rtd = Drive.download_file(file_id=rtd_file[0]['id'], parse=True)
+    return rtd
+
+@handle_exception
 def get_open_positions_report():
     """
     Get the open positions report.
@@ -943,7 +958,7 @@ def extract_market_data():
     try:
         extract_bond_snapshot()
         extract_stock_snapshot()
-        #extract_ust_bond_snapshot()
+        extract_ust_bond_snapshot()
         #extract_sovereign_bond_snapshot()
     except Exception as e:
         logger.error(f'Error running market data pipeline: {e}')
@@ -986,6 +1001,58 @@ def transform(pipeline=None) -> dict:
 """
 EXTRACT HELPERS
 """
+
+def _collect_watchlist_bond_conids(api_client, watchlist_id: str, max_retries: int = 5, sleep_seconds: int = 2, target_size: int = 500) -> list:
+    """Collect unique BOND conids from a watchlist with retry polling."""
+    unique_conids = []
+    seen_conids = set()
+
+    for _ in range(max_retries):
+        watchlist_information = api_client.get_watchlist_information(watchlist_id)
+        instruments = watchlist_information.get('instruments', [])
+
+        for watchlist_item in instruments:
+            if watchlist_item.get('assetClass') != 'BOND':
+                continue
+
+            conid = watchlist_item.get('conid')
+            if conid is None:
+                continue
+
+            conid = str(conid)
+            if conid in seen_conids:
+                continue
+
+            seen_conids.add(conid)
+            unique_conids.append(conid)
+
+        if len(unique_conids) >= target_size:
+            break
+
+        time.sleep(sleep_seconds)
+
+    return unique_conids
+
+def _get_market_data_snapshot_in_chunks(api_client, conids: list, chunk_size: int = 75, sleep_seconds: float = 0.25) -> list:
+    """Fetch market snapshots in smaller chunks to stay under IBKR conid limits."""
+    if chunk_size <= 0:
+        raise ValueError('chunk_size must be greater than zero')
+
+    snapshots = []
+    total_chunks = (len(conids) + chunk_size - 1) // chunk_size
+
+    for chunk_index, start in enumerate(range(0, len(conids), chunk_size), start=1):
+        chunk = conids[start:start + chunk_size]
+        if not chunk:
+            continue
+
+        logger.info(f'Fetching market snapshot chunk {chunk_index}/{total_chunks} ({len(chunk)} conids)')
+        snapshots.extend(api_client.get_market_data_snapshot(','.join(chunk)))
+
+        if sleep_seconds > 0 and chunk_index < total_chunks:
+            time.sleep(sleep_seconds)
+
+    return snapshots
 
 def extract_flex_queries():
     """
@@ -1211,23 +1278,22 @@ def extract_ust_bond_snapshot():
     ibkr_web_api.initialize_brokerage_session()
     time.sleep(2)
 
-    retry_count = 0
+    ust_conids = _collect_watchlist_bond_conids(
+        api_client=ibkr_web_api,
+        watchlist_id='122',
+        max_retries=5,
+        sleep_seconds=2,
+        target_size=500
+    )
+    if not ust_conids:
+        raise Exception('No UST bond conids found in watchlist 122')
 
-    ust_conids = []
-    while retry_count < 5:
-        ust_watchlist_information = ibkr_web_api.get_watchlist_information('122')
-
-        for watchlist_item in ust_watchlist_information['instruments']:
-            if 'assetClass' in watchlist_item.keys() and watchlist_item['assetClass'] == 'BOND':
-                ust_conids.append(str(watchlist_item['conid']))
-
-        if len(ust_conids) > 500:
-            break
-            
-        retry_count += 1
-        time.sleep(2)
-    
-    snapshot = ibkr_web_api.get_market_data_snapshot(','.join(ust_conids[:350]))
+    snapshot = _get_market_data_snapshot_in_chunks(
+        api_client=ibkr_web_api,
+        conids=ust_conids[:350],
+        chunk_size=75,
+        sleep_seconds=0.25
+    )
     df = pd.DataFrame(snapshot)
     df.columns = df.columns.str.capitalize()
 
@@ -1275,7 +1341,19 @@ def extract_ust_bond_snapshot():
     df = df.rename(columns=rename_map)
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
     df['Timestamp'] = timestamp
-    pass
+
+    market_data_snapshot_config = next((config for config in report_configs if config['name'] == 'ust_bonds_snapshot'), None)
+    if market_data_snapshot_config is None:
+        raise Exception('Missing report config for ust_bonds_snapshot')
+
+    file_name = market_data_snapshot_config['backup_name']
+    Drive.upload_file(
+        file_name=file_name,
+        mime_type='text/csv',
+        file_data=df.to_dict(orient='records'),
+        parent_folder_id=market_data_snapshot_config['backup_folder_id']
+    )
+    return df
 
 def extract_sovereign_bond_snapshot():
     
@@ -1564,7 +1642,15 @@ def process_report(config):
         
         # Get files in the report's backup folder
         files = Drive.get_files_in_folder(folder_id)
-        files = [f for f in files if config['name'] in f.get('name', '')] or files
+        config_name = config['name']
+        backup_name = config.get('backup_name', '')
+
+        # Avoid substring collisions (e.g., bonds_snapshot vs ust_bonds_snapshot).
+        # Prefer exact backup_name, then strict "<config_name>_" prefix.
+        files_for_config = [f for f in files if f.get('name', '') == backup_name]
+        if not files_for_config:
+            files_for_config = [f for f in files if f.get('name', '').startswith(f'{config_name}_')]
+        files = files_for_config or files
 
         if len(files) == 0:
             logger.error(f'No files found in backup folder.')
@@ -1683,7 +1769,7 @@ def process_bonds(df):
     :return: Processed dataframe
     """
     
-    df = df[['Symbol',
+    required_columns = ['Symbol',
             'Financial Instrument',
             'Company Name',
             'Bid Size',
@@ -1710,7 +1796,14 @@ def process_bonds(df):
             #'S&P',
             #'Bond Features',
             #'Time-To-Maturity (TTM)'
-            ]]
+            ]
+
+    # Keep transform resilient when upstream snapshots have partial schemas.
+    for column in required_columns:
+        if column not in df.columns:
+            df[column] = ''
+
+    df = df[required_columns]
     
     numeric_columns = ['Bid',
             'Ask',
@@ -2028,9 +2121,18 @@ report_configs = [
         'pipeline': 'market_data',
         'backup_folder_id': '1luTnQ1qRDNWLrqjMan-kF_eMgH16R-J9',
         'flex': False,
-        'backup_name': 'bond' + '_' + today_date + '.csv',
+        'backup_name': 'bonds_snapshot' + '_' + today_date + '.csv',
         'transform_func': process_bonds,
         'output_filename': 'ibkr_bonds_snapshot.csv'
+    },
+    {
+        'name': 'ust_bonds_snapshot',
+        'pipeline': 'market_data',
+        'backup_folder_id': '1luTnQ1qRDNWLrqjMan-kF_eMgH16R-J9',
+        'flex': False,
+        'backup_name': 'ust_bonds_snapshot' + '_' + today_date + '.csv',
+        'transform_func': process_bonds,
+        'output_filename': 'ibkr_ust_bonds_snapshot.csv'
     },
     {
         'name': 'stocks_snapshot',
