@@ -251,6 +251,133 @@ def get_deposits_withdrawals():
     return deposits_withdrawals
 
 @handle_exception
+def get_monthly_deposits_withdrawals(years: list, months: list):
+    """
+    Extract deposits/withdrawals information grouped by year and month,
+    keeping only the latest file available for each month.
+
+    :param years: List of years to include
+    :param months: List of months to include (as strings, e.g., '01', '02')
+    :return: List of deposits/withdrawals records
+    """
+    deposits_withdrawals_root_folder_id = '1ZCJfH2hxvMLuP470HMa-D33_R_l-Lhtx'
+
+    years = [str(y).strip() for y in years if str(y).strip()]
+    months = [str(m).strip().zfill(2) for m in months if str(m).strip()]
+
+    # If no months are provided, include all months in each requested year.
+    if not months:
+        months = [str(m).zfill(2) for m in range(1, 13)]
+
+    try:
+        root_contents = Drive.get_files_in_folder(deposits_withdrawals_root_folder_id)
+    except Exception as e:
+        logger.error(f'Could not fetch contents of deposits/withdrawals root folder: {deposits_withdrawals_root_folder_id}: {e}')
+        return []
+
+    all_deposits_withdrawals_dfs = []
+    files_in_root = [f for f in root_contents if f['mimeType'] != 'application/vnd.google-apps.folder']
+
+    # Deposits/withdrawals files are expected as files named like 794867_YYYYMMDD_YYYYMMDD.csv.
+    # Use the last date in the filename as the period end.
+    if files_in_root:
+        latest_files_for_period = {}
+
+        for f in files_in_root:
+            name = f['name']
+            date_matches = re.findall(r'(\d{8})', name)
+            if date_matches:
+                end_date_str = date_matches[-1]
+            else:
+                end_date_str = datetime.fromisoformat(f['modifiedTime'].replace('Z', '+00:00')).strftime('%Y%m%d')
+
+            file_year = end_date_str[:4]
+            file_month = end_date_str[4:6]
+
+            if file_year in years and file_month in months:
+                key = (file_year, file_month)
+                if key not in latest_files_for_period or end_date_str > latest_files_for_period[key]['end_date']:
+                    latest_files_for_period[key] = {
+                        'id': f['id'],
+                        'end_date': end_date_str
+                    }
+
+        for (year, month), info in latest_files_for_period.items():
+            try:
+                deposits_withdrawals_data = Drive.download_file(file_id=info['id'], parse=True)
+                if deposits_withdrawals_data:
+                    df = pd.DataFrame(deposits_withdrawals_data)
+                    df['Year'] = year
+                    df['Month'] = month
+                    df['ReportDate'] = info['end_date']
+                    all_deposits_withdrawals_dfs.append(df)
+            except Exception as e:
+                logger.error(f'Error downloading/parsing deposits/withdrawals file for {year}-{month}: {e}')
+    else:
+        # Fallback for structures that keep deposits/withdrawals files under year subfolders.
+        year_folders = {
+            f['name']: f['id']
+            for f in root_contents
+            if f['mimeType'] == 'application/vnd.google-apps.folder'
+        }
+
+        for year in years:
+            if year not in year_folders:
+                logger.warning(f'Year folder {year} not found in deposits/withdrawals root folder.')
+                continue
+
+            year_folder_id = year_folders[year]
+
+            try:
+                year_files = Drive.get_files_in_folder(year_folder_id)
+            except Exception as e:
+                logger.error(f'Could not fetch contents for deposits/withdrawals year folder {year}: {e}')
+                continue
+
+            latest_files_for_months = {}
+
+            for f in year_files:
+                if f['mimeType'] == 'application/vnd.google-apps.folder':
+                    continue
+
+                name = f['name']
+                date_matches = re.findall(r'(\d{8})', name)
+                if date_matches:
+                    end_date_str = date_matches[-1]
+                else:
+                    end_date_str = datetime.fromisoformat(f['modifiedTime'].replace('Z', '+00:00')).strftime('%Y%m%d')
+
+                file_year = end_date_str[:4]
+                file_month = end_date_str[4:6]
+
+                if file_year == year and file_month in months:
+                    if file_month not in latest_files_for_months or end_date_str > latest_files_for_months[file_month]['end_date']:
+                        latest_files_for_months[file_month] = {
+                            'id': f['id'],
+                            'end_date': end_date_str
+                        }
+
+            for month, info in latest_files_for_months.items():
+                try:
+                    deposits_withdrawals_data = Drive.download_file(file_id=info['id'], parse=True)
+                    if deposits_withdrawals_data:
+                        df = pd.DataFrame(deposits_withdrawals_data)
+                        df['Year'] = year
+                        df['Month'] = month
+                        df['ReportDate'] = info['end_date']
+                        all_deposits_withdrawals_dfs.append(df)
+                except Exception as e:
+                    logger.error(f'Error downloading/parsing deposits/withdrawals file for {year}-{month}: {e}')
+
+    if not all_deposits_withdrawals_dfs:
+        return []
+
+    combined_deposits_withdrawals_df = pd.concat(all_deposits_withdrawals_dfs, ignore_index=True)
+    combined_deposits_withdrawals_df = combined_deposits_withdrawals_df.fillna('')
+
+    return combined_deposits_withdrawals_df.to_dict(orient='records')
+
+@handle_exception
 def get_ibkr_details():
     files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
     ibkr_account_details_file = [ibkr_account_details for ibkr_account_details in files_in_resources_folder if 'ibkr_account_details' in ibkr_account_details['name']]

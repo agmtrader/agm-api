@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.tools.reporting import get_clients_report, get_client_fees_report, get_monthly_client_fees, get_nav_report, get_nav_report_monthly, get_bond_report, get_stocks_report, get_ust_bond_report, get_proposals_equity_report, get_open_positions_report, get_deposits_withdrawals, get_trades_report, send_unfunded_emails, update_account_aliases, get_brokerage_commissions, get_management_commissions, get_ending_balances_from_statements
+from src.components.tools.reporting import get_clients_report, get_client_fees_report, get_monthly_client_fees, get_nav_report, get_nav_report_monthly, get_bond_report, get_stocks_report, get_ust_bond_report, get_proposals_equity_report, get_open_positions_report, get_deposits_withdrawals, get_monthly_deposits_withdrawals, get_trades_report, send_unfunded_emails, update_account_aliases, get_brokerage_commissions, get_management_commissions, get_ending_balances_from_statements
 from src.components.tools.reporting import run_clients_pipeline, run_market_data_pipeline, get_ibkr_details
 from src.utils.response import format_response
 
@@ -81,6 +81,17 @@ def get_proposals_equity_report_route():
 @format_response
 def get_deposits_withdrawals_route():
     return get_deposits_withdrawals()
+
+@bp.route('/deposits_withdrawals/monthly', methods=['GET'])
+@format_response
+def get_monthly_deposits_withdrawals_route():
+    years = request.args.get('years', request.args.get('year', '')).split(',')
+    months = request.args.get('months', request.args.get('month', '')).split(',')
+
+    years = [y.strip() for y in years if y.strip()]
+    months = [m.strip() for m in months if m.strip()]
+
+    return get_monthly_deposits_withdrawals(years, months)
 
 @bp.route('/brokerage_commissions', methods=['GET'])
 @format_response
