@@ -1,0 +1,104 @@
+name: Daily Screenings
+
+on:
+  schedule:
+    - cron: '0 14 * * *'   # Every day at 2 PM UTC (8:00 AM CST)
+  workflow_dispatch:
+
+jobs:
+  run-screenings:
+    runs-on: ubuntu-latest
+    outputs:
+      summary: ${{ steps.screenings.outputs.summary }}
+    steps:
+      - name: Request token and run screenings
+        id: screenings
+        shell: bash
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"token":"all"}' \
+            https://api.agmtechnology.com/token)
+
+          http_status=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+
+          if [ "$http_status" != "200" ]; then
+            echo "Token request failed with status $http_status" >&2
+            exit 1
+          fi
+
+          access_token=$(echo "$body" | jq -r '.access_token')
+          if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
+            echo "access_token not found in response" >&2
+            exit 1
+          fi
+
+          response=$(curl -s -w "\n%{http_code}" -X GET \
+            -H "Authorization: Bearer $access_token" \
+            https://api.agmtechnology.com/screenings/run)
+
+          http_status=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+
+          if [ "$http_status" != "200" ]; then
+            echo "Screenings run failed with status $http_status" >&2
+            echo "$body"
+            exit 1
+          fi
+
+          accounts_due_now=$(echo "$body" | jq -r '.accounts_due_now // 0')
+          individuals_with_no_screenings=$(echo "$body" | jq -r '.individuals_with_no_screenings // 0')
+          total_screenings_to_be_done=$(echo "$body" | jq -r '.total_screenings_to_be_done // 0')
+          screenings_executed=$(echo "$body" | jq -r '.screenings_executed // 0')
+          screening_errors=$(echo "$body" | jq -r '.screening_errors | length')
+
+          summary=$(cat <<EOF
+          Accounts due now: $accounts_due_now
+          Individuals with no screenings: $individuals_with_no_screenings
+          Total screenings to be done: $total_screenings_to_be_done
+          Screenings executed: $screenings_executed
+          Screening errors: $screening_errors
+          EOF
+          )
+
+          printf "summary<<EOF\n%s\nEOF\n" "$summary" >> "$GITHUB_OUTPUT"
+          echo "$summary"
+
+  notify-success:
+    needs: run-screenings
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send success email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "✅ Daily Screenings SUCCEEDED"
+          to: cr@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: |
+            The daily screenings workflow completed successfully.
+
+            ${{ needs.run-screenings.outputs.summary }}
+
+  notify-failure:
+    needs: run-screenings
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send failure email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "🚨 Daily Screenings FAILED"
+          to: cr@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: |
+            The daily screenings workflow failed. Review workflow logs for details.
