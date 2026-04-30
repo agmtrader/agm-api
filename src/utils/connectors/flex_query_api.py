@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 import time
 import pandas as pd
 import csv
+import random
 
 from src.utils.logger import logger
 from src.utils.connectors.drive import GoogleDrive
@@ -15,6 +16,57 @@ version='&v=3'
 url = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest?"
 logger.announcement('Initialized Flex Query Service', type='success')
 
+
+def _extract_flex_error(response_text):
+    if 'ErrorCode' not in response_text:
+        return None, None
+    try:
+        error_root = ET.fromstring(response_text)
+        return error_root.findtext('ErrorCode'), error_root.findtext('ErrorMessage')
+    except ET.ParseError:
+        return 'UNKNOWN', 'Unable to parse IBKR error payload.'
+
+def _poll_flex_response(request_fn, operation_name, max_wait_seconds=180, base_delay=2, max_delay=15):
+    start_time = time.time()
+    attempt = 0
+    delay = base_delay
+
+    while True:
+        response = request_fn()
+        error_code, error_message = _extract_flex_error(response.text)
+
+        if error_code is None:
+            return response
+
+        if error_code != '1019':
+            logger.error(
+                f'{operation_name} Failed. Error Code: {error_code}, Message: {error_message}'
+            )
+            raise Exception(
+                f'{operation_name} Failed. Error Code: {error_code}, Message: {error_message}'
+            )
+
+        elapsed = time.time() - start_time
+        if elapsed >= max_wait_seconds:
+            logger.error(
+                f'{operation_name} Failed after waiting {int(elapsed)}s. '
+                f'Error Code: {error_code}, Message: {error_message}'
+            )
+            raise Exception(
+                f'{operation_name} Failed after waiting {int(elapsed)}s. '
+                f'Error Code: {error_code}, Message: {error_message}'
+            )
+
+        sleep_seconds = min(delay, max_wait_seconds - elapsed) + random.uniform(0, 0.5)
+        logger.error(f'{operation_name} Failed. Preview: {response.text[0:200]}')
+        logger.info(
+            f'{operation_name} in progress (code 1019). Retry attempt {attempt + 1} '
+            f'after {sleep_seconds:.1f}s (elapsed: {int(elapsed)}s/{max_wait_seconds}s).'
+        )
+        time.sleep(sleep_seconds)
+        delay = min(delay * 1.5, max_delay)
+        attempt += 1
+
 def getFlexQuery(queryId):
 
     logger.info(f'Getting Flex Query for queryId: {queryId}')
@@ -23,31 +75,13 @@ def getFlexQuery(queryId):
 
     xml_data = None
 
-    retry_count = 0
-    max_retries = 10
-    retry_delay = 2
-
     # Create url for GET request to API for generating a report
     logger.info('Requesting Flex Query Template...')
     generatedTemplateURL = "".join([url, token, '&q=' + queryId, version])
-    generatedTemplateResponse = rq.get(url=generatedTemplateURL)
-
-    # Retry while the response contains an ErrorCode (IBKR returns 200 even on errors)
-    while ('ErrorCode' in generatedTemplateResponse.text) and retry_count < max_retries:
-        logger.error(f'Flex Query Template Generation Failed. Preview: {generatedTemplateResponse.text[0:200]}')
-        logger.info(f'Retrying... Attempt {retry_count} of {max_retries}')
-        time.sleep(retry_delay)
-        generatedTemplateResponse = rq.get(url=generatedTemplateURL)
-        retry_count += 1
-
-    # After retries, check again for ErrorCode and fail gracefully
-    if 'ErrorCode' in generatedTemplateResponse.text:
-        error_tree = ET.ElementTree(ET.fromstring(generatedTemplateResponse.text))
-        error_root = error_tree.getroot()
-        error_code = error_root.findtext('ErrorCode')
-        error_message = error_root.findtext('ErrorMessage')
-        logger.error(f'Flex Query Template Generation Failed. Error Code: {error_code}, Message: {error_message}')
-        raise Exception(f'Flex Query Template Generation Failed. Error Code: {error_code}, Message: {error_message}')
+    generatedTemplateResponse = _poll_flex_response(
+        request_fn=lambda: rq.get(url=generatedTemplateURL),
+        operation_name='Flex Query Template Generation',
+    )
 
     logger.success('Flex Query Template Generated')
 
@@ -60,29 +94,14 @@ def getFlexQuery(queryId):
         logger.error(f'Error parsing Flex Query Template XML: {str(e)}')
         raise Exception(f'Error parsing Flex Query Template XML: {str(e)}')
 
-    retry_count = 0
     # Create url for GET request to API to fetch generated report
     logger.info("Generating Flex Query...")
     generatedReportURL = root.find('Url').text
     generatedReportURL = "".join([generatedReportURL, "?",token, refCode, version])
-
-    generatedReportResponse = rq.get(url=generatedReportURL, allow_redirects=True)
-    while 'ErrorCode' in generatedReportResponse.text and retry_count < max_retries:
-        logger.error(f'Flex Query Generation Failed. Preview: {generatedReportResponse.text[0:200]}')
-        logger.info(f'Retrying... Attempt {retry_count} of {max_retries}')
-        time.sleep(retry_delay)
-        generatedReportResponse = rq.get(url=generatedReportURL, allow_redirects=True)
-        retry_count += 1
-
-    # After retries, check if still error
-    if 'ErrorCode' in generatedReportResponse.text:
-        # Try to extract error message
-        error_tree = ET.ElementTree(ET.fromstring(generatedReportResponse.text))
-        error_root = error_tree.getroot()
-        error_code = error_root.findtext('ErrorCode')
-        error_message = error_root.findtext('ErrorMessage')
-        logger.error(f'Flex Query Generation Failed. Error Code: {error_code}, Message: {error_message}')
-        raise Exception(f'Flex Query Generation Failed. Error Code: {error_code}, Message: {error_message}')
+    generatedReportResponse = _poll_flex_response(
+        request_fn=lambda: rq.get(url=generatedReportURL, allow_redirects=True),
+        operation_name='Flex Query Generation',
+    )
 
     # If response is HTML (e.g., error page), fail gracefully
     if generatedReportResponse.text.strip().startswith('<html'):

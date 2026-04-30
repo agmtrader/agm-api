@@ -1097,7 +1097,7 @@ def extract_clients_data() -> dict:
     
     extract_flex_queries()
     extract_ofac_sdn_list()
-    #extract_uk_sanctions_list()
+    extract_uk_sanctions_list()
     extract_account_details_backup()
 
     logger.announcement('Information successfully extracted for reports.', type='success')
@@ -2354,7 +2354,7 @@ report_configs = [
     {
         'name': 'uk_sanctions_list',
         'pipeline': 'clients',
-        'backup_folder_id': '13W9sXMbFvWtXPsEy6FiZJrQDHV3WYDD6',
+        'backup_folder_id': '1-57AG_nFE2elzOygdc7PGqdB4Y9k_7h6',
         'flex': False,
         'backup_name': 'uk_sanctions_list' + '_' + today_date + '.csv',
         'transform_func': process_uk_sanctions_list,
