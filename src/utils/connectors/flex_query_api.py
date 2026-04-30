@@ -19,7 +19,7 @@ def getFlexQuery(queryId):
 
     logger.info(f'Getting Flex Query for queryId: {queryId}')
 
-    token = "t=419584539155539272816800"
+    token = "t=707418312601144786944"
 
     xml_data = None
 
