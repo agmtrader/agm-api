@@ -8,6 +8,8 @@ on:
 jobs:
   etl:
     runs-on: ubuntu-latest
+    outputs:
+      summary: ${{ steps.reporting.outputs.summary }}
 
     steps:
       # ─────────────────────────────────────────────────────────────
@@ -37,14 +39,59 @@ jobs:
             fi
 
             # Trigger clients reporting run
-            status_clients=$(curl -s -o /dev/null -w "%{http_code}" \
+            response=$(curl -s -w "\n%{http_code}" -X GET \
               -H "Authorization: Bearer $access_token" \
-              -X GET https://api.agmtechnology.com/reporting/run/clients)
+              https://api.agmtechnology.com/reporting/run/clients)
+
+            status_clients=$(echo "$response" | tail -n1)
+            body=$(echo "$response" | sed '$d')
 
             if [ "$status_clients" != "200" ]; then
               echo "Clients reporting run request failed with status $status_clients"
+              echo "$body"
               exit 1
             fi
+
+            overall_status=$(echo "$body" | jq -r '.status // "unknown"')
+            extract_status=$(echo "$body" | jq -r '.overview.extract.status // "unknown"')
+            backup_status=$(echo "$body" | jq -r '.overview.backup.status // "unknown"')
+            transform_status=$(echo "$body" | jq -r '.overview.transform.status // "unknown"')
+
+            extract_total=$(echo "$body" | jq -r '.overview.extract.summary.total // 0')
+            extract_success=$(echo "$body" | jq -r '.overview.extract.summary.successful // 0')
+            extract_skipped=$(echo "$body" | jq -r '.overview.extract.summary.skipped // 0')
+            extract_failed=$(echo "$body" | jq -r '.overview.extract.summary.failed // 0')
+
+            backup_rename_status=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="rename_batch_files") | .status // empty' | head -n1)
+            backup_rename_status=${backup_rename_status:-unknown}
+            backup_rename_count=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="rename_batch_files") | .summary.renamed // 0' | head -n1)
+            backup_rename_failed=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="rename_batch_files") | .summary.failed // 0' | head -n1)
+            backup_sort_status=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="sort_batch_files") | .status // empty' | head -n1)
+            backup_sort_status=${backup_sort_status:-unknown}
+            backup_sort_count=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="sort_batch_files") | .summary.moved // 0' | head -n1)
+            backup_sort_failed=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="sort_batch_files") | .summary.failed // 0' | head -n1)
+            backup_clear_status=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="clear_batch_folder") | .status // empty' | head -n1)
+            backup_clear_status=${backup_clear_status:-unknown}
+
+            transform_total=$(echo "$body" | jq -r '.overview.transform.summary.total // 0')
+            transform_success=$(echo "$body" | jq -r '.overview.transform.summary.successful // 0')
+            transform_failed=$(echo "$body" | jq -r '.overview.transform.summary.failed // 0')
+
+            summary=$(cat <<EOF
+            Clients ETL status: $overall_status
+            Extract status: $extract_status (total: $extract_total, successful: $extract_success, skipped: $extract_skipped, failed: $extract_failed)
+            Backup status: $backup_status
+              - Rename batch files: $backup_rename_status (renamed: $backup_rename_count, failed: $backup_rename_failed)
+              - Sort batch files: $backup_sort_status (moved: $backup_sort_count, failed: $backup_sort_failed)
+              - Clear batch folder: $backup_clear_status
+            Transform status: $transform_status (total: $transform_total, successful: $transform_success, failed: $transform_failed)
+            Full overview JSON:
+            $(echo "$body" | jq '.overview')
+            EOF
+            )
+
+            printf "summary<<EOF\n%s\nEOF\n" "$summary" >> "$GITHUB_OUTPUT"
+            echo "$summary"
             
             echo "http_status=200" >> "$GITHUB_OUTPUT"
           attempt_limit: 12 # 1 original + 11 retries (2 hours)
@@ -67,6 +114,8 @@ jobs:
           from: aa@agmtechnology.com
           body: |
             The Clients ETL Pipeline completed successfully.
+
+            ${{ needs.etl.outputs.summary }}
           
   notify-failure:
     needs: etl
@@ -85,3 +134,5 @@ jobs:
           from: aa@agmtechnology.com
           body: |
             The Clients ETL Pipeline failed.
+
+            ${{ needs.etl.outputs.summary }}

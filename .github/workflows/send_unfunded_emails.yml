@@ -33,7 +33,7 @@ jobs:
 
           response=$(curl -s -w "\n%{http_code}" -X GET \
             -H "Authorization: Bearer $access_token" \
-            https://api.agmtechnology.com/reporting/send_unfunded_emails)
+            https://api.agmtechnology.com/actions/send_unfunded_emails)
 
           http_status=$(echo "$response" | tail -n1)
           body=$(echo "$response" | sed '$d')

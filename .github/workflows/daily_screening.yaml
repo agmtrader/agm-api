@@ -2,7 +2,7 @@ name: Daily Screenings
 
 on:
   schedule:
-    - cron: '0 14 * * *'   # Every day at 2 PM UTC (8:00 AM CST)
+    - cron: '0 15 * * *'   # Every day at 2 PM UTC (9:00 AM CST)
   workflow_dispatch:
 
 jobs:
@@ -36,7 +36,7 @@ jobs:
 
           response=$(curl -s -w "\n%{http_code}" -X GET \
             -H "Authorization: Bearer $access_token" \
-            https://api.agmtechnology.com/screenings/run)
+            https://api.agmtechnology.com/actions/run_screening_process)
 
           http_status=$(echo "$response" | tail -n1)
           body=$(echo "$response" | sed '$d')

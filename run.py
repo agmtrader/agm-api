@@ -119,15 +119,15 @@ def start_api():
         raise ServiceError("Unauthorized", status_code=401)
 
     # Tools
-    from src.app.tools import ada, email, investment_proposals, reporting, risk_profiles, screenings, trade_tickets, trade_request
+    from src.app.tools import actions, email, etl,investment_proposals, reporting, risk_profiles, trade_tickets
+    app.register_blueprint(actions.bp, url_prefix='/actions')
     app.register_blueprint(email.bp, url_prefix='/email')
-    app.register_blueprint(ada.bp, url_prefix='/ada')
+    
+    app.register_blueprint(etl.bp, url_prefix='/etl')
     app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')
     app.register_blueprint(reporting.bp, url_prefix='/reporting')
     app.register_blueprint(risk_profiles.bp, url_prefix='/risk_profiles')
-    app.register_blueprint(screenings.bp, url_prefix='/screenings')
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
-    app.register_blueprint(trade_request.bp, url_prefix='/trade_request')
 
     # Entities
     from src.app.entities import accounts, advisors, applications, contacts, documents, fee_template_requests, flagged_deposits, users, advisor_changes, management_type_requests

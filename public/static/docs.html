@@ -57,7 +57,9 @@
     <tr><td>/accounts/update</td><td>POST</td><td></td></tr>
     <tr><td>/accounts/with-metadata</td><td>GET</td><td></td></tr>
     <tr><td>/accounts/with_metadata</td><td>GET</td><td></td></tr>
-    <tr><td>/ada/chat</td><td>POST</td><td></td></tr>
+    <tr><td>/actions/run_screening_process</td><td>GET</td><td></td></tr>
+    <tr><td>/actions/send_unfunded_emails</td><td>GET</td><td></td></tr>
+    <tr><td>/actions/update_pending_alias</td><td>PATCH</td><td></td></tr>
     <tr><td>/advisor_changes/create</td><td>POST</td><td></td></tr>
     <tr><td>/advisor_changes/read</td><td>GET</td><td></td></tr>
     <tr><td>/advisors/create</td><td>POST</td><td></td></tr>
@@ -81,6 +83,8 @@
     <tr><td>/email/send_email/trade_ticket</td><td>POST</td><td></td></tr>
     <tr><td>/email/send_email/transfer_instructions</td><td>POST</td><td></td></tr>
     <tr><td>/email/send_email/welcome</td><td>POST</td><td></td></tr>
+    <tr><td>/etl/clients</td><td>GET</td><td></td></tr>
+    <tr><td>/etl/market_data</td><td>GET</td><td></td></tr>
     <tr><td>/fee_template_requests/create</td><td>POST</td><td></td></tr>
     <tr><td>/fee_template_requests/read</td><td>GET</td><td></td></tr>
     <tr><td>/fee_template_requests/update</td><td>POST</td><td></td></tr>
@@ -103,12 +107,8 @@
     <tr><td>/reporting/nav</td><td>GET</td><td></td></tr>
     <tr><td>/reporting/nav/monthly</td><td>GET</td><td></td></tr>
     <tr><td>/reporting/open_positions</td><td>GET</td><td></td></tr>
-    <tr><td>/reporting/pending_alias</td><td>PATCH</td><td></td></tr>
     <tr><td>/reporting/proposals_equity</td><td>GET</td><td></td></tr>
     <tr><td>/reporting/rtd</td><td>GET</td><td></td></tr>
-    <tr><td>/reporting/run/clients</td><td>GET</td><td></td></tr>
-    <tr><td>/reporting/run/market_data</td><td>GET</td><td></td></tr>
-    <tr><td>/reporting/send_unfunded_emails</td><td>GET</td><td></td></tr>
     <tr><td>/reporting/stocks</td><td>GET</td><td></td></tr>
     <tr><td>/reporting/trades</td><td>GET</td><td></td></tr>
     <tr><td>/reporting/ust_bonds</td><td>GET</td><td></td></tr>
@@ -116,8 +116,6 @@
     <tr><td>/risk_profiles/list</td><td>GET</td><td></td></tr>
     <tr><td>/risk_profiles/read</td><td>GET</td><td></td></tr>
     <tr><td>/token</td><td>POST</td><td></td></tr>
-    <tr><td>/trade_request/create</td><td>POST</td><td></td></tr>
-    <tr><td>/trade_request/read</td><td>GET</td><td></td></tr>
     <tr><td>/trade_tickets/generate</td><td>POST</td><td></td></tr>
     <tr><td>/trade_tickets/list</td><td>GET</td><td></td></tr>
     <tr><td>/trade_tickets/read</td><td>GET</td><td></td></tr>

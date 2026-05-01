@@ -4,7 +4,6 @@ import xml.etree.ElementTree as ET
 import time
 import pandas as pd
 import csv
-import random
 
 from src.utils.logger import logger
 from src.utils.connectors.drive import GoogleDrive
@@ -26,12 +25,10 @@ def _extract_flex_error(response_text):
     except ET.ParseError:
         return 'UNKNOWN', 'Unable to parse IBKR error payload.'
 
-def _poll_flex_response(request_fn, operation_name, max_wait_seconds=180, base_delay=2, max_delay=15):
-    start_time = time.time()
+def _poll_flex_response(request_fn, operation_name, max_retries=20, retry_delay_seconds=5):
     attempt = 0
-    delay = base_delay
 
-    while True:
+    while attempt < max_retries:
         response = request_fn()
         error_code, error_message = _extract_flex_error(response.text)
 
@@ -46,26 +43,25 @@ def _poll_flex_response(request_fn, operation_name, max_wait_seconds=180, base_d
                 f'{operation_name} Failed. Error Code: {error_code}, Message: {error_message}'
             )
 
-        elapsed = time.time() - start_time
-        if elapsed >= max_wait_seconds:
+        if attempt >= max_retries - 1:
             logger.error(
-                f'{operation_name} Failed after waiting {int(elapsed)}s. '
+                f'{operation_name} Failed after {max_retries} attempts. '
                 f'Error Code: {error_code}, Message: {error_message}'
             )
             raise Exception(
-                f'{operation_name} Failed after waiting {int(elapsed)}s. '
+                f'{operation_name} Failed after {max_retries} attempts. '
                 f'Error Code: {error_code}, Message: {error_message}'
             )
 
-        sleep_seconds = min(delay, max_wait_seconds - elapsed) + random.uniform(0, 0.5)
         logger.error(f'{operation_name} Failed. Preview: {response.text[0:200]}')
         logger.info(
             f'{operation_name} in progress (code 1019). Retry attempt {attempt + 1} '
-            f'after {sleep_seconds:.1f}s (elapsed: {int(elapsed)}s/{max_wait_seconds}s).'
+            f'after {retry_delay_seconds}s.'
         )
-        time.sleep(sleep_seconds)
-        delay = min(delay * 1.5, max_delay)
+        time.sleep(retry_delay_seconds)
         attempt += 1
+
+    raise Exception(f'{operation_name} Failed after {max_retries} attempts.')
 
 def getFlexQuery(queryId):
 

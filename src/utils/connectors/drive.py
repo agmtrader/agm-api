@@ -8,6 +8,8 @@ from src.utils.logger import logger
 from src.utils.exception import handle_exception
 from src.utils.managers.secret_manager import get_secret
 
+from datetime import datetime
+
 import pandas as pd
 from io import BytesIO, StringIO
 import io
@@ -535,3 +537,19 @@ class GoogleDrive:
         return consolidated_records
       else:
         raise Exception("Unsupported MIME type for parsing.")
+      
+  def get_most_recent_file(self, files):
+    """
+    Get the most recent file from a list of files based on creation time.
+    
+    :param files: List of file dictionaries
+    :return: Most recent file dictionary
+    """
+    logger.info('Getting most recent file.')
+    if not files:
+      raise ValueError('No files provided to get_most_recent_file.')
+
+    files.sort(key=lambda f: datetime.strptime(f['createdTime'], '%Y-%m-%dT%H:%M:%S.%fZ'), reverse=True)
+    most_recent_file = files[0]
+    logger.info(f'Most recent file: {most_recent_file["name"], most_recent_file["createdTime"]}')
+    return most_recent_file

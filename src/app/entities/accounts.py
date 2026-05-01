@@ -345,6 +345,32 @@ def get_wire_instructions_route():
         return {"error": "Missing master_account or account_id"}, 400
     return get_wire_instructions(master_account=master_account, account_id=account_id, currency=currency)
 
+@bp.route('/ibkr/statements', methods=['POST'])
+@format_response
+def get_account_statements_route():
+    payload = request.get_json(force=True)
+
+    account_id = payload.get('account_id', None)
+    start_date = payload.get('start_date', None)
+    end_date = payload.get('end_date', None)
+    master_account = payload.get('master_account', None)
+    
+    if not account_id or not start_date or not end_date or not master_account:
+        return {"error": "Missing account_id, start_date, end_date, or master_account"}, 400
+        
+    return get_account_statements(account_id=account_id, start_date=start_date, end_date=end_date, master_account=master_account)
+
+@bp.route('/ibkr/statements/available', methods=['GET'])
+@format_response
+def get_available_statements_route():
+    account_id = request.args.get('account_id', None)
+    master_account = request.args.get('master_account', None)
+    
+    if not account_id:
+        return {"error": "Missing account_id"}, 400
+        
+    return get_available_statements(account_id=account_id, master_account=master_account)
+
 # Trading API
 @bp.route('/ibkr/sso/create', methods=['POST'])
 @format_response
@@ -392,33 +418,6 @@ def get_portfolio_analyst_performance_route():
         return {"error": "Missing acctIds or freq"}, 400
 
     return get_portfolio_analyst_performance(acct_ids=acct_ids, freq=freq)
-
-@bp.route('/ibkr/statements', methods=['POST'])
-@format_response
-def get_account_statements_route():
-    payload = request.get_json(force=True)
-
-    account_id = payload.get('account_id', None)
-    start_date = payload.get('start_date', None)
-    end_date = payload.get('end_date', None)
-    master_account = payload.get('master_account', None)
-    
-    if not account_id or not start_date or not end_date or not master_account:
-        return {"error": "Missing account_id, start_date, end_date, or master_account"}, 400
-        
-    return get_account_statements(account_id=account_id, start_date=start_date, end_date=end_date, master_account=master_account)
-
-@bp.route('/ibkr/statements/available', methods=['GET'])
-@format_response
-def get_available_statements_route():
-    account_id = request.args.get('account_id', None)
-    master_account = request.args.get('master_account', None)
-    
-    if not account_id:
-        return {"error": "Missing account_id"}, 400
-        
-    return get_available_statements(account_id=account_id, master_account=master_account)
-
 
 # Enums
 @bp.route('/ibkr/forms', methods=['POST'])

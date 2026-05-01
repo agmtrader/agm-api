@@ -1,6 +1,5 @@
 from enum import IntEnum
 
-
 class MarketDataField(IntEnum):
     """Enumeration of market data snapshot field identifiers from IBKR API."""
 

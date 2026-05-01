@@ -1,7 +1,6 @@
 from datetime import date, datetime, timedelta
 import re
 import unicodedata
-
 from src.components.entities.accounts import read_accounts, screen_person
 from src.components.tools.reporting import get_ibkr_details
 from src.utils.connectors.supabase import db

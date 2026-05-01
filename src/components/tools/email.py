@@ -1,16 +1,10 @@
 from src.utils.connectors.gmail import GmailConnector
 from src.utils.exception import handle_exception
 
-# Remove low-level Gmail implementation details; delegate to connector
 class Gmail(GmailConnector):
     """High-level email service containing business-specific helper methods.
     Inherits low-level send_email / create_html_email from GmailConnector.
     """
-
-    # ------------------------------------------------------------------
-    # Business convenience wrappers
-    # ------------------------------------------------------------------
-
     @handle_exception
     def send_email_confirmation(self, content, client_email, lang="es"):
         subject = (

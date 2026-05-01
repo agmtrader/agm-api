@@ -5,7 +5,6 @@ import json
 from src.utils.managers.secret_manager import get_secret
 from src.utils.exception import handle_exception, ServiceError
 from src.utils.logger import logger
-from datetime import datetime
 from functools import wraps
 from src.lib.market_data_fields import MarketDataField
 
