@@ -8,6 +8,7 @@ from flask import jsonify
 from src.utils.logger import logger
 from src.utils.exception import handle_exception
 import re
+import os
 from sqlalchemy import inspect
 
 class DatabaseManager:
@@ -31,24 +32,28 @@ class DatabaseManager:
         # Get all models from SQLAlchemy Base
         model_tables = self.base.metadata.tables.keys()
         
-        # Compare and log differences
-        logger.info("Validating database schema...")
-        
-        # Check for missing tables in models
-        missing_in_models = set(db_tables) - set(model_tables)
-        if missing_in_models:
-            logger.error(f"Tables in database but missing in models: {missing_in_models}")
-            raise Exception(f"Tables in database but missing in models: {missing_in_models}")
-        
-        # Check for extra tables in models
-        extra_in_models = set(model_tables) - set(db_tables)
-        if extra_in_models:
-            logger.error(f"Tables in models but missing in database: {extra_in_models}")
-            raise Exception(f"Tables in models but missing in database: {extra_in_models}")
-        
-        # Check detailed column differences for each table
-        for table_name in set(db_tables) & set(model_tables):
-            self._validate_table_schema(inspector, table_name)
+        dev_mode = os.getenv("DEV_MODE", "").lower() == "true"
+        if not dev_mode:
+            # Compare and log differences
+            logger.info("Validating database schema...")
+            
+            # Check for missing tables in models
+            missing_in_models = set(db_tables) - set(model_tables)
+            if missing_in_models:
+                logger.error(f"Tables in database but missing in models: {missing_in_models}")
+                raise Exception(f"Tables in database but missing in models: {missing_in_models}")
+            
+            # Check for extra tables in models
+            extra_in_models = set(model_tables) - set(db_tables)
+            if extra_in_models:
+                logger.error(f"Tables in models but missing in database: {extra_in_models}")
+                raise Exception(f"Tables in models but missing in database: {extra_in_models}")
+            
+            # Check detailed column differences for each table
+            for table_name in set(db_tables) & set(model_tables):
+                self._validate_table_schema(inspector, table_name)
+        else:
+            logger.info("Skipping database schema validation because DEV_MODE=true")
         
         try:
             self.base.metadata.create_all(self.engine)
