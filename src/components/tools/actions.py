@@ -2,7 +2,7 @@
 from src.utils.exception import handle_exception
 from src.components.tools.reporting import get_nav_report, get_clients_report
 import pandas as pd
-from src.utils import logger
+from src.utils.logger import logger
 
 @handle_exception
 def send_unfunded_emails():
@@ -119,8 +119,6 @@ def update_account_aliases():
         title = account.get('Title')
         old_alias = account.get('Alias')
         master_account = 'ad' if account.get('Master Account') == 'F10740574' else 'br'
-        if account_id == 'U23431519':
-            logger.info(f"old_alias: {old_alias}, {type(old_alias)}, title: {title}, {type(title)}, master_account: {master_account}")
         if account_id and title is not None:
             new_alias = f"{account_id} {title}"
             try:

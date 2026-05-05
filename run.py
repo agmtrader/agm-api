@@ -122,7 +122,6 @@ def start_api():
     from src.app.tools import actions, email, etl,investment_proposals, reporting, risk_profiles, trade_tickets
     app.register_blueprint(actions.bp, url_prefix='/actions')
     app.register_blueprint(email.bp, url_prefix='/email')
-    
     app.register_blueprint(etl.bp, url_prefix='/etl')
     app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')
     app.register_blueprint(reporting.bp, url_prefix='/reporting')
