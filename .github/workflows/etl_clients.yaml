@@ -2,7 +2,7 @@ name: Clients ETL Pipeline
 
 on:
   schedule:
-    - cron: '30 10 * * *'   # Every day at 10 AM UTC (4:00 AM CST)
+    - cron: '00 10 * * *'   # Every day at 10:00 AM UTC (4:00 AM CST)
   workflow_dispatch:
 
 jobs:
