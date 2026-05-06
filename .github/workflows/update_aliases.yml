@@ -40,7 +40,6 @@ jobs:
             response=$(curl -s -w "\n%{http_code}" -X PATCH \
               -H "Authorization: Bearer $access_token" \
               -H "Content-Type: application/json" \
-              -d '{"master_account":"br"}' \
               https://api.agmtechnology.com/actions/update_pending_alias)
 
             http_status=$(echo "$response" | tail -n1)
