@@ -179,7 +179,7 @@ def extract_flex_query(config):
 
     return {'name': query_id, 'status': 'success'}
 
-def extract_ofac_sdn_list():
+def extract_ofac_sdn_list(config=None):
     logger.announcement('Extracting OFAC SDN list.', type='info')
     sdn_url = 'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV'
     consolidated_url = 'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/CONS_PRIM.CSV'
@@ -199,7 +199,7 @@ def extract_ofac_sdn_list():
     Drive.upload_file(file_name='ofac_sdn_list.csv', mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=batch_folder_id)
     logger.announcement('OFAC SDN list extracted and uploaded to batch folder.', type='success')
 
-def extract_uk_sanctions_list():
+def extract_uk_sanctions_list(config=None):
     logger.announcement('Extracting UK sanctions list.', type='info')
     uk_sanctions_url = 'https://sanctionslist.fcdo.gov.uk/docs/UK-Sanctions-List.csv'
 
@@ -230,7 +230,7 @@ def extract_uk_sanctions_list():
     )
     logger.announcement('UK sanctions list extracted and uploaded to batch folder.', type='success')
 
-def extract_un_sanctions_list():
+def extract_un_sanctions_list(config=None):
     logger.announcement('Extracting UN sanctions list.', type='info')
 
     un_sanctions_response = requests.get('https://scsanctions.un.org/resources/xml/en/name/consolidated.xml?_gl=1*b6x5x9*_ga*MTM1Mzg4ODEzNS4xNzc3NjU0MjY4*_ga_TK9BQL5X7Z*czE3Nzc2NTQyNjgkbzEkZzEkdDE3Nzc2NTU1NzEkajYwJGwwJGgw')

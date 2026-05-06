@@ -214,16 +214,6 @@ class Supabase:
             name = Column(Text, nullable=False)
             query_id = Column(Text, nullable=False)
 
-        class TradeRequest(self.Base):
-            __tablename__ = 'trade_request'
-            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            side = Column(Text, nullable=False)
-            quantity = Column(Integer, nullable=False)
-            order_type = Column(Text, nullable=False)
-            time_in_force = Column(Text, nullable=False)
-
         class FlaggedDeposit(self.Base):
             __tablename__ = 'flagged_deposit'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -254,15 +244,9 @@ class Supabase:
 
         # Investment Proposals
         self.InvestmentProposal = InvestmentProposal
-        
-        # Trade Requests
-        self.TradeRequest = TradeRequest
 
         # Trade Tickets
         self.TradeTicket = TradeTicket
-
-        # Trade Requests
-        self.TradeRequest = TradeRequest
 
         # Flagged Deposits
         self.FlaggedDeposit = FlaggedDeposit
