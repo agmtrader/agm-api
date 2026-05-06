@@ -2,7 +2,7 @@ name: Daily Screenings
 
 on:
   schedule:
-    - cron: '0 15 * * *'   # Every day at 2 PM UTC (9:00 AM CST)
+    - cron: '0 14 * * *'   # Every day at 2 PM UTC (9:00 AM CST)
   workflow_dispatch:
 
 jobs:

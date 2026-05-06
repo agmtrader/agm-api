@@ -2,7 +2,7 @@ name: Send Unfunded Emails
 
 on:
   schedule:
-    - cron: '35 13 * * 1'   # Every Monday at 13:35 PM UTC (7:35 AM CST)
+    - cron: '00 14 * * 1'   # Every Monday at 15:00 PM UTC (8:00 AM CST)
   workflow_dispatch:
 
 jobs:
