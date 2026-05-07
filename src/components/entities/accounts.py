@@ -10,6 +10,7 @@ from src.components.tools.reporting import get_clients_report, get_nav_report, g
 import os
 import re
 import time
+import uuid
 
 logger.announcement('Initializing Accounts Service', type='info')
 ibkr_web_api = IBKRWebAPI()
@@ -430,6 +431,17 @@ def change_financial_information(account_id: str = None, new_financial_informati
     return ibkr_web_api.change_financial_information(
         account_id=account_id,
         new_financial_information=new_financial_information,
+        master_account=master_account
+    )
+
+@handle_exception
+def change_account_holder_external_id(account_id: str = None, id: str = None, master_account: str = None) -> dict:
+    """Change account holder external id via IBKR API using IBKR id (entityId)."""
+    external_id = str(uuid.uuid4())
+    return ibkr_web_api.change_account_holder_external_id(
+        accountId=account_id,
+        entityId=id,
+        external_id=external_id,
         master_account=master_account
     )
 

@@ -853,6 +853,57 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
+    def change_account_holder_external_id(self, accountId:str, entityId: str, external_id: str, master_account: str = None) -> dict:
+        """Change account holder external id via account management PATCH endpoint."""
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info("Changing account holder external id")
+
+            if not accountId:
+                raise Exception("Account id is required")
+            if not entityId:
+                raise Exception("Entity id is required")
+            if not external_id:
+                raise Exception("External id is required")
+
+            url = f"{self.BASE_URL}/gw/api/v1/accounts"
+
+            body = {
+                "accountManagementRequests": {
+                    "changeAccountHolderDetail": {
+                        "newAccountHolderDetails": [
+                            {
+                                "id": entityId,
+                                "externalId": "test",
+                            }
+                        ],
+                        "accountId": accountId,
+                    }
+                }
+            }
+
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            signed_jwt = self.sign_request(body)
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt",
+            }
+
+            response = requests.patch(url, headers=headers, data=signed_jwt)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Account holder external id changed successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
     def view_withdrawable_cash(self, master_account: str, account_id: str, client_instruction_id: str):
         """View the withdrawable cash for the given account.
 

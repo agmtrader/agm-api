@@ -2,7 +2,7 @@ from flask import Blueprint, request
 
 from src.components.entities.accounts import create_account, read_accounts, read_accounts_with_metadata, submit_documents, upload_document, read_instructions, delete_document, read_account_documents, update_account_document, screen_person, read_account_screenings
 
-from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, withdraw_funds, transfer_position_internally, transfer_position_externally, get_financial_ranges, get_business_and_occupation, view_active_bank_instructions, view_withdrawable_cash
+from src.components.entities.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, change_account_holder_external_id, withdraw_funds, transfer_position_internally, transfer_position_externally, get_financial_ranges, get_business_and_occupation, view_active_bank_instructions, view_withdrawable_cash
 
 from src.components.entities.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts, get_account_statements, get_available_statements, get_portfolio_analyst_performance
 
