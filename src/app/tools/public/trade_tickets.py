@@ -1,5 +1,5 @@
 from flask import request, Blueprint
-from src.components.tools.trade_tickets import list_trade_tickets, read, generate
+from src.components.tools.public.trade_tickets import list_trade_tickets, read, generate
 from src.utils.response import format_response
 
 bp = Blueprint('trade_tickets', __name__)

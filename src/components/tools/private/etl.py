@@ -15,7 +15,7 @@ from src.utils.connectors.drive import GoogleDrive
 from src.utils.connectors.flex_query_api import getFlexQuery
 from src.utils.exception import handle_exception
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
-from src.components.tools.reporting import get_bond_report
+from src.components.tools.public.reporting import get_bond_report
 from src.utils.logger import logger
 
 logger.announcement('Initializing Reporting Service', type='info')
@@ -471,7 +471,7 @@ def extract_bond_snapshot(config=None):
 
         df = df.dropna(subset=['Financial Instrument'])
 
-        from src.components.tools.trade_tickets import extract_bond_details
+        from components.tools.public.trade_tickets import extract_bond_details
         for index, row in df.iterrows():
             bond_details = extract_bond_details(row['Financial Instrument'])
             df.at[index, 'Coupon'] = float(bond_details['coupon']) if bond_details['coupon'] != '' else 0.0
@@ -703,7 +703,7 @@ def extract_ust_bond_snapshot(config=None):
     df['Financial Instrument'] = df['Symbol'] + ' ' + df['Contract_description_2']
     df['Symbol'] = 'IBCID' + df['Conidex']
 
-    from src.components.tools.trade_tickets import extract_bond_details
+    from components.tools.public.trade_tickets import extract_bond_details
     for index, row in df.iterrows():
         bond_details = extract_bond_details(row['Financial Instrument'])
         coupon = bond_details.get('coupon')
@@ -792,7 +792,7 @@ def extract_sovereign_bond_snapshot():
     df['Financial Instrument'] = df['Symbol'] + ' ' + df['Contract_description_2']
     df['Symbol'] = 'IBCID' + df['Conidex']
 
-    from src.components.tools.trade_tickets import extract_bond_details
+    from components.tools.public.trade_tickets import extract_bond_details
     for index, row in df.iterrows():
         bond_details = extract_bond_details(row['Financial Instrument'])
         df.at[index, 'Coupon'] = float(bond_details['coupon']) if bond_details['coupon'] != '' else 0.0

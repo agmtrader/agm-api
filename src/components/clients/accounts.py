@@ -5,8 +5,8 @@ from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 from src.utils.managers.document_manager import DocumentManager
 import pandas as pd
 import difflib
-from src.components.tools.reporting import get_ofac_sdn_list, get_uk_sanctions_list
-from src.components.tools.reporting import get_clients_report, get_nav_report, get_ibkr_details
+from src.components.tools.public.reporting import get_ofac_sdn_list, get_uk_sanctions_list
+from src.components.tools.public.reporting import get_clients_report, get_nav_report, get_ibkr_details
 import os
 import re
 import time

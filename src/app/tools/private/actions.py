@@ -1,6 +1,6 @@
 from flask import Blueprint, request
-from src.components.tools.screenings import run_screenings
-from src.components.tools.actions import send_unfunded_emails, update_account_aliases
+from src.components.tools.private.screenings import run_screenings
+from src.components.tools.private.actions import send_unfunded_emails, update_account_aliases
 from src.utils.response import format_response
 
 bp = Blueprint('actions', __name__)

@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.tools.email import Gmail
+from src.components.tools.public.email import Gmail
 from src.utils.response import format_response
 
 bp = Blueprint('email', __name__)

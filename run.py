@@ -119,27 +119,32 @@ def start_api():
         raise ServiceError("Unauthorized", status_code=401)
 
     # Tools
-    from src.app.tools import actions, email, etl,investment_proposals, reporting, risk_profiles, trade_tickets
+    from src.app.tools.private import actions, etl
     app.register_blueprint(actions.bp, url_prefix='/actions')
-    app.register_blueprint(email.bp, url_prefix='/email')
     app.register_blueprint(etl.bp, url_prefix='/etl')
-    app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')
+
+    from src.app.tools.public import email, reporting, trade_tickets
+    app.register_blueprint(email.bp, url_prefix='/email')
     app.register_blueprint(reporting.bp, url_prefix='/reporting')
-    app.register_blueprint(risk_profiles.bp, url_prefix='/risk_profiles')
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
 
-    # Entities
-    from src.app.entities import accounts, advisors, applications, contacts, documents, fee_template_requests, flagged_deposits, users, advisor_changes, management_type_requests
+    # Clients
+    from src.app.clients import accounts, advisors, applications, contacts, documents, investment_proposals, risk_profiles, users
     app.register_blueprint(accounts.bp, url_prefix='/accounts')
     app.register_blueprint(advisors.bp, url_prefix='/advisors')
     app.register_blueprint(applications.bp, url_prefix='/applications')
     app.register_blueprint(contacts.bp, url_prefix='/contacts')
     app.register_blueprint(documents.bp, url_prefix='/documents')
+    app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')
+    app.register_blueprint(risk_profiles.bp, url_prefix='/risk_profiles')
+    app.register_blueprint(users.bp, url_prefix='/users')
+
+    from src.app.clients import management_type_requests, advisor_changes, fee_template_requests, flagged_deposits
     app.register_blueprint(fee_template_requests.bp, url_prefix='/fee_template_requests')
     app.register_blueprint(flagged_deposits.bp, url_prefix='/flagged_deposits')
-    app.register_blueprint(users.bp, url_prefix='/users')
     app.register_blueprint(advisor_changes.bp, url_prefix='/advisor_changes')
     app.register_blueprint(management_type_requests.bp, url_prefix='/management_type_requests')
+
     
     return app
 

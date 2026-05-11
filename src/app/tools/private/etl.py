@@ -1,5 +1,5 @@
 from flask import Blueprint
-from src.components.tools.etl import run_pipeline
+from src.components.tools.private.etl import run_pipeline
 from src.utils.response import format_response
 
 bp = Blueprint('etl', __name__)

@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.entities.applications import create_application, read_applications, send_to_ibkr, update_application
+from src.components.clients.applications import create_application, read_applications, send_to_ibkr, update_application
 from src.utils.response import format_response
 from src.utils.logger import logger
 

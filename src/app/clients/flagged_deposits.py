@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.entities.flagged_deposits import read_flagged_deposits, create_flagged_deposit
+from src.components.clients.flagged_deposits import read_flagged_deposits, create_flagged_deposit
 from src.utils.response import format_response
 
 bp = Blueprint('flagged_deposits', __name__)

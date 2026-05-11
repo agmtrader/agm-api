@@ -1,6 +1,6 @@
 
 from src.utils.exception import handle_exception
-from src.components.tools.reporting import get_nav_report, get_clients_report
+from src.components.tools.public.reporting import get_nav_report, get_clients_report
 import pandas as pd
 from src.utils.logger import logger
 
@@ -13,7 +13,7 @@ def send_unfunded_emails():
     from src.components.entities.accounts import read_accounts
     from src.components.entities.contacts import read_contacts
     from src.components.entities.advisors import read_advisors
-    from src.components.tools.email import Gmail
+    from components.tools.public.email import Gmail
 
     email = Gmail()
 
@@ -109,7 +109,7 @@ def send_unfunded_emails():
 @handle_exception
 def update_account_aliases():
     """Fetch clients report, filter accounts without alias, update each alias, and return list."""
-    from src.components.tools.reporting import get_clients_report
+    from components.tools.public.reporting import get_clients_report
     from src.components.entities.accounts import update_account_alias
     clients = get_clients_report()
     pending_accounts = [c for c in clients if (c.get('Alias') in (None, '')) and c.get('Status') not in ('Rejected', 'Closed', 'Funded Pending')]

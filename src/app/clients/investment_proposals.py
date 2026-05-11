@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.tools.investment_proposals import (
+from src.components.clients.investment_proposals import (
     create_investment_proposal_with_assets,
     create_investment_proposal_with_risk_profile,
     read_investment_proposals,
