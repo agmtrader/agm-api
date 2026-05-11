@@ -148,7 +148,7 @@ logger.announcement('Running safety checks...', type='info')
 logger.announcement('Successfully started AGM API', type='success')
 
 # Generate docs
-from src.utils.docs_generator import generate_docs
+from src.utils.managers.docs_manager import generate_docs
 try:
     generate_docs(app)
     logger.announcement('Documentation generated', type='success')

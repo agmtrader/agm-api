@@ -6,7 +6,7 @@ from src.utils.managers.secret_manager import get_secret
 from src.utils.exception import handle_exception, ServiceError
 from src.utils.logger import logger
 from functools import wraps
-from src.lib.market_data_fields import MarketDataField
+from src.lib.ibkr_trading_api import MarketDataField
 
 logger.announcement('Initializing Interactive Brokers Web API Service', type='info')
 logger.announcement('Initialized Interactive Brokers Web API Service', type='success')
