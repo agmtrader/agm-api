@@ -51,6 +51,11 @@ def retry_on_connection_error(max_retries=3, delay=1):
 
 class IBKRWebAPI:
 
+    MASTER_ACCOUNT_CREDENTIALS = {
+        "F10740574": {"client_id": "AGMTechnology-FA2", "key_id": "prodfa"},
+        "I6413690": {"client_id": "AGMTechnology-FD2", "key_id": "prodfd"},
+    }
+
     def __init__(self):
         self.BASE_URL = "https://api.ibkr.com"
         self.CLIENT_ID = "AGMTechnology-FD2"
@@ -66,24 +71,25 @@ class IBKRWebAPI:
 
     def _apply_credentials(self, master_account: str):
         """
-        Temporarily switch credentials according to the requested master account type.
+        Temporarily switch credentials according to the requested master account id.
         Args:
-            master_account (str): 'ad' for Advisor, 'br' for Fully-Disclosed Broker.
+            master_account (str): IBKR master account id (example: F10740574, I6413690).
         Returns:
             tuple: (original_client_id, original_key_id, original_private_key)
         """
         original = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         self.CLIENT_PRIVATE_KEY = get_secret("IBKR_ACCOUNT_MANAGEMENT_PRIVATE_KEY")
-        if not master_account:
-            raise Exception("Master account is required")
-        if (master_account).lower() == 'ad':
-            self.CLIENT_ID = "AGMTechnology-FA2"
-            self.KEY_ID = "prodfa"
-        elif (master_account).lower() == 'br':
-            self.CLIENT_ID = "AGMTechnology-FD2"
-            self.KEY_ID = "prodfd"
-        else:
-            raise Exception(f"Invalid master_account: {master_account}")
+        normalized_master_account = str(master_account).strip().upper() if master_account else "I6413690"
+        credentials = self.MASTER_ACCOUNT_CREDENTIALS.get(normalized_master_account)
+        if not credentials:
+            allowed_ids = ", ".join(sorted(self.MASTER_ACCOUNT_CREDENTIALS.keys()))
+            raise Exception(
+                f"Invalid master_account: {master_account}. "
+                f"Expected one of: {allowed_ids}"
+            )
+
+        self.CLIENT_ID = credentials["client_id"]
+        self.KEY_ID = credentials["key_id"]
         self._token = None
         self._token_expiry = 0
         return original
@@ -440,102 +446,11 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def update_account_email(self, reference_user_name: str, new_email: str, access: bool = True, master_account: str = None):
-        """Update the email associated with a given IBKR user name.
-
-        Args:
-            reference_user_name (str): The IBKR username whose email will be updated.
-            new_email (str): The new email address.
-            access (bool, optional): Email access flag required by IBKR. Defaults to True.
-            master_account (str, optional): Master account type ('ad' or 'br'). Defaults to None.
-
-        Returns:
-            dict: API response after updating the email.
-        """
-        try:
-            original_creds = self._apply_credentials(master_account)
-            logger.info(f"Updating email for user {reference_user_name} to {new_email}")
-
-            url = f"{self.BASE_URL}/gw/api/v1/accounts"
-
-            body = {
-                "accountManagementRequests": {
-                    "updateCredentials": [
-                        {
-                            "referenceUserName": reference_user_name,
-                            "updateEmail": {
-                                "email": new_email,
-                                "token": "12345",                
-                                "access": True
-                            }
-                        }
-                    ]
-                }
-            }
-
-            token = self.get_bearer_token()
-            if not token:
-                raise Exception("No token found")
-
-            signed_jwt = self.sign_request(body)
-
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/jwt"
-            }
-
-            response = requests.patch(url, headers=headers, data=signed_jwt)
-            if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
-
-            logger.success("Account email updated successfully")
-            return response.json()
-        finally:
-            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
-
-    @handle_exception
-    def create_user_for_account(self, account_id: str, prefix: str = None, user_name: str = None, external_id: str = None, authorized_trader: bool = False, master_account: str = None):
-        try:
-            original_creds = self._apply_credentials(master_account)
-            logger.info(f"Getting open positions for account {account_id}")
-            url = f"{self.BASE_URL}/gw/api/v1/accounts"
-            token = self.get_bearer_token()
-            if not token:
-                raise Exception("No token found")
-            body = {
-                "accountManagementRequests": {
-                    "createUser": {
-                        "prefix": prefix,
-                        "userName": user_name,
-                        "externalId": external_id,
-                        "authorizedTrader": authorized_trader,
-                        "accountId": account_id,
-                        'id': external_id
-                    }
-                }
-            }
-            signed_jwt = self.sign_request(body)
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/jwt"
-            }
-            response = requests.post(url, headers=headers, data=signed_jwt)
-            if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
-            logger.success("User created successfully")
-            data = response.json()
-            return data
-        finally:
-            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
-
-    @handle_exception
     def deposit_funds(self, master_account: str, instruction: dict) -> dict:
         """Submit a deposit instruction to IBKR.
 
         Args:
-            master_account (str): Which credential set to use ('ad' or 'br').
+            master_account (str): Master account id used to select the credential set.
             client_instruction_id (str): Unique identifier for the client instruction.
             instruction (dict): Instruction details.
         Returns:
@@ -853,6 +768,48 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
+    def close_account(self, account_id: str = None, close_reason: str = None, master_account: str = None) -> dict:
+        """Close an account via IBKR account management PATCH endpoint."""
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Closing account {account_id}")
+
+            url = f"{self.BASE_URL}/gw/api/v1/accounts"
+            
+            if not account_id:
+                raise Exception("Account id is required")
+            if not close_reason:
+                raise Exception("close_reason is required")
+            body = {
+                "accountManagementRequests": {
+                    "accountClose": {
+                        "accountId": account_id,
+                        "closeReason": close_reason,
+                    }
+                }
+            }
+
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            signed_jwt = self.sign_request(body)
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt",
+            }
+
+            response = requests.patch(url, headers=headers, data=signed_jwt)
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Account close submitted successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
     def change_account_holder_external_id(self, accountId:str, entityId: str, external_id: str, master_account: str = None) -> dict:
         """Change account holder external id via account management PATCH endpoint."""
         try:
@@ -908,7 +865,7 @@ class IBKRWebAPI:
         """View the withdrawable cash for the given account.
 
         Args:
-            master_account (str): The master account type ('ad' or 'br').
+            master_account (str): Master account id (example: F10740574, I6413690).
             account_id (str): The IBKR account ID.
             client_instruction_id (str): The client instruction ID.
         Returns:
@@ -945,7 +902,7 @@ class IBKRWebAPI:
         """View the active bank instructions for the given account.
 
         Args:
-            master_account (str): The master account type ('ad' or 'br').
+            master_account (str): Master account id (example: F10740574, I6413690).
             account_id (str): The IBKR account ID.
             client_instruction_id (str): The client instruction ID.
             bank_instruction_method (str): The bank instruction method.
@@ -980,7 +937,7 @@ class IBKRWebAPI:
     def get_status_of_instruction(self, client_instruction_id: str):
         """Get the status of an instruction via IBKR API."""
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             logger.info(f"Getting status of instruction for client instruction {client_instruction_id}")
             url = f"{self.BASE_URL}/gw/api/v1/client-instructions/{client_instruction_id}"
             token = self.get_bearer_token()
@@ -998,6 +955,91 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @handle_exception
+    def get_account_statements(self, account_id: str, start_date: str, end_date: str, master_account: str = None):
+        """Get account statements via IBKR API."""
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Fetching statements for account {account_id} from {start_date} to {end_date}")
+
+            url = f"{self.BASE_URL}/gw/api/v1/statements"
+            
+            body = {
+                "accountId": account_id,
+                "startDate": start_date,
+                "endDate": end_date,
+                "mimeType": "application/pdf"
+            }
+
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            signed_jwt = self.sign_request(body)
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt"
+            }
+
+            response = requests.post(url, headers=headers, data=signed_jwt)
+            
+            if response.status_code != 200:
+                 logger.error(f"Error {response.status_code}: {response.text}")
+                 raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Statements fetched successfully")
+            
+            # Check content type to decide how to return
+            content_type = response.headers.get("Content-Type", "")
+            if "application/json" in content_type:
+                 return response.json()
+            else:
+                 # Return raw bytes for PDF/other formats, encoded in base64 to be JSON serializable if needed, 
+                 # or just return the raw bytes/response object depending on how this is used.
+                 # The user just asked to call it. existing functions return dicts (json).
+                 # If I return bytes, it might break callers expecting dicts if they blindly serialize.
+                 # For now, I'll return the raw content, but wrapped in a helper or just return as is?
+                 # Given the other methods return dicts, maybe I should return a dict with base64 data if it's a file.
+                 import base64
+                 return {
+                     "data": base64.b64encode(response.content).decode('utf-8'),
+                     "mime_type": content_type,
+                     "file_name": f"statement_{account_id}_{start_date}_{end_date}.{content_type.split('/')[-1]}"
+                 }
+
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def get_available_statements(self, account_id: str, master_account: str = None):
+        """Get available statements via IBKR API."""
+        try:
+            original_creds = self._apply_credentials(master_account)
+            logger.info(f"Fetching available statements for account {account_id}")
+
+            url = f"{self.BASE_URL}/gw/api/v1/statements/available?accountId={account_id}"
+            
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            headers = {
+                "Authorization": f"Bearer {token}"
+            }
+
+            response = requests.get(url, headers=headers)
+            
+            if response.status_code != 200:
+                 logger.error(f"Error {response.status_code}: {response.text}")
+                 raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Available statements fetched successfully")
+            return response.json()
+
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
     # Trading API
     @handle_exception
     def create_sso_session(self, credential: str, ip: str) -> str:
@@ -1010,7 +1052,7 @@ class IBKRWebAPI:
             str: The SSO URL to be opened in the browser.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             logger.info(f"Creating SSO browser session for credential: {credential}, ip: {ip}")
             url = f"{self.BASE_URL}/gw/api/v1/sso-sessions"
             token = self.get_bearer_token()
@@ -1051,7 +1093,7 @@ class IBKRWebAPI:
         Returns:
             str: The brokerage session URL to be opened in the browser.
         """
-        original_creds = self._apply_credentials('br')
+        original_creds = self._apply_credentials('I6413690')
         logger.info(f"Initializing Brokerage session")
         url = f"{self.BASE_URL}/v1/api/iserver/auth/ssodh/init"
         #token = self.get_bearer_token()
@@ -1086,7 +1128,7 @@ class IBKRWebAPI:
         Logout of the brokerage session.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/v1/api/logout"
             if not self.sso_token:
                 logger.error("No SSO token found for brokerage session logout")
@@ -1110,7 +1152,7 @@ class IBKRWebAPI:
         Get the brokerage accounts.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/v1/api/iserver/accounts"
             if not self.sso_token:
                 raise Exception("No token found")
@@ -1131,7 +1173,7 @@ class IBKRWebAPI:
         Get Portfolio Analyst performance data.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/v1/api/pa/performance"
             if not self.sso_token:
                 raise Exception("No token found")
@@ -1158,7 +1200,7 @@ class IBKRWebAPI:
             dict: All watchlists.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/v1/api/iserver/watchlists"
             if not self.sso_token:
                 raise Exception("No token found")
@@ -1186,7 +1228,7 @@ class IBKRWebAPI:
             dict: The watchlist information.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/v1/api/iserver/watchlist?id={watchlist_id}"
             if not self.sso_token:
                 raise Exception("No token found")
@@ -1213,7 +1255,7 @@ class IBKRWebAPI:
             dict: The market data snapshot.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/v1/api/iserver/marketdata/snapshot?conids={conids}"
 
             # Build a comprehensive field list to match sandbox column requirements
@@ -1320,7 +1362,7 @@ class IBKRWebAPI:
         Fetch available market scanner parameters, instruments, filters, and locations.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/v1/api/iserver/scanner/params"
             if not self.sso_token:
                 raise Exception("No token found – make sure to initialise an SSO session first")
@@ -1349,7 +1391,7 @@ class IBKRWebAPI:
         Run the IBKR market scanner with the provided parameters.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/v1/api/iserver/scanner/run"
             if not self.sso_token:
                 raise Exception("No token found – make sure to initialise an SSO session first")
@@ -1382,7 +1424,7 @@ class IBKRWebAPI:
         """
         try:
             # Ensure we are using brokerage credentials because market data endpoints live there
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
 
             # We need an SSO token to call /iserver endpoints
             if not self.sso_token:
@@ -1423,7 +1465,7 @@ class IBKRWebAPI:
             dict: The securities.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/v1/api/iserver/secdef/search"
             if not self.sso_token:
                 raise Exception("No token found")
@@ -1455,7 +1497,7 @@ class IBKRWebAPI:
             dict: The security info.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/v1/api/iserver/secdef/info?issuerId={issuer_id}&secType={sec_type}"
             if not self.sso_token:
                 raise Exception("No token found")
@@ -1481,7 +1523,7 @@ class IBKRWebAPI:
             dict: The conids.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/v1/api/trsrv/all-conids?exchange={exchange}"
             if not self.sso_token:
                 raise Exception("No token found")
@@ -1508,7 +1550,7 @@ class IBKRWebAPI:
             dict: Contract details.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/v1/api/iserver/contract/{conid}/info"
             if not self.sso_token:
                 raise Exception("No token found")
@@ -1538,7 +1580,7 @@ class IBKRWebAPI:
             dict: API response (may contain order IDs or reply prompts).
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/v1/api/iserver/account/{account_id}/orders"
             if not self.sso_token:
                 raise Exception("No token found")
@@ -1566,7 +1608,7 @@ class IBKRWebAPI:
             dict: API response after replying.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/v1/api/iserver/reply/{reply_id}"
             if not self.sso_token:
                 raise Exception("No token found")
@@ -1594,7 +1636,7 @@ class IBKRWebAPI:
             dict: API response after cancellation.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/v1/api/iserver/account/{account_id}/order/{order_id}"
             if not self.sso_token:
                 raise Exception("No token found")
@@ -1619,7 +1661,7 @@ class IBKRWebAPI:
             dict: Open orders.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/v1/api/iserver/account/orders"
             if not self.sso_token:
                 raise Exception("No token found")
@@ -1709,7 +1751,7 @@ class IBKRWebAPI:
     def get_security_questions(self):
         """Retrieve list of security questions from IBKR."""
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             logger.info("Fetching security questions")
 
             url = f"{self.BASE_URL}/gw/api/v1/enumerations/security-questions"
@@ -1734,7 +1776,7 @@ class IBKRWebAPI:
     def get_product_country_bundles(self):
         """Retrieve enumeration list for product country bundles from IBKR."""
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             logger.info("Fetching product country bundles enumerations")
 
             url = f"{self.BASE_URL}/gw/api/v1/enumerations/product-country-bundles"
@@ -1762,7 +1804,7 @@ class IBKRWebAPI:
         """Retrieve wire instructions for a given account & currency.
 
         Args:
-            master_account (str): Credential set to use ('ad' or 'br').
+            master_account (str): Master account id used to select the credential set.
             account_id (str): IBKR account ID.
             currency (str, optional): Currency code (e.g., "USD"). Defaults to "USD".
         Returns:
@@ -1799,7 +1841,7 @@ class IBKRWebAPI:
             dict: The account screenings.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/gw/api/v1/enumerations/fin-info-ranges?currency=USD"
             token = self.get_bearer_token()
             if not token:
@@ -1823,7 +1865,7 @@ class IBKRWebAPI:
             dict: The business and occupation.
         """
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/gw/api/v1/enumerations/business-and-occupation"
             token = self.get_bearer_token()
             if not token:
@@ -1841,94 +1883,9 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def get_account_statements(self, account_id: str, start_date: str, end_date: str, master_account: str = None):
-        """Get account statements via IBKR API."""
-        try:
-            original_creds = self._apply_credentials(master_account)
-            logger.info(f"Fetching statements for account {account_id} from {start_date} to {end_date}")
-
-            url = f"{self.BASE_URL}/gw/api/v1/statements"
-            
-            body = {
-                "accountId": account_id,
-                "startDate": start_date,
-                "endDate": end_date,
-                "mimeType": "application/pdf"
-            }
-
-            token = self.get_bearer_token()
-            if not token:
-                raise Exception("No token found")
-
-            signed_jwt = self.sign_request(body)
-
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/jwt"
-            }
-
-            response = requests.post(url, headers=headers, data=signed_jwt)
-            
-            if response.status_code != 200:
-                 logger.error(f"Error {response.status_code}: {response.text}")
-                 raise Exception(f"Error {response.status_code}: {response.text}")
-
-            logger.success("Statements fetched successfully")
-            
-            # Check content type to decide how to return
-            content_type = response.headers.get("Content-Type", "")
-            if "application/json" in content_type:
-                 return response.json()
-            else:
-                 # Return raw bytes for PDF/other formats, encoded in base64 to be JSON serializable if needed, 
-                 # or just return the raw bytes/response object depending on how this is used.
-                 # The user just asked to call it. existing functions return dicts (json).
-                 # If I return bytes, it might break callers expecting dicts if they blindly serialize.
-                 # For now, I'll return the raw content, but wrapped in a helper or just return as is?
-                 # Given the other methods return dicts, maybe I should return a dict with base64 data if it's a file.
-                 import base64
-                 return {
-                     "data": base64.b64encode(response.content).decode('utf-8'),
-                     "mime_type": content_type,
-                     "file_name": f"statement_{account_id}_{start_date}_{end_date}.{content_type.split('/')[-1]}"
-                 }
-
-        finally:
-            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
-
-    @handle_exception
-    def get_available_statements(self, account_id: str, master_account: str = None):
-        """Get available statements via IBKR API."""
-        try:
-            original_creds = self._apply_credentials(master_account)
-            logger.info(f"Fetching available statements for account {account_id}")
-
-            url = f"{self.BASE_URL}/gw/api/v1/statements/available?accountId={account_id}"
-            
-            token = self.get_bearer_token()
-            if not token:
-                raise Exception("No token found")
-
-            headers = {
-                "Authorization": f"Bearer {token}"
-            }
-
-            response = requests.get(url, headers=headers)
-            
-            if response.status_code != 200:
-                 logger.error(f"Error {response.status_code}: {response.text}")
-                 raise Exception(f"Error {response.status_code}: {response.text}")
-
-            logger.success("Available statements fetched successfully")
-            return response.json()
-
-        finally:
-            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
-
-    @handle_exception
     def submit_all_agreements(self):
         try:
-            original_creds = self._apply_credentials('br')
+            original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/gw/api/v1/accounts/documents"
             token = self.get_bearer_token()
             if not token:
@@ -1939,7 +1896,7 @@ class IBKRWebAPI:
             }
             documents = []
             forms = [3024, 4070, 9987, 8001, 3089, 4304, 4404, 6108, 5013, 6112, 4024, 9130, 3074, 3203, 3070, 3094, 3071, 4587, 4837, 2192, 4399, 8002, 2109, 4016, 4289, 4208, 9902, 3081, 3400]
-            form_response = self.get_forms(forms=forms, master_account='br')
+            form_response = self.get_forms(forms=forms, master_account='I6413690')
             for form in form_response['formDetails']:
                 documents.append(form)
 
@@ -1990,6 +1947,7 @@ for _method_name in [
     'deposit_funds',
     'get_wire_instructions',
     'change_financial_information',
+    'close_account',
     'get_contract_info',
     'place_order',
     'reply_to_order',

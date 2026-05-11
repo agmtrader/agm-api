@@ -118,20 +118,21 @@ def update_account_aliases():
         account_id = account.get('Account ID')
         title = account.get('Title')
         old_alias = account.get('Alias')
-        master_account = 'ad' if account.get('Master Account') == 'F10740574' else 'br'
+        master_account = account.get('Master Account')
         if account_id and title is not None:
-            new_alias = f"{account_id} {title}"
-            try:
-                # Reuse existing helper to update alias via IBKR API
-                update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
-                updated_accounts.append({
-                    'account_id': account_id,
-                    'old_alias': old_alias,
-                    'new_alias': new_alias
-                })
-                logger.success(f"Updated alias for {account_id}: {old_alias} -> {new_alias}")
-            except Exception as e:
-                logger.error(f"Failed to update alias for {account_id}: {e}")
+            if master_account:
+                new_alias = f"{account_id} {title}"
+                try:
+                    # Reuse existing helper to update alias via IBKR API
+                    update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
+                    updated_accounts.append({
+                        'account_id': account_id,
+                        'old_alias': old_alias,
+                        'new_alias': new_alias
+                    })
+                    logger.success(f"Updated alias for {account_id}: {old_alias} -> {new_alias}")
+                except Exception as e:
+                    logger.error(f"Failed to update alias for {account_id}: {e}")
     return {
         'updated': len(updated_accounts),
         'accounts': updated_accounts

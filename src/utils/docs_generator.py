@@ -1,7 +1,6 @@
 from flask import Flask
 from typing import Iterable
 
-
 def generate_docs(app: Flask, output_path: str = 'public/static/docs.html', skip_endpoints: Iterable[str] | None = None) -> None:
     """Generate a basic HTML documentation file listing all registered routes.
 

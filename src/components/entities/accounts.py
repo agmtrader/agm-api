@@ -416,6 +416,15 @@ def add_clp_capability(account_id: str = None, document_submission: dict = None,
     return ibkr_web_api.add_clp_capability(account_id=account_id, document_submission=document_submission, master_account=master_account)
 
 @handle_exception
+def close_account(account_id: str = None, close_reason: str = None, master_account: str = None) -> dict:
+    """Close account via IBKR API."""
+    return ibkr_web_api.close_account(
+        account_id=account_id,
+        close_reason=close_reason,
+        master_account=master_account
+    )
+
+@handle_exception
 def update_account_alias(account_id: str = None, new_alias: str = None, master_account: str = None) -> dict:
     """Update account alias via IBKR API."""
     return ibkr_web_api.update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)

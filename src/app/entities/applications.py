@@ -47,5 +47,5 @@ def update_route():
 def send_to_ibkr_route():
     payload = request.get_json(force=True)
     application = payload.get('application', None)
-    master_account = payload.get('master_account', 'ad')
+    master_account = payload.get('master_account', None)
     return send_to_ibkr(application=application, master_account=master_account)
