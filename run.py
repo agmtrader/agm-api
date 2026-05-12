@@ -15,7 +15,6 @@ load_dotenv()
 public_routes = ['docs', 'index', 'token', 'users.login', 'users.create']
 
 def jwt_required_except_login():
-    logger.info(f'\nRequest endpoint: {request.endpoint} from {request.remote_addr}')
     if request.endpoint not in public_routes:
         try:
             verify_jwt_in_request()

@@ -43,8 +43,6 @@ def get_secret(secret_id: str):
             logger.info(f"Retrieved secret from cache: {secret_id}")
             return cached_secret
 
-        logger.info(f"Fetching secret: {secret_id}")
-
         # Initialize the Secret Manager client
         client = secretmanager.SecretManagerServiceClient()
 
@@ -57,8 +55,6 @@ def get_secret(secret_id: str):
 
         # Fetch the secret (ADC credentials are used here)
         response = client.access_secret_version(request={"name": secret_path})
-
-        logger.info(f"Attempting to decode secret...")
         
         try:
             json_string = response.payload.data.decode("UTF-8")
@@ -74,7 +70,6 @@ def get_secret(secret_id: str):
         # Cache the successfully retrieved secret
         _cache_secret(secret_id, secrets)
         
-        logger.success(f"Successfully fetched and decoded secret.\n")
         return secrets
         
     except Exception as e:

@@ -161,8 +161,7 @@ class DatabaseManager:
             if db_type_base != model_type_base:
                 logger.warning(f"Table '{table_name}', column '{col_name}': Data type difference. DB: {db_type_str}, Model: {model_type_str}")
                 # Don't raise exception for type differences, just warn as they might be compatible
-        
-        logger.info(f"Schema validation completed for table '{table_name}'")
+    
 
     def with_session(self, func, max_retries: int = 3, delay: int = 1):
         """Decorator to manage a SQLAlchemy session with automatic reconnection logic.
@@ -340,7 +339,6 @@ class DatabaseManager:
                 compile_kwargs={"literal_binds": True},
                 dialect=self.engine.dialect
             )
-            logger.info(f'Generated SQL: {str(compiled_query)}')
             
             results = sql_query.all()
 
@@ -434,7 +432,6 @@ class DatabaseManager:
     @handle_exception
     def get_schema(self, table: str):
         """Returns the schema of a specified table."""
-        logger.info(f'Attempting to get schema for table: {table}')
         if table not in self.metadata.tables:
             raise Exception(f"Table '{table}' not found in database")
         
@@ -450,7 +447,6 @@ class DatabaseManager:
                 'foreign_keys': [str(fk.target_fullname) for fk in column.foreign_keys]
             }
         
-        logger.success(f'Successfully retrieved schema for table: {table}')
         return schema
 
     def from_data_object(self, data: dict, table: str, overwrite: bool = False):
