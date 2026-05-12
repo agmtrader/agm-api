@@ -121,7 +121,7 @@ def read_accounts_with_metadata(query: dict = None, include_advisor: bool = Fals
     advisors = []
     advisor_name_by_code = {}
     if include_advisor:
-        from src.components.entities.advisors import read_advisors
+        from src.components.clients.advisors import read_advisors
         advisors = read_advisors({})
         advisor_name_by_code = {
             _normalize_join_key(advisor.get('code')): advisor.get('name')

@@ -105,12 +105,74 @@ class Supabase:
             management_type = Column(Text, nullable=True)
             emailed_credentials = Column(Boolean, nullable=False, default=False)
 
+        class NewAccount(self.Base):
+            __tablename__ = 'new_account'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            ibkr_account_number = Column(Text, nullable=True, unique=True)
+            ibkr_username = Column(Text, nullable=True)
+            ibkr_password = Column(Text, nullable=True)
+            temporal_email = Column(Text, nullable=True)
+            temporal_password = Column(Text, nullable=True)
+            master_account = Column(Text, nullable=True)
+            management_type = Column(Text, nullable=True)
+            emailed_credentials = Column(Boolean, nullable=False, default=False)
+            referrer = Column(Text, nullable=True)
+            date_sent_to_ibkr = Column(Text, nullable=True)
+            application_json = Column(JSONB, nullable=True)
+            estimated_deposit = Column(BIGINT, nullable=True)
+
+        class NewContact(self.Base):
+            __tablename__ = 'new_contact'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            type = Column(Text, nullable=True)
+            name = Column(Text, nullable=False)
+            phone = Column(Text, nullable=True)
+            email = Column(Text, nullable=True)
+
+        class NewAccountContact(self.Base):
+            __tablename__ = 'new_account_contact'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('new_contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('new_account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            entity_id = Column(UUID(as_uuid=True), nullable=True)
+
+        class NewContactScreening(self.Base):
+            __tablename__ = 'new_contact_screening'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('new_contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            holder_name = Column(Text, nullable=False)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            risk_score = Column(Text, nullable=True)
+            fatf_status = Column(Text, nullable=True)
+            un_status = Column(Text, nullable=True)
+            uk_status = Column(JSONB, nullable=True)
+            ofac_results = Column(JSONB, nullable=True)
+
+        class NewContactDocument(self.Base):
+            __tablename__ = 'new_contact_document'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('new_contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            document_id = Column(UUID(as_uuid=True), ForeignKey('document.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            category = Column(Text, nullable=True)
+            type = Column(Text, nullable=True)
+            issued_date = Column(Text, nullable=True)
+            expiry_date = Column(Text, nullable=True)
+            comment = Column(Text, nullable=True)
+
         class AccountScreening(self.Base):
             __tablename__ = 'account_screening'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
             holder_name = Column(Text, nullable=False)
             ofac_results = Column(JSONB, nullable=False)
             fatf_status = Column(Text, nullable=False)
@@ -123,9 +185,9 @@ class Supabase:
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
-            requested_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
-            approved_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=True)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            requested_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            approved_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             replied_time = Column(Text, nullable=True)
             previous_template = Column(Text, nullable=False)
             new_template = Column(Text, nullable=False)
@@ -136,25 +198,25 @@ class Supabase:
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
-            requested_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
-            old_advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='CASCADE', onupdate='CASCADE'), nullable=True)
-            new_advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='CASCADE', onupdate='CASCADE'), nullable=True)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            requested_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            old_advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            new_advisor_code = Column(Integer, ForeignKey('advisor.code', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
 
         class ManagementTypeRequest(self.Base):
             __tablename__ = 'management_type_request'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
-            requested_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            requested_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
             previous_type = Column(Text, nullable=True)
             new_type = Column(Text, nullable=True)
 
         class AccountInstruction(self.Base):
             __tablename__ = 'account_instruction'
             id = Column(BigInteger, primary_key=True, autoincrement=True)
-            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
 
@@ -163,8 +225,8 @@ class Supabase:
             id = Column(UUID(as_uuid=True), unique=True, primary_key=True, default=uuid.uuid4)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
-            document_id = Column(UUID(as_uuid=True), ForeignKey('document.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            document_id = Column(UUID(as_uuid=True), ForeignKey('document.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
             category = Column(Text, nullable=True)
             name = Column(Text, nullable=True)
             type = Column(Text, nullable=True)
@@ -196,7 +258,7 @@ class Supabase:
         class InvestmentProposal(self.Base):
             __tablename__ = 'investment_proposal'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            risk_profile_id = Column(UUID(as_uuid=True), ForeignKey('risk_profile.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=True, unique=True)
+            risk_profile_id = Column(UUID(as_uuid=True), ForeignKey('risk_profile.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True, unique=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             aaa_a = Column(ARRAY(JSONB), nullable=False)
@@ -208,7 +270,7 @@ class Supabase:
         class TradeTicket(self.Base):
             __tablename__ = 'trade_ticket'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             name = Column(Text, nullable=False)
@@ -219,7 +281,7 @@ class Supabase:
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
             transaction_id = Column(Text, nullable=False)
             comment = Column(Text, nullable=False)
         
@@ -230,7 +292,13 @@ class Supabase:
         self.Advisor = Advisor
 
         # Accounts
+        self.NewAccount = NewAccount
+        self.NewContact = NewContact
+        self.NewAccountContact = NewAccountContact
+        self.NewContactScreening = NewContactScreening
+        self.NewContactDocument = NewContactDocument
         self.Account = Account
+
         self.AccountDocument = AccountDocument
         self.Document = Document
         self.FeeTemplateRequest = FeeTemplateRequest
