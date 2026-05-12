@@ -145,7 +145,6 @@ class Supabase:
             __tablename__ = 'new_contact_screening'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             contact_id = Column(UUID(as_uuid=True), ForeignKey('new_contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
-            holder_name = Column(Text, nullable=False)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             risk_score = Column(Text, nullable=True)
@@ -287,24 +286,29 @@ class Supabase:
         
         # Contacts
         self.User = User
-        self.Contact = Contact
-        self.Application = Application
-        self.Advisor = Advisor
 
-        # Accounts
-        self.NewAccount = NewAccount
         self.NewContact = NewContact
-        self.NewAccountContact = NewAccountContact
+        self.Contact = Contact
+
         self.NewContactScreening = NewContactScreening
         self.NewContactDocument = NewContactDocument
+
+        self.Advisor = Advisor
+
+        self.Application = Application
+
+        # Documents
+        self.Document = Document
+
+        # Accounts
         self.Account = Account
+        self.NewAccount = NewAccount
+
+        self.NewAccountContact = NewAccountContact
+
+        self.AccountInstruction = AccountInstruction
 
         self.AccountDocument = AccountDocument
-        self.Document = Document
-        self.FeeTemplateRequest = FeeTemplateRequest
-        self.AdvisorChangeRequest = AdvisorChangeRequest
-        self.ManagementTypeRequest = ManagementTypeRequest
-        self.AccountInstruction = AccountInstruction
         self.AccountScreening = AccountScreening
 
         # Risk Profiles
@@ -313,11 +317,15 @@ class Supabase:
         # Investment Proposals
         self.InvestmentProposal = InvestmentProposal
 
+        # Account Requests
+        self.FeeTemplateRequest = FeeTemplateRequest
+        self.AdvisorChangeRequest = AdvisorChangeRequest
+        self.ManagementTypeRequest = ManagementTypeRequest
+        self.FlaggedDeposit = FlaggedDeposit
+
         # Trade Tickets
         self.TradeTicket = TradeTicket
 
-        # Flagged Deposits
-        self.FlaggedDeposit = FlaggedDeposit
 
 # Create a single instance that can be imported and used throughout the application
 db = Supabase().db
