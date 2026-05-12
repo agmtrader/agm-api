@@ -40,7 +40,6 @@ def get_secret(secret_id: str):
         # Check cache first
         cached_secret = _get_cached_secret(secret_id)
         if cached_secret is not None:
-            logger.info(f"Retrieved secret from cache: {secret_id}")
             return cached_secret
 
         # Initialize the Secret Manager client

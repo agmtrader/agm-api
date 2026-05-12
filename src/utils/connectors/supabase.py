@@ -139,7 +139,7 @@ class Supabase:
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             contact_id = Column(UUID(as_uuid=True), ForeignKey('new_contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
             account_id = Column(UUID(as_uuid=True), ForeignKey('new_account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
-            entity_id = Column(UUID(as_uuid=True), nullable=True)
+            entity_id = Column(BIGINT, nullable=True)
 
         class NewContactScreening(self.Base):
             __tablename__ = 'new_contact_screening'
@@ -158,7 +158,8 @@ class Supabase:
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            contact_id = Column(UUID(as_uuid=True), ForeignKey('new_contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('new_account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('new_contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             document_id = Column(UUID(as_uuid=True), ForeignKey('document.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
             category = Column(Text, nullable=True)
             type = Column(Text, nullable=True)
