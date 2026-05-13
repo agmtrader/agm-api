@@ -17,11 +17,12 @@
   <table>
     <tr><th>Route</th><th>Methods</th><th>Path&nbsp;Parameters</th></tr>
     <tr><td>/</td><td>GET</td><td></td></tr>
+    <tr><td>/account_contacts/create</td><td>POST</td><td></td></tr>
+    <tr><td>/account_contacts/delete</td><td>POST</td><td></td></tr>
+    <tr><td>/account_contacts/read</td><td>GET</td><td></td></tr>
+    <tr><td>/account_contacts/update</td><td>POST</td><td></td></tr>
+    <tr><td>/accounts/contacts_screenings_summary</td><td>GET</td><td></td></tr>
     <tr><td>/accounts/create</td><td>POST</td><td></td></tr>
-    <tr><td>/accounts/documents</td><td>GET</td><td></td></tr>
-    <tr><td>/accounts/documents</td><td>POST</td><td></td></tr>
-    <tr><td>/accounts/documents</td><td>PATCH</td><td></td></tr>
-    <tr><td>/accounts/documents</td><td>DELETE</td><td></td></tr>
     <tr><td>/accounts/ibkr/account_email</td><td>POST</td><td></td></tr>
     <tr><td>/accounts/ibkr/active_bank_instructions</td><td>POST</td><td></td></tr>
     <tr><td>/accounts/ibkr/business_and_occupation</td><td>GET</td><td></td></tr>
@@ -52,8 +53,7 @@
     <tr><td>/accounts/ibkr/withdrawable_cash</td><td>POST</td><td></td></tr>
     <tr><td>/accounts/instructions</td><td>GET</td><td></td></tr>
     <tr><td>/accounts/read</td><td>GET</td><td></td></tr>
-    <tr><td>/accounts/screening</td><td>GET</td><td></td></tr>
-    <tr><td>/accounts/screening</td><td>POST</td><td></td></tr>
+    <tr><td>/accounts/send_to_ibkr</td><td>POST</td><td></td></tr>
     <tr><td>/accounts/update</td><td>POST</td><td></td></tr>
     <tr><td>/accounts/with-metadata</td><td>GET</td><td></td></tr>
     <tr><td>/accounts/with_metadata</td><td>GET</td><td></td></tr>
@@ -66,10 +66,15 @@
     <tr><td>/advisors/read</td><td>GET</td><td></td></tr>
     <tr><td>/applications/create</td><td>POST</td><td></td></tr>
     <tr><td>/applications/read</td><td>GET</td><td></td></tr>
-    <tr><td>/applications/send_to_ibkr</td><td>POST</td><td></td></tr>
     <tr><td>/applications/update</td><td>POST</td><td></td></tr>
     <tr><td>/contacts/create</td><td>POST</td><td></td></tr>
+    <tr><td>/contacts/documents</td><td>GET</td><td></td></tr>
+    <tr><td>/contacts/documents</td><td>POST</td><td></td></tr>
+    <tr><td>/contacts/documents</td><td>PATCH</td><td></td></tr>
+    <tr><td>/contacts/documents</td><td>DELETE</td><td></td></tr>
     <tr><td>/contacts/read</td><td>GET</td><td></td></tr>
+    <tr><td>/contacts/screening</td><td>GET</td><td></td></tr>
+    <tr><td>/contacts/screening</td><td>POST</td><td></td></tr>
     <tr><td>/contacts/update</td><td>POST</td><td></td></tr>
     <tr><td>/docs</td><td>GET</td><td></td></tr>
     <tr><td>/documents/get_document_data</td><td>GET</td><td></td></tr>

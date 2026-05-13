@@ -1,5 +1,15 @@
 from flask import Blueprint, request
-from src.components.clients.contacts import read_contacts, create_contact, update_contact
+from src.components.clients.contacts import (
+    read_contacts,
+    create_contact,
+    update_contact,
+    upload_contact_document,
+    read_contact_documents,
+    update_contact_document,
+    delete_contact_document,
+    create_contact_screening,
+    read_contact_screenings
+)
 from src.utils.response import format_response
 
 bp = Blueprint('contacts', __name__)
@@ -30,3 +40,75 @@ def update_contact_route():
     contact = payload.get('contact', None)
     query = payload.get('query', None)
     return update_contact(query=query, contact=contact)
+
+
+@bp.route('/documents', methods=['GET'])
+@format_response
+def read_contact_documents_route():
+    contact_id = request.args.get('contact_id', None)
+    include_data = request.args.get('include_data', 'false').strip().lower() in ('1', 'true', 'yes')
+    include_documents = request.args.get('include_documents', 'true').strip().lower() in ('1', 'true', 'yes')
+    return read_contact_documents(contact_id=contact_id, include_data=include_data, include_documents=include_documents)
+
+
+@bp.route('/documents', methods=['POST'])
+@format_response
+def upload_contact_document_route():
+    payload = request.get_json(force=True)
+    return upload_contact_document(
+        account_id=payload.get('account_id'),
+        contact_id=payload.get('contact_id'),
+        file_name=payload.get('file_name'),
+        file_length=payload.get('file_length'),
+        sha1_checksum=payload.get('sha1_checksum'),
+        mime_type=payload.get('mime_type'),
+        data=payload.get('data'),
+        category=payload.get('category'),
+        type=payload.get('type'),
+        issued_date=payload.get('issued_date'),
+        expiry_date=payload.get('expiry_date'),
+        comment=payload.get('comment')
+    )
+
+
+@bp.route('/documents', methods=['PATCH'])
+@format_response
+def update_contact_document_route():
+    payload = request.get_json(force=True)
+    return update_contact_document(
+        document_id=payload.get('document_id'),
+        category=payload.get('category'),
+        type=payload.get('type'),
+        issued_date=payload.get('issued_date'),
+        expiry_date=payload.get('expiry_date'),
+        comment=payload.get('comment')
+    )
+
+
+@bp.route('/documents', methods=['DELETE'])
+@format_response
+def delete_contact_document_route():
+    payload = request.get_json(force=True)
+    return delete_contact_document(document_id=payload.get('document_id'))
+
+
+@bp.route('/screening', methods=['GET'])
+@format_response
+def read_contact_screenings_route():
+    contact_id = request.args.get('contact_id', None)
+    return read_contact_screenings(contact_id=contact_id)
+
+
+@bp.route('/screening', methods=['POST'])
+@format_response
+def create_contact_screening_route():
+    payload = request.get_json(force=True)
+    return create_contact_screening(
+        contact_id=payload.get('contact_id'),
+        risk_score=payload.get('risk_score'),
+        fatf_status=payload.get('fatf_status'),
+        un_status=payload.get('un_status'),
+        uk_status=payload.get('uk_status'),
+        ofac_results=payload.get('ofac_results'),
+        created=payload.get('created')
+    )

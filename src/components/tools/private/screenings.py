@@ -1,7 +1,8 @@
 from datetime import date, datetime, timedelta
 import re
 import unicodedata
-from src.components.clients.accounts import read_accounts, screen_person
+from src.components.clients.accounts import read_accounts
+from src.components.clients.contacts import create_contact_screening
 from src.components.tools.public.reporting import get_ibkr_details
 from src.utils.connectors.supabase import db
 
@@ -158,14 +159,26 @@ def person_display_name(person: dict) -> str:
 
 
 def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
-    screens = db.read("account_screening", query={})
     accounts = read_accounts({})
     details = get_ibkr_details()
+    account_contact_rows = db.read("account_contact", query={}) or []
+    contact_rows = db.read("contact", query={}) or []
+    contact_screen_rows = db.read("contact_screening", query={}) or []
 
-    screens_by_account = {}
-    for screen in screens:
-        account_id = screen.get("account_id")
-        screens_by_account.setdefault(account_id, []).append(screen)
+    account_contacts_by_account = {}
+    for row in account_contact_rows:
+        account_id = row.get("account_id")
+        if not account_id:
+            continue
+        account_contacts_by_account.setdefault(account_id, []).append(row)
+
+    contacts_by_id = {row.get("id"): row for row in contact_rows if row.get("id")}
+    contact_screens_by_contact_id = {}
+    for screen in contact_screen_rows:
+        contact_id = screen.get("contact_id")
+        if not contact_id:
+            continue
+        contact_screens_by_contact_id.setdefault(contact_id, []).append(screen)
 
     details_by_ibkr_number = {}
     for detail in details:
@@ -191,6 +204,7 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
         detail = details_by_ibkr_number.get(ibkr_number, {})
         detail_account = detail.get("account", {})
         persons = detail.get("associatedPersons") or []
+        account_contact_links = account_contacts_by_account.get(account_id, [])
 
         date_opened = detail_account.get("dateOpened")
         date_started = detail_account.get("dateBegun")
@@ -198,7 +212,6 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
         if not start_date:
             continue
 
-        account_screens = screens_by_account.get(account_id, [])
         has_any_screenings = False
         has_any_missing_screenings = False
         account_has_due_now = False
@@ -213,11 +226,27 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
                 continue
 
             candidates = person_name_candidates(person)
-            person_screens = [
-                screen
-                for screen in account_screens
-                if normalize_name(screen.get("holder_name", "")) in candidates
-            ]
+            person_contact_id = None
+            person_entity_id = person.get("entityId")
+            if person_entity_id is not None:
+                for link in account_contact_links:
+                    if str(link.get("entity_id") or "").strip() == str(person_entity_id).strip():
+                        person_contact_id = link.get("contact_id")
+                        break
+
+            if not person_contact_id:
+                for link in account_contact_links:
+                    contact = contacts_by_id.get(link.get("contact_id"))
+                    contact_name = normalize_name((contact or {}).get("name", ""))
+                    if contact_name and contact_name in candidates:
+                        person_contact_id = link.get("contact_id")
+                        break
+
+            person_screens = (
+                contact_screens_by_contact_id.get(person_contact_id, [])
+                if person_contact_id
+                else []
+            )
 
             roles_str = ", ".join(roles)
 
@@ -269,11 +298,18 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
                     created_date = anniversary_for_year(start_date, cycle_year)
                     created_value = created_date.strftime("%Y%m%d000000")
 
-                    result = screen_person(
-                        account_id=account_id,
-                        holder_name=display_name,
-                        residence_country=residence_country,
-                        risk_score=risk_score,
+                    if not person_contact_id:
+                        screening_errors.append(
+                            f"{ibkr_number}/{display_name}/{cycle_year}: contact link not found"
+                        )
+                        continue
+
+                    result = create_contact_screening(
+                        contact_id=person_contact_id,
+                        risk_score=risk_score if risk_score is not None else 0,
+                        fatf_status='Not listed',
+                        ofac_results=[],
+                        uk_status=[],
                         created=created_value,
                     )
 
@@ -292,6 +328,7 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
                         "account_id": account_id,
                         "ibkr_number": ibkr_number,
                         "date_opened": date_opened,
+                        "contact_id": person_contact_id,
                         "individual_name": display_name,
                         "roles": roles_str,
                         "latest_screening_date": latest_screen_date.isoformat()

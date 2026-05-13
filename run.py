@@ -128,8 +128,9 @@ def start_api():
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
 
     # Clients
-    from src.app.clients import accounts, advisors, applications, contacts, documents, investment_proposals, risk_profiles, users
+    from src.app.clients import accounts, account_contacts, advisors, applications, contacts, documents, investment_proposals, risk_profiles, users
     app.register_blueprint(accounts.bp, url_prefix='/accounts')
+    app.register_blueprint(account_contacts.bp, url_prefix='/account_contacts')
     app.register_blueprint(advisors.bp, url_prefix='/advisors')
     app.register_blueprint(applications.bp, url_prefix='/applications')
     app.register_blueprint(contacts.bp, url_prefix='/contacts')

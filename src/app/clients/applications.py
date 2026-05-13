@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.clients.applications import create_application, read_applications, send_to_ibkr, update_application
+from src.components.clients.applications import create_application, read_applications, update_application
 from src.utils.response import format_response
 from src.utils.logger import logger
 
@@ -40,12 +40,3 @@ def update_route():
     application = payload.get('application', None)
     query = payload.get('query', None)
     return update_application(application=application, query=query)
-
-# Account Management API
-@bp.route('/send_to_ibkr', methods=['POST'])
-@format_response
-def send_to_ibkr_route():
-    payload = request.get_json(force=True)
-    application = payload.get('application', None)
-    master_account = payload.get('master_account', None)
-    return send_to_ibkr(application=application, master_account=master_account)

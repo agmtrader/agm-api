@@ -2,10 +2,6 @@ from src.utils.exception import handle_exception
 from src.utils.connectors.supabase import db
 from src.utils.logger import logger
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
-from src.utils.managers.document_manager import DocumentManager
-import pandas as pd
-import difflib
-from src.components.tools.public.reporting import get_ofac_sdn_list, get_uk_sanctions_list
 from src.components.tools.public.reporting import get_clients_report, get_nav_report, get_ibkr_details
 import os
 import re
@@ -14,12 +10,13 @@ import uuid
 
 logger.announcement('Initializing Accounts Service', type='info')
 ibkr_web_api = IBKRWebAPI()
-document_manager = DocumentManager()
 logger.announcement('Initialized Accounts Service', type='success')
 
 _ACCOUNTS_METADATA_CACHE = {}
 _ACCOUNTS_METADATA_CACHE_TTL_SECONDS = int(os.getenv('ACCOUNTS_METADATA_CACHE_TTL_SECONDS', '120'))
 
+table = 'account'
+account_contact_table = 'account_contact'
 
 def _normalize_join_key(value) -> str:
     if value is None:
@@ -94,10 +91,148 @@ def _parse_fee_template_summary(fee_template) -> str:
 
     return ' | '.join(parts) if parts else '-'
 
+
+def _ibkr_timestamp() -> int:
+    return int(time.strftime('%Y%m%d%H%M'))
+
+
+def _extract_holder_external_ids(application_json: dict) -> dict:
+    """
+    Build a signer-name -> externalId map from application_json holders.
+    """
+    out = {}
+    customer = (application_json or {}).get('customer') or {}
+    customer_type = customer.get('type')
+
+    def _add(details: dict):
+        if not isinstance(details, dict):
+            return
+        name_obj = details.get('name') or {}
+        first = str(name_obj.get('first') or '').strip()
+        last = str(name_obj.get('last') or '').strip()
+        signer_name = f'{first} {last}'.strip()
+        external_id = details.get('externalId')
+        if signer_name and external_id:
+            out[signer_name] = external_id
+
+    if customer_type == 'INDIVIDUAL':
+        _add(((customer.get('accountHolder') or {}).get('accountHolderDetails') or [{}])[0])
+    elif customer_type == 'JOINT':
+        joint = customer.get('jointHolders') or {}
+        _add((joint.get('firstHolderDetails') or [{}])[0])
+        _add((joint.get('secondHolderDetails') or [{}])[0])
+    elif customer_type == 'ORG':
+        org = customer.get('organization') or {}
+        associated = (((org.get('associatedEntities') or {}).get('associatedIndividuals')) or [])
+        for details in associated:
+            _add(details)
+
+    return out
+
+
+def _form_number_from_category(category: str) -> int | None:
+    normalized = str(category or '').strip().lower()
+    if normalized == 'tax':
+        return 5001
+    if normalized == 'proof of identity':
+        return 8001
+    if normalized == 'proof of address':
+        return 8002
+    return None
+
+
+def _build_documents_from_contact_store(account_id: str, application_json: dict) -> list:
+    """
+    Rebuild IBKR application documents from relational contact-document storage.
+    """
+    links = db.read(table=account_contact_table, query={'account_id': account_id}) or []
+    if len(links) == 0:
+        return []
+
+    contact_ids = [link.get('contact_id') for link in links if link.get('contact_id')]
+    contacts_by_id = {}
+    for contact_id in contact_ids:
+        rows = db.read(table='contact', query={'id': contact_id}) or []
+        if rows:
+            contacts_by_id[contact_id] = rows[0]
+    signer_external_ids = _extract_holder_external_ids(application_json)
+
+    ts = _ibkr_timestamp()
+    rebuilt_documents = []
+    for link in links:
+        contact_id = link.get('contact_id')
+        if not contact_id:
+            continue
+
+        contact = contacts_by_id.get(contact_id) or {}
+        signer_name = str(contact.get('name') or '').strip()
+        contact_doc_links = db.read(table='contact_document', query={'contact_id': contact_id}) or []
+        latest_by_form_number = {}
+
+        for contact_doc_link in contact_doc_links:
+            form_number = _form_number_from_category(contact_doc_link.get('category'))
+            if form_number is None:
+                continue
+            current = latest_by_form_number.get(form_number)
+            if current is None:
+                latest_by_form_number[form_number] = contact_doc_link
+                continue
+
+            current_updated = str(current.get('updated') or current.get('created') or '')
+            candidate_updated = str(contact_doc_link.get('updated') or contact_doc_link.get('created') or '')
+            if candidate_updated >= current_updated:
+                latest_by_form_number[form_number] = contact_doc_link
+
+        for form_number, contact_doc_link in latest_by_form_number.items():
+
+            document_id = contact_doc_link.get('document_id')
+            if not document_id:
+                continue
+
+            doc_rows = db.read(table='document', query={'id': document_id}) or []
+            doc = doc_rows[0] if doc_rows else None
+            if not doc:
+                continue
+
+            reconstructed = {
+                'signedBy': [signer_name] if signer_name else [],
+                'attachedFile': {
+                    'fileName': doc.get('file_name') or '',
+                    'fileLength': int(doc.get('file_length') or 0),
+                    'sha1Checksum': doc.get('sha1_checksum') or '',
+                },
+                'formNumber': form_number,
+                'execLoginTimestamp': ts,
+                'execTimestamp': ts,
+                'payload': {
+                    'mimeType': doc.get('mime_type') or '',
+                    'data': doc.get('data') or '',
+                },
+            }
+
+            ext_id = link.get('external_id') or signer_external_ids.get(signer_name)
+            if ext_id:
+                reconstructed['externalIndividualId'] = str(ext_id)
+
+            if form_number == 8001:
+                reconstructed['proofOfIdentityType'] = contact_doc_link.get('type') or 'Document'
+            elif form_number == 8002:
+                reconstructed['proofOfAddressType'] = contact_doc_link.get('type') or 'Document'
+                reconstructed['validAddress'] = False
+
+            if contact_doc_link.get('issued_date'):
+                reconstructed['issuedDate'] = contact_doc_link.get('issued_date')
+            if contact_doc_link.get('expiry_date'):
+                reconstructed['expiryDate'] = contact_doc_link.get('expiry_date')
+
+            rebuilt_documents.append(reconstructed)
+
+    return rebuilt_documents
+
 @handle_exception
 def create_account(account: dict = None) -> dict:
     logger.info(f"Attempting to create account with data: {account}")
-    account_id = db.create(table='account', data=account)
+    account_id = db.create(table=table, data=account)
     return {'id': account_id}
 
 @handle_exception
@@ -106,9 +241,51 @@ def create_instruction(account_id: str = None) -> dict:
 
 @handle_exception
 def read_accounts(query: dict = None) -> list:
-    accounts = db.read(table='account', query=query)
+    accounts = db.read(table=table, query=query)
     return accounts
 
+@handle_exception
+def read_account_contacts_and_screenings(account_id: str = None) -> dict:
+    if not account_id:
+        raise Exception('account_id is required')
+
+    links = db.read(table=account_contact_table, query={'account_id': account_id}) or []
+    contact_ids = {
+        str(link.get('contact_id')).strip()
+        for link in links
+        if link.get('contact_id')
+    }
+
+    if len(contact_ids) == 0:
+        return {
+            'account_contacts': links,
+            'contacts': [],
+            'screenings_by_contact_id': {}
+        }
+
+    contacts = []
+    for contact_id in contact_ids:
+        contact_rows = db.read(table='contact', query={'id': contact_id}) or []
+        if contact_rows:
+            contacts.append(contact_rows[0])
+
+    screenings_by_contact_id = {}
+    for contact_id in contact_ids:
+        screenings = db.read(table='contact_screening', query={'contact_id': contact_id}) or []
+        screenings_by_contact_id[contact_id] = screenings
+
+    for contact_id, screenings in screenings_by_contact_id.items():
+        screenings_by_contact_id[contact_id] = sorted(
+            screenings,
+            key=lambda screening: str(screening.get('created') or ''),
+            reverse=True
+        )
+
+    return {
+        'account_contacts': links,
+        'contacts': contacts,
+        'screenings_by_contact_id': screenings_by_contact_id
+    }
 
 @handle_exception
 def read_accounts_with_metadata(query: dict = None, include_advisor: bool = False, force_refresh: bool = False) -> list:
@@ -117,6 +294,17 @@ def read_accounts_with_metadata(query: dict = None, include_advisor: bool = Fals
     clients = _get_cached_payload('clients_report', get_clients_report, force_refresh=force_refresh)
     nav_report = _get_cached_payload('nav_report', get_nav_report, force_refresh=force_refresh)
     ibkr_details = _get_cached_payload('ibkr_details', get_ibkr_details, force_refresh=force_refresh)
+    account_contact_rows = db.read(table=account_contact_table, query={}) or []
+    all_contacts = db.read(table='contact', query={}) or []
+    contacts_by_id = {c.get('id'): c for c in all_contacts if c.get('id')}
+    account_contacts_by_account_id = {}
+    for row in account_contact_rows:
+        account_id = row.get('account_id')
+        if not account_id:
+            continue
+        if account_id not in account_contacts_by_account_id:
+            account_contacts_by_account_id[account_id] = []
+        account_contacts_by_account_id[account_id].append(row)
 
     advisors = []
     advisor_name_by_code = {}
@@ -174,6 +362,12 @@ def read_accounts_with_metadata(query: dict = None, include_advisor: bool = Fals
             'sls_devices': client.get('SLS Devices') if client and client.get('SLS Devices') else '-',
             'client_email_address': client.get('Email Address') if client and client.get('Email Address') else '-',
             'fee_template_summary': fee_template_summary_by_account_id.get(account_id, '-'),
+            'account_contacts': account_contacts_by_account_id.get(account.get('id'), []),
+            'contacts': [
+                contacts_by_id.get(link.get('contact_id'))
+                for link in account_contacts_by_account_id.get(account.get('id'), [])
+                if link.get('contact_id') in contacts_by_id
+            ],
         }
 
         if include_advisor:
@@ -191,179 +385,34 @@ def read_instructions(query: dict = None) -> list:
 @handle_exception
 def update_account(query: dict = None, account: dict = None) -> dict:
     logger.info(f"Attempting to update account with query: {query} and data: {account}")
-    db.update(table='account', query=query, data=account)
+    db.update(table=table, query=query, data=account)
     return {'status': 'success'}
 
-@handle_exception
-def upload_document(account_id: str = None, file_name: str = None, file_length: int = None, sha1_checksum: str = None, mime_type: str = None, data: str = None, category: str = None, type: str = None, issued_date: str = None, expiry_date: str = None, name: str = None) -> dict:
-    logger.info(f"Uploading document: {file_name} to account: {account_id}, file_length: {file_length}, sha1_checksum: {sha1_checksum}, mime_type: {mime_type}, data: {data}")
-    return document_manager.upload_document(account_id=account_id, file_name=file_name, file_length=file_length, sha1_checksum=sha1_checksum, mime_type=mime_type, data=data, category=category, type=type, issued_date=issued_date, expiry_date=expiry_date, name=name)
 
 @handle_exception
-def read_account_documents(account_id: str = None) -> list:
-    """
-    Read all documents for an account
-    Args:
-        account_id: The ID of the account to read documents for
-    Returns:
-        A list of documents for the account
-    """
-    account_documents = db.read(table='account_document', query={'account_id': account_id})
-    documents = []
-    for account_document in account_documents:
-        document = db.read(table='document', query={'id': account_document['document_id']})
-        for d in document:
-            documents.append(d)
-    return documents, account_documents
+def send_to_ibkr(account_id: str = None, master_account: str = None, application: dict = None) -> dict:
+    if not account_id:
+        raise Exception('Missing account_id')
 
-@handle_exception
-def update_account_document(document_id: str = None, category: str = None, name: str = None, type: str = None, issued_date: str = None, expiry_date: str = None, comment: str = None) -> dict:
-    logger.info(f"Updating account document: {document_id}, category: {category}, name: {name}, type: {type}, issued_date: {issued_date}, expiry_date: {expiry_date}, comment: {comment}")
-    return db.update(table='account_document', query={'document_id': document_id}, data={
-        'category': category,
-        'name': name,
-        'type': type,
-        'issued_date': issued_date,
-        'expiry_date': expiry_date,
-        'comment': comment
-    })
+    accounts = db.read(table=table, query={'id': account_id}) or []
+    if len(accounts) == 0:
+        raise Exception(f'Account not found for id={account_id}')
+    if len(accounts) > 1:
+        raise Exception(f'Multiple accounts found for id={account_id}')
 
-@handle_exception
-def delete_document(document_id: str = None) -> dict:
-    db.delete(table='account_document', query={'document_id': document_id})
-    db.delete(table='document', query={'id': document_id})
-    return {'status': 'success'}
+    account = accounts[0]
+    application_json = application if isinstance(application, dict) else account.get('application_json')
+    if not application_json:
+        raise Exception('Account has no application_json')
 
-@handle_exception
-def read_account_screenings(account_id: str = None) -> list:
-    return db.read(table='account_screening', query={'account_id': account_id})
+    resolved_master_account = master_account or account.get('master_account')
+    if not resolved_master_account:
+        raise Exception('Missing master_account (payload and account row are empty)')
 
-@handle_exception
-def screen_person(account_id: str = None, holder_name: str = None, residence_country: str = None, risk_score: float = None, created: str = None) -> dict:
-    
-    greylist = [
-        'Albania',
-        'Armenia',
-        'Barbados',
-        'Burkina Faso',
-        'Haiti',
-        'Ghana',
-        'Gibraltar',
-        'Democratic Republic of the Congo',
-        'Yemen',
-        'Jordan',
-        'Cambodia',
-        'Cayman Islands',
-        'Mali',
-        'Morocco',
-        'Mozambique',
-        'Nigeria',
-        'United Arab Emirates',
-        'Panama',
-        'Senegal',
-        'Syria',
-        'Tanzania',
-        'Turkey',
-        'Uganda',
-        'Philippines',
-        'South Africa',
-        'South Sudan',
-        'Jamaica',
-    ]
-
-    blacklist = [
-        'Democratic People\'s Republic of Korea (DPRK)',
-        'Iran',
-        'Myanmar'
-    ]
-
-    ofac_results = []
-    uk_results = []
-    ofac_sdn_list = get_ofac_sdn_list()
-    ofac_df = pd.DataFrame(ofac_sdn_list)
-
-    uk_sanctions_list = get_uk_sanctions_list()
-    uk_df = pd.DataFrame(uk_sanctions_list)
-
-    similarity_threshold = 0.8
-
-    if residence_country in blacklist:
-        fatf_status = 'Black listed'
-    elif residence_country in greylist:
-        fatf_status = 'Grey listed'
-    else:
-        fatf_status = 'Not listed'
-
-    for index, row in ofac_df.iterrows():
-        sdn_name = str(row['name']).strip()
-        if sdn_name == '':
-            continue
-        similarity = difflib.SequenceMatcher(None, holder_name.lower(), sdn_name.lower()).ratio()
-        if similarity >= similarity_threshold:
-            data = {
-                'name': sdn_name,
-                'entity_number': row['entity_number'],
-                'type': row['type'],
-                'program': row['program'],
-                'title': row['title'],
-                'similarity': similarity,
-                'call_sign': row['call_sign'],
-                'vessel_type': row['vessel_type'],
-                'tonnage': row['tonnage'],
-                'gross_registered_tonnage': row['gross_registered_tonnage'],
-                'vessel_flag': row['vessel_flag'],
-                'vessel_owner': row['vessel_owner'],
-                'more_info': row['more_info'],
-                'source': 'OFAC'
-            }
-
-            ofac_results.append(data)
-
-    uk_name_columns = ['Name 6', 'Name 1', 'Name 2', 'Name 3', 'Name 4', 'Name 5']
-    for index, row in uk_df.iterrows():
-        candidate_names = []
-        for col in uk_name_columns:
-            value = str(row.get(col, '')).strip()
-            if value != '':
-                candidate_names.append(value)
-
-        if len(candidate_names) == 0:
-            continue
-
-        for candidate_name in candidate_names:
-            similarity = difflib.SequenceMatcher(None, holder_name.lower(), candidate_name.lower()).ratio()
-            if similarity < similarity_threshold:
-                continue
-
-            data = {
-                'name': candidate_name,
-                'entity_number': row.get('Unique ID', ''),
-                'type': row.get('Designation Type', ''),
-                'program': row.get('Regime Name', ''),
-                'title': row.get('Title', ''),
-                'similarity': similarity,
-                'call_sign': '',
-                'vessel_type': row.get('Type of ship', ''),
-                'tonnage': row.get('Tonnage of ship', ''),
-                'gross_registered_tonnage': '',
-                'vessel_flag': row.get('Current believed flag of ship', ''),
-                'vessel_owner': row.get('Current owner/operator (s)', ''),
-                'more_info': row.get('Other Information', ''),
-                'source': 'UK'
-            }
-            uk_results.append(data)
-
-    uk_status = uk_results
-
-    return db.create(table='account_screening', data={
-        'account_id': account_id,
-        'holder_name': holder_name,
-        'ofac_results': ofac_results,
-        'uk_status': uk_status,
-        'fatf_status': fatf_status,
-        'risk_score': risk_score if risk_score is not None else 0,
-        'created': created
-    })
+    return ibkr_web_api.send_to_ibkr(
+        application={'application': application_json},
+        master_account=resolved_master_account
+    )
 
 
 """

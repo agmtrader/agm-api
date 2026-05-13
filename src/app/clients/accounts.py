@@ -1,6 +1,6 @@
 from flask import Blueprint, request
 
-from src.components.clients.accounts import create_account, read_accounts, read_accounts_with_metadata, submit_documents, upload_document, read_instructions, delete_document, read_account_documents, update_account_document, screen_person, read_account_screenings
+from src.components.clients.accounts import create_account, read_accounts, read_accounts_with_metadata, submit_documents, read_instructions, send_to_ibkr, read_account_contacts_and_screenings
 
 from src.components.clients.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, change_account_holder_external_id, withdraw_funds, transfer_position_internally, transfer_position_externally, get_financial_ranges, get_business_and_occupation, view_active_bank_instructions, view_withdrawable_cash
 
@@ -31,6 +31,13 @@ def read_route():
     if code:
         query['advisor_code'] = code
     return read_accounts(query=query)
+
+
+@bp.route('/contacts_screenings_summary', methods=['GET'])
+@format_response
+def read_contacts_screenings_summary_route():
+    account_id = request.args.get('account_id', None)
+    return read_account_contacts_and_screenings(account_id=account_id)
 
 
 @bp.route('/with_metadata', methods=['GET'])
@@ -65,53 +72,6 @@ def update_account_route():
     account = payload.get('account', None)
     return update_account(query=query, account=account)
 
-@bp.route('/documents', methods=['GET'])
-@format_response
-def read_documents_by_account_id_route():
-    account_id = request.args.get('account_id', None)
-    documents, account_documents = read_account_documents(account_id=account_id)
-    return {'documents': documents, 'account_documents': account_documents }
-
-@bp.route('/documents', methods=['POST'])
-@format_response
-def upload_document_route():
-    payload = request.get_json(force=True)
-    account_id = payload.get('account_id', None)
-    file_name = payload.get('file_name', None)
-    file_length = payload.get('file_length', None)
-    sha1_checksum = payload.get('sha1_checksum', None)
-    mime_type = payload.get('mime_type', None)
-    data = payload.get('data', None)
-    category = payload.get('category', None)
-    type = payload.get('type', None)
-    issued_date = payload.get('issued_date', None)
-    expiry_date = payload.get('expiry_date', None)
-    name = payload.get('name', None)
-    return upload_document(account_id=account_id, file_name=file_name, file_length=file_length, sha1_checksum=sha1_checksum, mime_type=mime_type, data=data, category=category, type=type, issued_date=issued_date, expiry_date=expiry_date, name=name)
-
-
-@bp.route('/documents', methods=['PATCH'])
-@format_response
-def update_account_document_route():
-    payload = request.get_json(force=True)
-    document_id = payload.get('document_id', None)
-    comment = payload.get('comment', None)
-    category = payload.get('category', None)
-    name = payload.get('name', None)
-    type = payload.get('type', None)
-    issued_date = payload.get('issued_date', None)
-    expiry_date = payload.get('expiry_date', None)
-    return update_account_document(document_id=document_id, category=category, name=name, type=type, issued_date=issued_date, expiry_date=expiry_date, comment=comment)
-
-@bp.route('/documents', methods=['DELETE'])
-@format_response
-def delete_document_route():
-    payload = request.get_json(force=True)
-    document_id = payload.get('document_id', None)
-    if not document_id:
-        return {"error": "Missing document_id"}, 400
-    return delete_document(document_id=document_id)
- 
 @bp.route('/instructions', methods=['GET'])
 @format_response
 def read_instruction_route():
@@ -121,21 +81,14 @@ def read_instruction_route():
         query['account_id'] = account_id
     return read_instructions(query=query)
 
-@bp.route('/screening', methods=['GET'])
+@bp.route('/send_to_ibkr', methods=['POST'])
 @format_response
-def read_account_screenings_route():
-    account_id = request.args.get('account_id', None)
-    return read_account_screenings(account_id=account_id)
-
-@bp.route('/screening', methods=['POST'])
-@format_response
-def screen_person_route():
+def send_to_ibkr_route():
     payload = request.get_json(force=True)
     account_id = payload.get('account_id', None)
-    holder_name = payload.get('holder_name', None)
-    residence_country = payload.get('residence_country', None)
-    risk_score = payload.get('risk_score', None)
-    return screen_person(account_id=account_id, holder_name=holder_name, residence_country=residence_country, risk_score=risk_score)
+    master_account = payload.get('master_account', None)
+    application = payload.get('application', None)
+    return send_to_ibkr(account_id=account_id, master_account=master_account, application=application)
 
 # Account Management
 @bp.route('/ibkr/details', methods=['GET'])
