@@ -133,6 +133,7 @@ class Supabase:
             name = Column(Text, nullable=False)
             phone = Column(Text, nullable=True)
             email = Column(Text, nullable=True)
+            external_id = Column(Text, nullable=True)
 
         class NewAccountContact(self.Base):
             __tablename__ = 'new_account_contact'
