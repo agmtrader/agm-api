@@ -186,15 +186,16 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
         if ibkr_number:
             details_by_ibkr_number[ibkr_number] = detail
 
-    accounts_with_some_individuals_no_screenings = 0
+    accounts_with_some_contacts_no_screenings = 0
     accounts_with_no_screenings_at_all = 0
     accounts_with_some_screenings = 0
-    individuals_with_no_screenings = 0
+    contacts_with_no_screenings = 0
     accounts_due_now = 0
+    contacts_due_now = 0
     total_screenings_to_be_done = 0
     screenings_executed = 0
     screening_errors = []
-    accounts_due_now_rows = []
+    contacts_due_now_rows = []
 
     today = date.today()
 
@@ -205,6 +206,11 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
         detail_account = detail.get("account", {})
         persons = detail.get("associatedPersons") or []
         account_contact_links = account_contacts_by_account.get(account_id, [])
+        persons_by_entity_id = {
+            str(person.get("entityId")).strip(): person
+            for person in persons
+            if person.get("entityId") is not None
+        }
 
         date_opened = detail_account.get("dateOpened")
         date_started = detail_account.get("dateBegun")
@@ -216,37 +222,35 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
         has_any_missing_screenings = False
         account_has_due_now = False
 
-        for person in persons:
-            roles = person.get("associations") or []
-            if is_excluded_person(roles):
+        for link in account_contact_links:
+            person_contact_id = link.get("contact_id")
+            if not person_contact_id:
                 continue
 
-            display_name = person_display_name(person)
+            contact = contacts_by_id.get(person_contact_id) or {}
+            display_name = (contact.get("name") or "").strip()
             if not display_name:
                 continue
 
-            candidates = person_name_candidates(person)
-            person_contact_id = None
-            person_entity_id = person.get("entityId")
-            if person_entity_id is not None:
-                for link in account_contact_links:
-                    if str(link.get("entity_id") or "").strip() == str(person_entity_id).strip():
-                        person_contact_id = link.get("contact_id")
+            matched_person = None
+            entity_id = link.get("entity_id")
+            if entity_id is not None:
+                matched_person = persons_by_entity_id.get(str(entity_id).strip())
+
+            if matched_person is None:
+                normalized_contact_name = normalize_name(display_name)
+                for person in persons:
+                    if normalized_contact_name in person_name_candidates(person):
+                        matched_person = person
                         break
 
-            if not person_contact_id:
-                for link in account_contact_links:
-                    contact = contacts_by_id.get(link.get("contact_id"))
-                    contact_name = normalize_name((contact or {}).get("name", ""))
-                    if contact_name and contact_name in candidates:
-                        person_contact_id = link.get("contact_id")
-                        break
+            roles = (matched_person or {}).get("associations") or []
+            if not roles and contact.get("type"):
+                roles = [contact.get("type")]
+            if is_excluded_person(roles):
+                continue
 
-            person_screens = (
-                contact_screens_by_contact_id.get(person_contact_id, [])
-                if person_contact_id
-                else []
-            )
+            person_screens = contact_screens_by_contact_id.get(person_contact_id, [])
 
             roles_str = ", ".join(roles)
 
@@ -254,7 +258,7 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
                 has_any_screenings = True
             else:
                 has_any_missing_screenings = True
-                individuals_with_no_screenings += 1
+                contacts_with_no_screenings += 1
 
             due_now, due_reason, latest_screen_date = screening_status(
                 start_date=start_date,
@@ -277,12 +281,6 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
                 screenings_needed = 0
                 cycle_years_to_create = []
 
-            residence_country = (
-                person.get("residenceCountry")
-                or person.get("countryOfResidence")
-                or detail_account.get("residenceCountry")
-                or detail_account.get("countryOfResidence")
-            )
             risk_score = None
             if latest_screen_date:
                 sorted_person_screens = sorted(
@@ -322,14 +320,15 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
 
             if due_now:
                 account_has_due_now = True
+                contacts_due_now += 1
                 total_screenings_to_be_done += screenings_needed
-                accounts_due_now_rows.append(
+                contacts_due_now_rows.append(
                     {
                         "account_id": account_id,
                         "ibkr_number": ibkr_number,
                         "date_opened": date_opened,
                         "contact_id": person_contact_id,
-                        "individual_name": display_name,
+                        "contact_name": display_name,
                         "roles": roles_str,
                         "latest_screening_date": latest_screen_date.isoformat()
                         if latest_screen_date
@@ -345,21 +344,27 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
             accounts_due_now += 1
 
         if has_any_missing_screenings and has_any_screenings:
-            accounts_with_some_individuals_no_screenings += 1
+            accounts_with_some_contacts_no_screenings += 1
         elif not has_any_screenings:
             accounts_with_no_screenings_at_all += 1
         else:
             accounts_with_some_screenings += 1
 
-    return {
+    result = {
         "apply_screenings": apply_screenings,
+        "contacts_due_now": contacts_due_now,
+        "contacts_with_no_screenings": contacts_with_no_screenings,
+        "accounts_with_some_contacts_no_screenings": accounts_with_some_contacts_no_screenings,
+        "contacts_due_now_rows": contacts_due_now_rows,
         "accounts_due_now": accounts_due_now,
-        "individuals_with_no_screenings": individuals_with_no_screenings,
-        "accounts_with_some_individuals_no_screenings": accounts_with_some_individuals_no_screenings,
         "accounts_with_no_screenings_at_all": accounts_with_no_screenings_at_all,
         "accounts_with_some_screenings": accounts_with_some_screenings,
         "total_screenings_to_be_done": total_screenings_to_be_done,
         "screenings_executed": screenings_executed,
         "screening_errors": screening_errors,
-        "accounts_due_now_rows": accounts_due_now_rows,
+        # Backward-compatible aliases. Prefer contact-centric keys above.
+        "individuals_with_no_screenings": contacts_with_no_screenings,
+        "accounts_with_some_individuals_no_screenings": accounts_with_some_contacts_no_screenings,
+        "accounts_due_now_rows": contacts_due_now_rows,
     }
+    return result
