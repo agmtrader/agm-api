@@ -87,10 +87,8 @@ def upload_contact_document(
 
 @handle_exception
 def read_contact_documents(contact_id: str = None, include_data: bool = False, include_documents: bool = True):
-    if not contact_id:
-        raise Exception('contact_id is required')
-
-    links = db.read(table=contact_document_table, query={'contact_id': contact_id}) or []
+    query = {'contact_id': contact_id} if contact_id else {}
+    links = db.read(table=contact_document_table, query=query) or []
     if not include_documents:
         return {'documents': [], 'contact_documents': links}
 
