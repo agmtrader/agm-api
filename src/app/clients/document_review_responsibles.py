@@ -4,6 +4,7 @@ from src.components.clients.document_review_responsibles import (
     create_document_review_responsible,
     read_document_review_responsibles,
     delete_document_review_responsible,
+    upsert_document_review_responsible,
 )
 from src.utils.response import format_response
 
@@ -45,3 +46,19 @@ def delete_document_review_responsible_route():
     payload = request.get_json(force=True)
     query = payload.get('query', None)
     return delete_document_review_responsible(query=query)
+
+
+@bp.route('/upsert', methods=['POST'])
+@format_response
+def upsert_document_review_responsible_route():
+    payload = request.get_json(force=True)
+    account_id = payload.get('account_id', None)
+    contact_id = payload.get('contact_id', None)
+    user_id = payload.get('user_id', None)
+    comment = payload.get('comment', None)
+    return upsert_document_review_responsible(
+        account_id=account_id,
+        contact_id=contact_id,
+        user_id=user_id,
+        comment=comment,
+    )

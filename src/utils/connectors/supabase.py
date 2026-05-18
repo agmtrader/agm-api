@@ -160,6 +160,7 @@ class Supabase:
             account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False, unique=False)
             contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False, unique=False)
             user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False, unique=False)
+            comment = Column(Text, nullable=True)
 
         class FeeTemplateRequest(self.Base):
             __tablename__ = 'fee_template_request'
