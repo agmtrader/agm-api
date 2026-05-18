@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ subject }}</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.7; color: #2D3748; margin: 0; padding: 0; background-color: #F7FAFC; }
+        .container { max-width: 640px; margin: 32px auto; padding: 32px; background-color: #FFFFFF; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); }
+        .logo { text-align: center; margin: 0 auto 32px; max-width: 220px; }
+        .logo img { max-width: 100%; height: auto; }
+        h1 { color: #1A365D; font-size: 22px; margin-bottom: 20px; text-align: center; }
+        .section { margin-bottom: 20px; }
+        .doc-card { border: 1px solid #E2E8F0; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+        .doc-title { font-weight: 600; margin-bottom: 8px; }
+        ul { margin: 0; padding-left: 18px; }
+        li { margin-bottom: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo"><img src="cid:logo" alt="AGM Logo"></div>
+        <h1>{{ subject }}</h1>
+
+        <div class="section">
+            <p>Estimado/a {{ content.client_name or 'Cliente' }},</p>
+            <p>Hemos notado que nos faltan ciertos documentos requeridos por cumplimiento para que su cuenta permanezca abierta. Por favor envíenos lo siguiente:</p>
+        </div>
+
+        {% if content.missing_documents and content.missing_documents|length > 0 %}
+            {% for missing in content.missing_documents %}
+                <div class="doc-card">
+                    <div class="doc-title">{{ missing.name }}</div>
+                    {% if missing.accepted_types and missing.accepted_types|length > 0 %}
+                        <p>Tipos de documentos aceptados:</p>
+                        <ul>
+                            {% for doc_type in missing.accepted_types %}
+                                <li>{{ doc_type }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="section">
+            <p>Responda este correo si tiene cualquier consulta.</p>
+            <p>Saludos,<br>AGM Customer Service</p>
+        </div>
+    </div>
+</body>
+</html>

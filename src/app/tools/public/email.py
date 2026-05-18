@@ -60,3 +60,15 @@ def send_funding_notification_email_route():
   """HTTP POST body must include: content (dict), client_email (str), lang ('en'|'es')"""
   payload = request.get_json(force=True)
   return Email.send_funding_notification_email(payload['content'], payload['client_email'], payload.get('lang', 'es'), payload.get('cc', ''))
+
+@bp.route('/send_email/missing_documents', methods=['POST'])
+@format_response
+def send_missing_documents_email_route():
+  payload = request.get_json(force=True)
+  return Email.send_missing_documents_email(
+    content=payload['content'],
+    client_email=payload['client_email'],
+    missing_type=payload.get('missing_type', 'multiple'),
+    lang=payload.get('lang', 'en'),
+    cc=payload.get('cc', ''),
+  )

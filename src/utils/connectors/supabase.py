@@ -152,6 +152,16 @@ class Supabase:
             mime_type = Column(Text, nullable=False)
             data = Column(Text, nullable=False)
 
+        class DocumentReviewResponsible(self.Base):
+            __tablename__ = 'document_review_responsible'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            document_id = Column(UUID(as_uuid=True), ForeignKey('document.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False, unique=True)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False, unique=True)
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False, unique=True)
+            user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False, unique=True)
+
         class FeeTemplateRequest(self.Base):
             __tablename__ = 'fee_template_request'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -224,6 +234,7 @@ class Supabase:
         self.ContactScreening = ContactScreening
         self.ContactDocument = ContactDocument
         self.Document = Document
+        self.DocumentReviewResponsible = DocumentReviewResponsible
         self.FeeTemplateRequest = FeeTemplateRequest
         self.FlaggedDeposit = FlaggedDeposit
         self.InvestmentProposal = InvestmentProposal
