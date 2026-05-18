@@ -9,7 +9,7 @@ def create_document_review_responsible(document_review_responsible: dict = None)
     if not document_review_responsible:
         raise Exception('document_review_responsible payload is required')
 
-    required_keys = ['document_id', 'account_id', 'contact_id', 'user_id']
+    required_keys = ['account_id', 'contact_id', 'user_id']
     missing_keys = [key for key in required_keys if not document_review_responsible.get(key)]
     if missing_keys:
         raise Exception(f"Missing required fields: {', '.join(missing_keys)}")
@@ -17,7 +17,6 @@ def create_document_review_responsible(document_review_responsible: dict = None)
     existing = db.read(
         table=TABLE,
         query={
-            'document_id': document_review_responsible['document_id'],
             'account_id': document_review_responsible['account_id'],
             'contact_id': document_review_responsible['contact_id'],
             'user_id': document_review_responsible['user_id'],

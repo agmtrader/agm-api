@@ -23,15 +23,12 @@ def create_document_review_responsible_route():
 def read_document_review_responsibles_route():
     query = {}
     id = request.args.get('id', None)
-    document_id = request.args.get('document_id', None)
     account_id = request.args.get('account_id', None)
     contact_id = request.args.get('contact_id', None)
     user_id = request.args.get('user_id', None)
 
     if id:
         query['id'] = id
-    if document_id:
-        query['document_id'] = document_id
     if account_id:
         query['account_id'] = account_id
     if contact_id:
