@@ -384,10 +384,8 @@ def read_instructions(query: dict = None) -> list:
 
 @handle_exception
 def update_account(query: dict = None, account: dict = None) -> dict:
-    logger.info(f"Attempting to update account with query: {query} and data: {account}")
     db.update(table=table, query=query, data=account)
     return {'status': 'success'}
-
 
 @handle_exception
 def send_to_ibkr(account_id: str = None, master_account: str = None, application: dict = None) -> dict:

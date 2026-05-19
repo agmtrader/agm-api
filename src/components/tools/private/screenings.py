@@ -2,11 +2,10 @@ from datetime import date, datetime, timedelta
 import re
 import unicodedata
 from src.components.clients.accounts import read_accounts
-from src.components.clients.contacts import create_contact_screening
+from src.components.clients.contacts import create_contact_screening_from_contact_id
 from src.components.tools.public.reporting import get_ibkr_details
 from src.utils.connectors.supabase import db
 
-EXCLUDED_ASSOCIATIONS = {"trusted contact"}
 SCREENING_CYCLE_GRACE_DAYS = 3
 APPLY_SCREENINGS = True
 
@@ -36,7 +35,6 @@ def parse_screen_created(value: str | None) -> date | None:
         return datetime.strptime(value, "%Y%m%d%H%M%S").date()
     except ValueError:
         return None
-
 
 def person_name_candidates(person: dict) -> set[str]:
     first = (person.get("firstName") or "").strip()
@@ -93,11 +91,6 @@ def screenings_needed_count(
         latest_cycle_year = cycle_year_for_date(start_date, latest_screen_date)
 
     return max(0, current_cycle_year - latest_cycle_year)
-
-
-def is_excluded_person(roles: list[str]) -> bool:
-    normalized_roles = {normalize_name(role) for role in roles if role}
-    return bool(normalized_roles.intersection(EXCLUDED_ASSOCIATIONS))
 
 
 def screening_status(
@@ -247,9 +240,6 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
             roles = (matched_person or {}).get("associations") or []
             if not roles and contact.get("type"):
                 roles = [contact.get("type")]
-            if is_excluded_person(roles):
-                continue
-
             person_screens = contact_screens_by_contact_id.get(person_contact_id, [])
 
             roles_str = ", ".join(roles)
@@ -281,16 +271,6 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
                 screenings_needed = 0
                 cycle_years_to_create = []
 
-            risk_score = None
-            if latest_screen_date:
-                sorted_person_screens = sorted(
-                    person_screens,
-                    key=lambda s: parse_screen_created(s.get("created")) or date.min,
-                    reverse=True,
-                )
-                if sorted_person_screens:
-                    risk_score = sorted_person_screens[0].get("risk_score")
-
             if apply_screenings and due_now and cycle_years_to_create:
                 for cycle_year in cycle_years_to_create:
                     created_date = anniversary_for_year(start_date, cycle_year)
@@ -302,12 +282,8 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
                         )
                         continue
 
-                    result = create_contact_screening(
+                    result = create_contact_screening_from_contact_id(
                         contact_id=person_contact_id,
-                        risk_score=risk_score if risk_score is not None else 0,
-                        fatf_status='Not listed',
-                        ofac_results=[],
-                        uk_status=[],
                         created=created_value,
                     )
 

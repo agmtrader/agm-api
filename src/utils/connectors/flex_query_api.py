@@ -4,16 +4,22 @@ import xml.etree.ElementTree as ET
 import time
 import pandas as pd
 import csv
+import os
 
 from src.utils.logger import logger
 from src.utils.connectors.drive import GoogleDrive
 from datetime import datetime
+from requests.exceptions import RequestException
 
 logger.announcement('Initializing Flex Query Service', type='info')
 drive = GoogleDrive()
 version='&v=3'
 url = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest?"
 logger.announcement('Initialized Flex Query Service', type='success')
+
+FLEX_QUERY_MAX_RETRIES = int(os.getenv('FLEX_QUERY_MAX_RETRIES', '6'))
+FLEX_QUERY_RETRY_DELAY_SECONDS = int(os.getenv('FLEX_QUERY_RETRY_DELAY_SECONDS', '3'))
+FLEX_QUERY_HTTP_TIMEOUT_SECONDS = int(os.getenv('FLEX_QUERY_HTTP_TIMEOUT_SECONDS', '12'))
 
 
 def _extract_flex_error(response_text):
@@ -25,11 +31,34 @@ def _extract_flex_error(response_text):
     except ET.ParseError:
         return 'UNKNOWN', 'Unable to parse IBKR error payload.'
 
-def _poll_flex_response(request_fn, operation_name, max_retries=20, retry_delay_seconds=5):
+def _poll_flex_response(
+    request_fn,
+    operation_name,
+    max_retries=FLEX_QUERY_MAX_RETRIES,
+    retry_delay_seconds=FLEX_QUERY_RETRY_DELAY_SECONDS
+):
     attempt = 0
 
     while attempt < max_retries:
-        response = request_fn()
+        try:
+            response = request_fn()
+        except RequestException as e:
+            if attempt >= max_retries - 1:
+                logger.error(
+                    f'{operation_name} Failed after {max_retries} attempts. '
+                    f'Network error: {str(e)}'
+                )
+                raise Exception(
+                    f'{operation_name} Failed after {max_retries} attempts. '
+                    f'Network error: {str(e)}'
+                ) from e
+            logger.warning(
+                f'{operation_name} network error on attempt {attempt + 1}/{max_retries}: {str(e)}. '
+                f'Retrying in {retry_delay_seconds}s.'
+            )
+            time.sleep(retry_delay_seconds)
+            attempt += 1
+            continue
         error_code, error_message = _extract_flex_error(response.text)
 
         if error_code is None:
@@ -75,7 +104,10 @@ def getFlexQuery(queryId):
     logger.info('Requesting Flex Query Template...')
     generatedTemplateURL = "".join([url, token, '&q=' + queryId, version])
     generatedTemplateResponse = _poll_flex_response(
-        request_fn=lambda: rq.get(url=generatedTemplateURL),
+        request_fn=lambda: rq.get(
+            url=generatedTemplateURL,
+            timeout=FLEX_QUERY_HTTP_TIMEOUT_SECONDS
+        ),
         operation_name='Flex Query Template Generation',
     )
 
@@ -95,7 +127,11 @@ def getFlexQuery(queryId):
     generatedReportURL = root.find('Url').text
     generatedReportURL = "".join([generatedReportURL, "?",token, refCode, version])
     generatedReportResponse = _poll_flex_response(
-        request_fn=lambda: rq.get(url=generatedReportURL, allow_redirects=True),
+        request_fn=lambda: rq.get(
+            url=generatedReportURL,
+            allow_redirects=True,
+            timeout=FLEX_QUERY_HTTP_TIMEOUT_SECONDS
+        ),
         operation_name='Flex Query Generation',
     )
 

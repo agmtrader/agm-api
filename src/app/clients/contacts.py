@@ -7,7 +7,7 @@ from src.components.clients.contacts import (
     read_contact_documents,
     update_contact_document,
     delete_contact_document,
-    create_contact_screening,
+    create_contact_screening_from_contact_id,
     read_contact_screenings
 )
 from src.utils.response import format_response
@@ -103,12 +103,4 @@ def read_contact_screenings_route():
 @format_response
 def create_contact_screening_route():
     payload = request.get_json(force=True)
-    return create_contact_screening(
-        contact_id=payload.get('contact_id'),
-        risk_score=payload.get('risk_score'),
-        fatf_status=payload.get('fatf_status'),
-        un_status=payload.get('un_status'),
-        uk_status=payload.get('uk_status'),
-        ofac_results=payload.get('ofac_results'),
-        created=payload.get('created')
-    )
+    return create_contact_screening_from_contact_id(contact_id=payload.get('contact_id'))

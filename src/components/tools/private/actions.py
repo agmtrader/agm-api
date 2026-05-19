@@ -10,9 +10,9 @@ def send_unfunded_emails():
     Cross-references the NAV report with the accounts table to find
     accounts that have zero NAV (not funded).
     """
-    from src.components.entities.accounts import read_accounts
-    from src.components.entities.contacts import read_contacts
-    from src.components.entities.advisors import read_advisors
+    from src.components.clients.accounts import read_accounts
+    from src.components.clients.contacts import read_contacts
+    from src.components.clients.advisors import read_advisors
     from components.tools.public.email import Gmail
 
     email = Gmail()
@@ -110,7 +110,7 @@ def send_unfunded_emails():
 def update_account_aliases():
     """Fetch clients report, filter accounts without alias, update each alias, and return list."""
     from components.tools.public.reporting import get_clients_report
-    from src.components.entities.accounts import update_account_alias
+    from src.components.clients.accounts import update_account_alias
     clients = get_clients_report()
     pending_accounts = [c for c in clients if (c.get('Alias') in (None, '')) and c.get('Status') not in ('Rejected', 'Closed', 'Funded Pending')]
     updated_accounts = []

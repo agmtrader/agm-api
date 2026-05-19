@@ -344,7 +344,7 @@ def _append_missing_account_details(details: list):
     }
 
     
-    from src.components.entities.accounts import read_accounts, read_account_details
+    from src.components.clients.accounts import read_accounts, read_account_details
     accounts = read_accounts({})
     detail_account_ids = {
         str(detail.get('account', {}).get('accountId')).strip()
