@@ -46,9 +46,15 @@ def update_contact_route():
 @format_response
 def read_contact_documents_route():
     contact_id = request.args.get('contact_id', None)
+    document_ids = request.args.getlist('document_id')
     include_data = request.args.get('include_data', 'false').strip().lower() in ('1', 'true', 'yes')
     include_documents = request.args.get('include_documents', 'true').strip().lower() in ('1', 'true', 'yes')
-    return read_contact_documents(contact_id=contact_id, include_data=include_data, include_documents=include_documents)
+    return read_contact_documents(
+        contact_id=contact_id,
+        document_ids=document_ids,
+        include_data=include_data,
+        include_documents=include_documents
+    )
 
 
 @bp.route('/documents', methods=['POST'])

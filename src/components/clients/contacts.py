@@ -119,9 +119,20 @@ def upload_contact_document(
 
 
 @handle_exception
-def read_contact_documents(contact_id: str = None, include_data: bool = False, include_documents: bool = True):
+def read_contact_documents(
+    contact_id: str = None,
+    document_ids: list[str] = None,
+    include_data: bool = False,
+    include_documents: bool = True
+):
     query = {'contact_id': contact_id} if contact_id else {}
     links = db.read(table=contact_document_table, query=query) or []
+    if document_ids:
+        requested_document_ids = {str(document_id) for document_id in document_ids if document_id}
+        links = [
+            link for link in links
+            if str(link.get('document_id') or '') in requested_document_ids
+        ]
     if not include_documents:
         return {'documents': [], 'contact_documents': links}
 
