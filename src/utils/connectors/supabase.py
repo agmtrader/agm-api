@@ -136,8 +136,8 @@ class Supabase:
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             risk_score = Column(Text, nullable=True)
-            fatf_status = Column(Text, nullable=True)
-            un_status = Column(Text, nullable=True)
+            fatf_status = Column(JSONB, nullable=True)
+            un_status = Column(JSONB, nullable=True)
             uk_status = Column(JSONB, nullable=True)
             ofac_results = Column(JSONB, nullable=True)
 

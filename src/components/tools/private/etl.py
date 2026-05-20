@@ -304,9 +304,10 @@ def extract_un_sanctions_list(config=None):
         })
 
     df = pd.DataFrame(un_rows).fillna('')
+    un_timestamp = datetime.now(cst).strftime('%Y%m%d%H%M')
 
     Drive.upload_file(
-        file_name='un_sanctions_list.csv',
+        file_name=f'un_sanctions_list_{un_timestamp}.csv',
         mime_type='text/csv',
         file_data=df.to_dict(orient='records'),
         parent_folder_id=batch_folder_id

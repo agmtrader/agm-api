@@ -3,7 +3,6 @@ from src.utils.connectors.supabase import db
 from src.utils.logger import logger
 from typing import Optional
 from datetime import datetime
-import json
 import re
 import unicodedata
 from src.components.tools.public.reporting import (
@@ -165,8 +164,8 @@ def delete_contact_document(document_id: str = None):
 def create_contact_screening(
     contact_id: str = None,
     risk_score: Optional[float] = None,
-    fatf_status: Optional[str] = None,
-    un_status: Optional[str] = None,
+    fatf_status: Optional[list[dict]] = None,
+    un_status: Optional[list[dict]] = None,
     uk_status=None,
     ofac_results=None,
     created: Optional[str] = None
@@ -176,10 +175,10 @@ def create_contact_screening(
     return db.create(table=contact_screening_table, data={
         'contact_id': contact_id,
         'risk_score': risk_score if risk_score is not None else 0,
-        'fatf_status': fatf_status if fatf_status is not None else '[]',
-        'un_status': un_status if un_status is not None else '[]',
-        'uk_status': uk_status if uk_status is not None else [],
-        'ofac_results': ofac_results if ofac_results is not None else [],
+        'fatf_status': fatf_status,
+        'un_status': un_status,
+        'uk_status': uk_status,
+        'ofac_results': ofac_results,
         'created': created
     })
 
@@ -480,7 +479,7 @@ def create_contact_screening_from_contact_id(contact_id: str = None, created: Op
     ofac_results = [
         row for row in ofac_sdn_list
         if isinstance(row, dict) and _normalize_name(row.get('name', '')) == normalized_contact_name
-    ][:10]
+    ]
 
     uk_status = []
     for row in uk_sanctions_list:
@@ -489,8 +488,6 @@ def create_contact_screening_from_contact_id(contact_id: str = None, created: Op
         name_candidates = [row.get(f'Name {index}', '') for index in range(1, 7)]
         if any(_normalize_name(candidate) == normalized_contact_name for candidate in name_candidates):
             uk_status.append(row)
-        if len(uk_status) >= 10:
-            break
 
     un_matches = []
     for row in un_sanctions_list:
@@ -502,10 +499,9 @@ def create_contact_screening_from_contact_id(contact_id: str = None, created: Op
             candidate_names.extend(aliases.split('|'))
         if any(_normalize_name(candidate) == normalized_contact_name for candidate in candidate_names):
             un_matches.append(row)
-        if len(un_matches) >= 10:
-            break
-
-    un_status = json.dumps(un_matches) if len(un_matches) > 0 else '[]'
+    un_status = un_matches if len(un_matches) > 0 else None
+    uk_status_value = uk_status if len(uk_status) > 0 else None
+    ofac_results_value = ofac_results if len(ofac_results) > 0 else None
     risk_score = _compute_weighted_holder_risk_score(contact=contact, account_row=account_row)
     if ofac_results or uk_status or un_matches:
         risk_score = max(risk_score, 9.0)
@@ -513,10 +509,10 @@ def create_contact_screening_from_contact_id(contact_id: str = None, created: Op
     return create_contact_screening(
         contact_id=contact_id,
         risk_score=risk_score,
-        fatf_status='[]',
+        fatf_status=None,
         un_status=un_status,
-        uk_status=uk_status,
-        ofac_results=ofac_results,
+        uk_status=uk_status_value,
+        ofac_results=ofac_results_value,
         created=created or datetime.now().strftime('%Y%m%d%H%M%S'),
     )
 

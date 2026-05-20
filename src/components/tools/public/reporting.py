@@ -1,8 +1,11 @@
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from src.utils.logger import logger
 import pandas as pd
 import pandas as pd
 import re
+import json
+import hashlib
+import pytz
 
 from src.utils.connectors.drive import GoogleDrive
 from src.utils.exception import ServiceError, handle_exception
@@ -14,6 +17,9 @@ ibkr_web_api = IBKRWebAPI()
 
 batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
 resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+ofac_backup_folder_id = '13W9sXMbFvWtXPsEy6FiZJrQDHV3WYDD6'
+uk_backup_folder_id = '1-57AG_nFE2elzOygdc7PGqdB4Y9k_7h6'
+un_backup_folder_id = '1AwTRSLSi0D3kzyhFx9Be53ugvo7uJgpd'
 
 UN_SANCTIONS_XML_URL = 'https://scsanctions.un.org/resources/xml/en/name/consolidated.xml?_gl=1*b6x5x9*_ga*MTM1Mzg4ODEzNS4xNzc3NjU0MjY4*_ga_TK9BQL5X7Z*czE3Nzc2NTQyNjgkbzEkZzEkdDE3Nzc2NTU1NzEkajYwJGwwJGgw'
 
@@ -137,6 +143,169 @@ def get_ofac_sdn_list():
         raise Exception('OFAC SDN list file not found or multiple files found')
     ofac_sdn_list = Drive.download_file(file_id=ofac_sdn_list_file[0]['id'], parse=True)
     return ofac_sdn_list
+
+def _normalize_day_reference(day_reference) -> date:
+    if isinstance(day_reference, datetime):
+        return day_reference.date()
+    if isinstance(day_reference, date):
+        return day_reference
+    if isinstance(day_reference, str):
+        return datetime.strptime(day_reference, '%Y-%m-%d').date()
+    raise ValueError('Invalid day_reference. Use date, datetime, or YYYY-MM-DD string.')
+
+def _rows_signature(rows: list) -> str:
+    canonical_rows = []
+    for row in rows or []:
+        if isinstance(row, dict):
+            canonical_rows.append(dict(sorted(row.items())))
+        else:
+            canonical_rows.append(row)
+    canonical_rows.sort(key=lambda item: json.dumps(item, sort_keys=True, default=str))
+    payload = json.dumps(canonical_rows, sort_keys=True, default=str).encode('utf-8')
+    return hashlib.sha256(payload).hexdigest()
+
+def _canonicalize_row(row) -> str:
+    if isinstance(row, dict):
+        normalized = dict(sorted(row.items()))
+    else:
+        normalized = row
+    return json.dumps(normalized, sort_keys=True, default=str)
+
+def _row_change_summary(today_rows: list, yesterday_rows: list, sample_size: int = 3) -> dict:
+    today_map = {_canonicalize_row(row): row for row in (today_rows or [])}
+    yesterday_map = {_canonicalize_row(row): row for row in (yesterday_rows or [])}
+
+    added_keys = sorted(set(today_map.keys()) - set(yesterday_map.keys()))
+    removed_keys = sorted(set(yesterday_map.keys()) - set(today_map.keys()))
+
+    return {
+        'added_count': len(added_keys),
+        'removed_count': len(removed_keys),
+        'added_samples': [today_map[k] for k in added_keys[:sample_size]],
+        'removed_samples': [yesterday_map[k] for k in removed_keys[:sample_size]],
+    }
+
+@handle_exception
+def get_ofac_sdn_backup_for_day(day_reference) -> dict | None:
+    return _get_sanctions_backup_for_day(
+        day_reference=day_reference,
+        backup_folder_id=ofac_backup_folder_id,
+        file_prefix='ofac_sdn_list_',
+    )
+
+@handle_exception
+def get_uk_sanctions_backup_for_day(day_reference) -> dict | None:
+    return _get_sanctions_backup_for_day(
+        day_reference=day_reference,
+        backup_folder_id=uk_backup_folder_id,
+        file_prefix='uk_sanctions_list_',
+    )
+
+@handle_exception
+def get_un_sanctions_backup_for_day(day_reference) -> dict | None:
+    return _get_sanctions_backup_for_day(
+        day_reference=day_reference,
+        backup_folder_id=un_backup_folder_id,
+        file_prefix='un_sanctions_list_',
+    )
+
+def _get_sanctions_backup_for_day(day_reference, backup_folder_id: str, file_prefix: str) -> dict | None:
+    target_day = _normalize_day_reference(day_reference)
+    day_prefix = target_day.strftime('%Y%m%d')
+    target_prefix = f'{file_prefix}{day_prefix}'
+
+    files_in_backup_folder = Drive.get_files_in_folder(backup_folder_id) or []
+    matching_files = [
+        f for f in files_in_backup_folder
+        if f.get('name', '').startswith(target_prefix)
+    ]
+    if not matching_files:
+        return None
+
+    matching_files.sort(key=lambda f: f.get('name', ''), reverse=True)
+    selected_file = matching_files[0]
+    rows = Drive.download_file(file_id=selected_file['id'], parse=True) or []
+    return {
+        'day': target_day.isoformat(),
+        'file_id': selected_file.get('id'),
+        'file_name': selected_file.get('name'),
+        'rows': rows,
+        'rows_signature': _rows_signature(rows),
+    }
+
+@handle_exception
+def compare_ofac_sdn_today_vs_yesterday(reference_day: date | None = None) -> dict:
+    return _compare_sanctions_today_vs_yesterday(
+        snapshot_fetcher=get_ofac_sdn_backup_for_day,
+        reference_day=reference_day,
+    )
+
+@handle_exception
+def compare_uk_sanctions_today_vs_yesterday(reference_day: date | None = None) -> dict:
+    return _compare_sanctions_today_vs_yesterday(
+        snapshot_fetcher=get_uk_sanctions_backup_for_day,
+        reference_day=reference_day,
+    )
+
+@handle_exception
+def compare_un_sanctions_today_vs_yesterday(reference_day: date | None = None) -> dict:
+    return _compare_sanctions_today_vs_yesterday(
+        snapshot_fetcher=get_un_sanctions_backup_for_day,
+        reference_day=reference_day,
+    )
+
+def _compare_sanctions_today_vs_yesterday(snapshot_fetcher, reference_day: date | None = None) -> dict:
+    today = reference_day or datetime.now(pytz.timezone('America/Costa_Rica')).date()
+    yesterday = today - timedelta(days=1)
+
+    today_snapshot = snapshot_fetcher(today)
+    yesterday_snapshot = snapshot_fetcher(yesterday)
+    missing_today = not bool(today_snapshot)
+    missing_yesterday = not bool(yesterday_snapshot)
+
+    change_summary = None
+    if today_snapshot and yesterday_snapshot:
+        if today_snapshot.get('rows_signature') != yesterday_snapshot.get('rows_signature'):
+            change_summary = _row_change_summary(
+                today_rows=today_snapshot.get('rows') or [],
+                yesterday_rows=yesterday_snapshot.get('rows') or [],
+            )
+
+    return {
+        'today': today.isoformat(),
+        'yesterday': yesterday.isoformat(),
+        'today_snapshot': today_snapshot,
+        'yesterday_snapshot': yesterday_snapshot,
+        'missing_today': missing_today,
+        'missing_yesterday': missing_yesterday,
+        'both_available': not missing_today and not missing_yesterday,
+        'is_same': bool(
+            today_snapshot
+            and yesterday_snapshot
+            and today_snapshot.get('rows_signature') == yesterday_snapshot.get('rows_signature')
+        ),
+        'change_summary': change_summary,
+    }
+
+@handle_exception
+def compare_all_sanctions_today_vs_yesterday(reference_day: date | None = None) -> dict:
+    ofac = compare_ofac_sdn_today_vs_yesterday(reference_day=reference_day)
+    uk = compare_uk_sanctions_today_vs_yesterday(reference_day=reference_day)
+    un = compare_un_sanctions_today_vs_yesterday(reference_day=reference_day)
+
+    return {
+        'ofac': ofac,
+        'uk': uk,
+        'un': un,
+        'all_available': all(
+            isinstance(c, dict) and c.get('both_available')
+            for c in [ofac, uk, un]
+        ),
+        'all_same': all(
+            isinstance(c, dict) and c.get('is_same')
+            for c in [ofac, uk, un]
+        )
+    }
 
 @handle_exception
 def get_uk_sanctions_list():
