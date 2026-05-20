@@ -136,10 +136,10 @@ class Supabase:
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             risk_score = Column(Text, nullable=True)
-            fatf_status = Column(JSONB, nullable=True)
-            un_status = Column(JSONB, nullable=True)
-            uk_status = Column(JSONB, nullable=True)
-            ofac_results = Column(JSONB, nullable=True)
+            fatf_status = Column(JSONB(none_as_null=True), nullable=True)
+            un_status = Column(JSONB(none_as_null=True), nullable=True)
+            uk_status = Column(JSONB(none_as_null=True), nullable=True)
+            ofac_results = Column(JSONB(none_as_null=True), nullable=True)
 
         class Document(self.Base):
             __tablename__ = 'document'

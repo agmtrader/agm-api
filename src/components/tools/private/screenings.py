@@ -103,6 +103,8 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
         logger.warning(
             f"Sanctions comparison failed. Continuing screenings. Error: {sanctions_comparison.get('error')}"
         )
+    elif len(unavailable_lists) > 0:
+        raise Exception(f"Sanctions files unavailable: {', '.join(unavailable_lists)}")
     elif sanctions_comparison.get("all_available") and sanctions_comparison.get("all_same"):
         return {
             "apply_screenings": apply_screenings,
