@@ -19,8 +19,6 @@ _ACCOUNTS_METADATA_CACHE_TTL_SECONDS = int(os.getenv('ACCOUNTS_METADATA_CACHE_TT
 table = 'account'
 account_contact_table = 'account_contact'
 SENSITIVE_ACCOUNT_FIELDS = {
-    'ibkr_password',
-    'temporal_password',
     'ibkr_password_secret_id',
     'temporal_password_secret_id',
 }
@@ -88,7 +86,6 @@ def _prepare_account_secrets(account: dict, account_id: str | None = None) -> di
             continue
 
         password_value = prepared.pop(password_field)
-        prepared[password_field] = None
         prepared[secret_id_field] = None
 
         if password_value is None or password_value == '':
@@ -106,13 +103,12 @@ def _prepare_account_secrets(account: dict, account_id: str | None = None) -> di
     return prepared
 
 
-def _resolve_account_secret(account: dict, password_field: str, secret_id_field: str) -> str | None:
+def _resolve_account_secret(account: dict, secret_id_field: str) -> str | None:
     secret = _read_vault_secret(account.get(secret_id_field))
     if secret:
         return secret
 
-    # Temporary rollout fallback until plaintext columns are cleared.
-    return account.get(password_field)
+    return None
 
 def _normalize_join_key(value) -> str:
     if value is None:
@@ -389,7 +385,7 @@ def send_account_credentials_email(
 
     account = accounts[0]
     username = account.get('ibkr_username')
-    password = _resolve_account_secret(account, 'ibkr_password', 'ibkr_password_secret_id')
+    password = _resolve_account_secret(account, 'ibkr_password_secret_id')
     if not username or not password:
         raise Exception('Account credentials not found')
 

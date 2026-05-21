@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.clients.users import read_users, update_user, create_user, verify_password, sanitize_user, hash_password
+from src.components.clients.users import read_users, update_user, create_user, verify_password, sanitize_user
 from src.utils.response import format_response
 from src.utils.logger import logger
 from src.utils.exception import ServiceError
@@ -35,11 +35,6 @@ def login():
         user = users[0]
         password_hash = user.get('password_hash')
         if verify_password(password, password_hash):
-            return sanitize_user(user)
-
-        # Temporary migration bridge for rows not yet backfilled with password_hash.
-        if not password_hash and user.get('password') == password:
-            update_user(query={'id': user['id']}, user={'password_hash': hash_password(password)})
             return sanitize_user(user)
 
     logger.error(f'Single entry has {len(users)} matches.')

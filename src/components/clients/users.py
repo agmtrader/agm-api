@@ -6,7 +6,7 @@ import bcrypt
 logger.announcement('Initializing Users Service', type='info')
 logger.announcement('Initialized Users Service', type='success')
 
-SENSITIVE_USER_FIELDS = {'password', 'password_hash'}
+SENSITIVE_USER_FIELDS = {'password_hash'}
 
 def hash_password(password: str) -> str:
     if not password:
@@ -35,7 +35,7 @@ def create_user(user: dict = None):
         raise Exception("User must be provided.")
     if 'password' in user:
         user['password_hash'] = hash_password(user['password'])
-        user['password'] = '__password_hash_only__'
+        user.pop('password', None)
     user_id = db.create(table='user', data=user)
     return user_id
 
@@ -63,6 +63,6 @@ def update_user(query: dict = None, user: dict = None):
         raise Exception("User must be provided.")
     if 'password' in user:
         user['password_hash'] = hash_password(user['password'])
-        user['password'] = '__password_hash_only__'
+        user.pop('password', None)
     user = db.update(table='user', query=query, data=user)
     return {'id': user}
