@@ -163,7 +163,7 @@ class DatabaseManager:
                 # Don't raise exception for type differences, just warn as they might be compatible
     
 
-    def with_session(self, func, max_retries: int = 3, delay: int = 1):
+    def with_session(self, func=None, max_retries: int = 3, delay: int = 1, commit: bool = True):
         """Decorator to manage a SQLAlchemy session with automatic reconnection logic.
 
         Parameters
@@ -177,6 +177,11 @@ class DatabaseManager:
             Seconds to wait before each retry (with simple exponential back-off). Defaults to 1.
         """
 
+        if func is None:
+            def decorator(f):
+                return self.with_session(f, max_retries=max_retries, delay=delay, commit=commit)
+            return decorator
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             last_exception = None
@@ -187,7 +192,11 @@ class DatabaseManager:
                 session = Session(bind=self.engine)
                 try:
                     result = func(session, *args, **kwargs)
-                    session.commit()
+                    if commit:
+                        session.commit()
+                    else:
+                        # Ensure no transaction is left open for read-only paths.
+                        session.rollback()
                     return result
 
                 except Exception as e:
@@ -311,7 +320,7 @@ class DatabaseManager:
         return _create(table, data)
 
     def read(self, table: str, query: dict = None, exclude_columns: list = None) -> list:
-        @self.with_session
+        @self.with_session(commit=False)
         def _read(session, table: str, query: dict = None, exclude_columns: list = None):
 
             logger.info(f'Attempting to read entry from table: {table} with query: {query}')
