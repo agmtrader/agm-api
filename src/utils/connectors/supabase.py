@@ -43,6 +43,7 @@ class Supabase:
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             email = Column(Text, nullable=True, unique=True)
             password = Column(Text, nullable=False)
+            password_hash = Column(Text, nullable=True)
             scopes = Column(Text, nullable=True)
             last_login = Column(Text, nullable=True)
             contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)

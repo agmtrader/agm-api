@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.clients.users import read_users, update_user, create_user
+from src.components.clients.users import read_users, update_user, create_user, verify_password, sanitize_user, hash_password
 from src.utils.response import format_response
 from src.utils.logger import logger
 from src.utils.exception import ServiceError
@@ -11,11 +11,12 @@ bp = Blueprint('users', __name__)
 def create():
     payload = request.get_json(force=True)
     user = payload['user']
+    user.pop('password_hash', None)
     
     # Check if user email already exists
     existing_user = read_users(query={'email': user['email']})
 
-    if existing_user and len(existing_user) > 1:
+    if existing_user and len(existing_user) > 0:
         logger.error(f'User email already exists')
         raise Exception('User email already exists')
     
@@ -29,9 +30,17 @@ def login():
     email = payload['email']
     password = payload['password']
 
-    users = read_users(query={'email': email, 'password': password})
+    users = read_users(query={'email': email}, include_sensitive=True)
     if len(users) == 1:
-        return users[0]
+        user = users[0]
+        password_hash = user.get('password_hash')
+        if verify_password(password, password_hash):
+            return sanitize_user(user)
+
+        # Temporary migration bridge for rows not yet backfilled with password_hash.
+        if not password_hash and user.get('password') == password:
+            update_user(query={'id': user['id']}, user={'password_hash': hash_password(password)})
+            return sanitize_user(user)
 
     logger.error(f'Single entry has {len(users)} matches.')
     # Raise 400 for client-side error (bad credentials)
@@ -54,6 +63,8 @@ def read_users_route():
 def update_user_route():
     payload = request.get_json(force=True)
     user = payload.get('user', None)
+    if user:
+        user.pop('password_hash', None)
     query = {}
     id = payload.get('id', None)
     email = payload.get('email', None)
