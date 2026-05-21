@@ -1,6 +1,6 @@
 from flask import Blueprint, request
 
-from src.components.clients.accounts import create_account, read_accounts, read_accounts_with_metadata, submit_documents, read_instructions, send_to_ibkr, read_account_contacts_and_screenings
+from src.components.clients.accounts import create_account, read_accounts, read_accounts_with_metadata, submit_documents, read_instructions, send_to_ibkr, read_account_contacts_and_screenings, send_account_credentials_email
 
 from src.components.clients.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, change_account_holder_external_id, withdraw_funds, transfer_position_internally, transfer_position_externally, get_financial_ranges, get_business_and_occupation, view_active_bank_instructions, view_withdrawable_cash
 
@@ -71,6 +71,19 @@ def update_account_route():
     query = payload.get('query', None)
     account = payload.get('account', None)
     return update_account(query=query, account=account)
+
+@bp.route('/send_credentials_email', methods=['POST'])
+@format_response
+def send_credentials_email_route():
+    payload = request.get_json(force=True)
+    return send_account_credentials_email(
+        account_id=payload.get('account_id'),
+        client_email=payload.get('client_email'),
+        lang=payload.get('lang', 'es'),
+        cc=payload.get('cc', ''),
+        send_welcome=payload.get('send_welcome', False),
+        client_name=payload.get('client_name', ''),
+    )
 
 @bp.route('/instructions', methods=['GET'])
 @format_response

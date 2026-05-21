@@ -3,6 +3,7 @@ from src.utils.connectors.supabase import db
 from src.utils.logger import logger
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 from src.components.tools.public.reporting import get_clients_report, get_nav_report, get_ibkr_details
+from sqlalchemy import text
 import os
 import re
 import time
@@ -17,6 +18,101 @@ _ACCOUNTS_METADATA_CACHE_TTL_SECONDS = int(os.getenv('ACCOUNTS_METADATA_CACHE_TT
 
 table = 'account'
 account_contact_table = 'account_contact'
+SENSITIVE_ACCOUNT_FIELDS = {
+    'ibkr_password',
+    'temporal_password',
+    'ibkr_password_secret_id',
+    'temporal_password_secret_id',
+}
+
+def _sanitize_account(account: dict = None):
+    if account is None:
+        return None
+    return {key: value for key, value in account.items() if key not in SENSITIVE_ACCOUNT_FIELDS}
+
+
+def _sanitize_accounts(accounts: list = None):
+    return [_sanitize_account(account) for account in accounts or []]
+
+
+def _vault_secret_name(account_id: str, field: str) -> str:
+    return f'account:{account_id}:{field}'
+
+
+def _create_vault_secret(secret: str, name: str, description: str) -> str | None:
+    if secret is None or secret == '':
+        return None
+
+    @db.with_session
+    def _create_secret(session, secret: str, name: str, description: str):
+        result = session.execute(
+            text('select vault.create_secret(:secret, :name, :description) as id'),
+            {'secret': secret, 'name': name, 'description': description},
+        ).mappings().first()
+        if not result or not result.get('id'):
+            raise Exception('Vault did not return a secret id')
+        return str(result['id'])
+
+    return _create_secret(secret, name, description)
+
+
+def _read_vault_secret(secret_id: str | None) -> str | None:
+    if not secret_id:
+        return None
+
+    @db.with_session
+    def _read_secret(session, secret_id: str):
+        result = session.execute(
+            text('select decrypted_secret from vault.decrypted_secrets where id = :secret_id'),
+            {'secret_id': secret_id},
+        ).mappings().first()
+        return result.get('decrypted_secret') if result else None
+
+    return _read_secret(str(secret_id))
+
+
+def _prepare_account_secrets(account: dict, account_id: str | None = None) -> dict:
+    if account is None:
+        return account
+
+    prepared = dict(account)
+    prepared.pop('ibkr_password_secret_id', None)
+    prepared.pop('temporal_password_secret_id', None)
+    secret_fields = {
+        'ibkr_password': 'ibkr_password_secret_id',
+        'temporal_password': 'temporal_password_secret_id',
+    }
+
+    for password_field, secret_id_field in secret_fields.items():
+        if password_field not in prepared:
+            continue
+
+        password_value = prepared.pop(password_field)
+        prepared[password_field] = None
+        prepared[secret_id_field] = None
+
+        if password_value is None or password_value == '':
+            continue
+
+        if not account_id:
+            raise Exception(f'account_id is required to store {password_field} in Vault')
+
+        prepared[secret_id_field] = _create_vault_secret(
+            password_value,
+            _vault_secret_name(account_id, password_field),
+            f'{password_field} for account {account_id}',
+        )
+
+    return prepared
+
+
+def _resolve_account_secret(account: dict, password_field: str, secret_id_field: str) -> str | None:
+    secret = _read_vault_secret(account.get(secret_id_field))
+    if secret:
+        return secret
+
+    # Temporary rollout fallback until plaintext columns are cleared.
+    return account.get(password_field)
 
 def _normalize_join_key(value) -> str:
     if value is None:
@@ -95,7 +191,21 @@ def _parse_fee_template_summary(fee_template) -> str:
 @handle_exception
 def create_account(account: dict = None) -> dict:
     logger.info(f"Attempting to create account with data: {account}")
-    account_id = db.create(table=table, data=account)
+    pending_secrets = {}
+    account_data = dict(account or {})
+    account_data.pop('ibkr_password_secret_id', None)
+    account_data.pop('temporal_password_secret_id', None)
+    for password_field in ('ibkr_password', 'temporal_password'):
+        if password_field in account_data:
+            pending_secrets[password_field] = account_data.pop(password_field)
+
+    account_id = db.create(table=table, data=account_data)
+
+    if pending_secrets:
+        secret_update = _prepare_account_secrets(pending_secrets, account_id=account_id)
+        if secret_update:
+            db.update(table=table, query={'id': account_id}, data=secret_update)
+
     return {'id': account_id}
 
 @handle_exception
@@ -105,7 +215,7 @@ def create_instruction(account_id: str = None) -> dict:
 @handle_exception
 def read_accounts(query: dict = None) -> list:
     accounts = db.read(table=table, query=query)
-    return accounts
+    return _sanitize_accounts(accounts)
 
 @handle_exception
 def read_account_contacts_and_screenings(account_id: str = None) -> dict:
@@ -247,7 +357,59 @@ def read_instructions(query: dict = None) -> list:
 
 @handle_exception
 def update_account(query: dict = None, account: dict = None) -> dict:
-    db.update(table=table, query=query, data=account)
+    existing_accounts = db.read(table=table, query=query) or []
+    if len(existing_accounts) == 0:
+        raise Exception('Account not found')
+    if len(existing_accounts) > 1:
+        raise Exception('Multiple accounts found')
+
+    prepared_account = _prepare_account_secrets(account, account_id=existing_accounts[0].get('id'))
+    db.update(table=table, query=query, data=prepared_account)
+    return {'status': 'success'}
+
+@handle_exception
+def send_account_credentials_email(
+    account_id: str = None,
+    client_email: str = None,
+    lang: str = 'es',
+    cc: str = '',
+    send_welcome: bool = False,
+    client_name: str = '',
+) -> dict:
+    if not account_id:
+        raise Exception('Missing account_id')
+    if not client_email:
+        raise Exception('Missing client_email')
+
+    accounts = db.read(table=table, query={'id': account_id}) or []
+    if len(accounts) == 0:
+        raise Exception('Account not found')
+    if len(accounts) > 1:
+        raise Exception('Multiple accounts found')
+
+    account = accounts[0]
+    username = account.get('ibkr_username')
+    password = _resolve_account_secret(account, 'ibkr_password', 'ibkr_password_secret_id')
+    if not username or not password:
+        raise Exception('Account credentials not found')
+
+    from src.components.tools.public.email import Gmail
+    email_service = Gmail()
+    email_service.send_credentials_email(
+        content={'username': username, 'password': password},
+        client_email=client_email,
+        lang=lang,
+        cc=cc,
+    )
+
+    if send_welcome:
+        email_service.send_welcome_email(
+            content={'client_name': client_name or 'Client'},
+            client_email=client_email,
+            lang=lang,
+        )
+        db.update(table=table, query={'id': account_id}, data={'emailed_credentials': True})
+
     return {'status': 'success'}
 
 @handle_exception
