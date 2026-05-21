@@ -20,6 +20,7 @@ contact_document_table = 'contact_document'
 contact_screening_table = 'contact_screening'
 _sanctions_lists_cache = None
 _ibkr_details_by_account_id_cache = None
+_sanctions_match_indexes_cache = None
 
 WEIGHTS = {
     'customerRisk': 0.30,
@@ -476,6 +477,61 @@ def _get_sanctions_lists():
     return _sanctions_lists_cache
 
 
+def _append_index(index: dict[str, list[dict]], key: str, row: dict):
+    if not key:
+        return
+    bucket = index.setdefault(key, [])
+    bucket.append(row)
+
+
+def _unique_rows(rows: list[dict]) -> list[dict]:
+    seen = set()
+    unique = []
+    for row in rows or []:
+        key = id(row)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(row)
+    return unique
+
+
+def _build_sanctions_match_indexes() -> tuple[dict[str, list[dict]], dict[str, list[dict]], dict[str, list[dict]]]:
+    ofac_sdn_list, uk_sanctions_list, un_sanctions_list = _get_sanctions_lists()
+
+    ofac_index: dict[str, list[dict]] = {}
+    for row in ofac_sdn_list:
+        if not isinstance(row, dict):
+            continue
+        _append_index(ofac_index, _normalize_name(row.get('name', '')), row)
+
+    uk_index: dict[str, list[dict]] = {}
+    for row in uk_sanctions_list:
+        if not isinstance(row, dict):
+            continue
+        for i in range(1, 7):
+            _append_index(uk_index, _normalize_name(row.get(f'Name {i}', '')), row)
+
+    un_index: dict[str, list[dict]] = {}
+    for row in un_sanctions_list:
+        if not isinstance(row, dict):
+            continue
+        _append_index(un_index, _normalize_name(row.get('name', '')), row)
+        aliases = row.get('aliases', '')
+        if isinstance(aliases, str) and aliases.strip():
+            for alias in aliases.split('|'):
+                _append_index(un_index, _normalize_name(alias), row)
+
+    return ofac_index, uk_index, un_index
+
+
+def _get_sanctions_match_indexes() -> tuple[dict[str, list[dict]], dict[str, list[dict]], dict[str, list[dict]]]:
+    global _sanctions_match_indexes_cache
+    if _sanctions_match_indexes_cache is None:
+        _sanctions_match_indexes_cache = _build_sanctions_match_indexes()
+    return _sanctions_match_indexes_cache
+
+
 def _get_ibkr_details_by_account_id() -> dict[str, dict]:
     global _ibkr_details_by_account_id_cache
     if _ibkr_details_by_account_id_cache is None:
@@ -538,31 +594,10 @@ def create_contact_screening_from_contact_id(contact_id: str = None, created: Op
     ibkr_account_number = str(account_row.get('ibkr_account_number') or '').strip()
     ibkr_detail = _get_ibkr_details_by_account_id().get(ibkr_account_number) if ibkr_account_number else None
 
-    ofac_sdn_list, uk_sanctions_list, un_sanctions_list = _get_sanctions_lists()
-
-    ofac_results = [
-        row for row in ofac_sdn_list
-        if isinstance(row, dict) and _normalize_name(row.get('name', '')) == normalized_contact_name
-    ]
-
-    uk_status = []
-    for row in uk_sanctions_list:
-        if not isinstance(row, dict):
-            continue
-        name_candidates = [row.get(f'Name {index}', '') for index in range(1, 7)]
-        if any(_normalize_name(candidate) == normalized_contact_name for candidate in name_candidates):
-            uk_status.append(row)
-
-    un_matches = []
-    for row in un_sanctions_list:
-        if not isinstance(row, dict):
-            continue
-        candidate_names = [row.get('name', '')]
-        aliases = row.get('aliases', '')
-        if isinstance(aliases, str) and aliases.strip():
-            candidate_names.extend(aliases.split('|'))
-        if any(_normalize_name(candidate) == normalized_contact_name for candidate in candidate_names):
-            un_matches.append(row)
+    ofac_index, uk_index, un_index = _get_sanctions_match_indexes()
+    ofac_results = _unique_rows(list(ofac_index.get(normalized_contact_name, [])))
+    uk_status = _unique_rows(list(uk_index.get(normalized_contact_name, [])))
+    un_matches = _unique_rows(list(un_index.get(normalized_contact_name, [])))
     un_status = un_matches if len(un_matches) > 0 else None
     uk_status_value = uk_status if len(uk_status) > 0 else None
     ofac_results_value = ofac_results if len(ofac_results) > 0 else None
