@@ -346,6 +346,70 @@ def _pick_latest_contact_link(contact_id: str) -> dict | None:
     return links_sorted[0]
 
 
+def _extract_candidate_names_from_application(customer: dict) -> set[str]:
+    names = set()
+    customer_type = _resolve_customer_type(customer.get('type'))
+    if customer_type == 'INDIVIDUAL':
+        holder = ((customer.get('accountHolder') or {}).get('accountHolderDetails') or [{}])[0] or {}
+        first = str((holder.get('name') or {}).get('first') or '').strip()
+        last = str((holder.get('name') or {}).get('last') or '').strip()
+        if first or last:
+            names.add(_normalize_name(f'{first} {last}'.strip()))
+    elif customer_type == 'JOINT':
+        joint = customer.get('jointHolders') or {}
+        for key in ('firstHolderDetails', 'secondHolderDetails'):
+            holder = (joint.get(key) or [{}])[0] or {}
+            first = str((holder.get('name') or {}).get('first') or '').strip()
+            last = str((holder.get('name') or {}).get('last') or '').strip()
+            if first or last:
+                names.add(_normalize_name(f'{first} {last}'.strip()))
+    elif customer_type == 'ORG':
+        associated_individuals = ((customer.get('organization') or {}).get('associatedEntities') or {}).get('associatedIndividuals') or []
+        for holder in associated_individuals:
+            first = str((holder.get('name') or {}).get('first') or '').strip()
+            last = str((holder.get('name') or {}).get('last') or '').strip()
+            if first or last:
+                names.add(_normalize_name(f'{first} {last}'.strip()))
+    return {name for name in names if name}
+
+
+def _find_latest_account_from_application_json(contact: dict) -> dict | None:
+    all_accounts = db.read(table='account', query={}) or []
+    if not all_accounts:
+        return None
+
+    contact_email = str(contact.get('email') or '').strip().lower()
+    contact_name = _normalize_name(contact.get('name') or '')
+    candidates: list[dict] = []
+
+    for account_row in all_accounts:
+        application_json = account_row.get('application_json') or {}
+        if not isinstance(application_json, dict):
+            continue
+        customer = application_json.get('customer') or {}
+        if not isinstance(customer, dict):
+            continue
+
+        customer_email = str(customer.get('email') or '').strip().lower()
+        if contact_email and customer_email and contact_email == customer_email:
+            candidates.append(account_row)
+            continue
+
+        candidate_names = _extract_candidate_names_from_application(customer)
+        if contact_name and contact_name in candidate_names:
+            candidates.append(account_row)
+
+    if not candidates:
+        return None
+
+    candidates_sorted = sorted(
+        candidates,
+        key=lambda row: str(row.get('updated') or row.get('created') or ''),
+        reverse=True,
+    )
+    return candidates_sorted[0]
+
+
 def _resolve_customer_type(value: str | None) -> str:
     customer_type = str(value or '').upper().strip()
     if customer_type == 'ORGANIZATION':
@@ -584,13 +648,22 @@ def create_contact_screening_from_contact_id(contact_id: str = None, created: Op
         raise Exception('contact name is required for screening')
 
     latest_contact_link = _pick_latest_contact_link(contact_id)
-    if not latest_contact_link or not latest_contact_link.get('account_id'):
-        raise Exception('contact is not linked to any account')
+    account_row = None
+    if latest_contact_link and latest_contact_link.get('account_id'):
+        account_rows = db.read(table='account', query={'id': latest_contact_link.get('account_id')}) or []
+        account_row = account_rows[0] if account_rows else None
+        if not account_row:
+            raise Exception(f"linked account not found: {latest_contact_link.get('account_id')}")
+    else:
+        account_row = _find_latest_account_from_application_json(contact)
+        if account_row:
+            logger.info(
+                f"Resolved fallback account from application_json for unlinked contact_id={contact_id} "
+                f"account_id={account_row.get('id')}"
+            )
+        else:
+            raise Exception('contact is not linked to any account and no application_json fallback account was found')
 
-    account_rows = db.read(table='account', query={'id': latest_contact_link.get('account_id')}) or []
-    account_row = account_rows[0] if account_rows else None
-    if not account_row:
-        raise Exception(f"linked account not found: {latest_contact_link.get('account_id')}")
     ibkr_account_number = str(account_row.get('ibkr_account_number') or '').strip()
     ibkr_detail = _get_ibkr_details_by_account_id().get(ibkr_account_number) if ibkr_account_number else None
 

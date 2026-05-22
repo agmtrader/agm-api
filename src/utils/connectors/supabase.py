@@ -74,7 +74,7 @@ class Supabase:
             contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
             account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
             entity_id = Column(BIGINT, nullable=True)
-            external_id = Column(UUID(as_uuid=True), nullable=True)
+            external_id = Column(Text, nullable=True)
 
         class AccountInstruction(self.Base):
             __tablename__ = 'account_instruction'
