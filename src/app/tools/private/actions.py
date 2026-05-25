@@ -1,6 +1,10 @@
 from flask import Blueprint, request
 from src.components.tools.private.screenings import run_screenings
-from src.components.tools.private.actions import send_unfunded_emails, update_account_aliases
+from src.components.tools.private.actions import (
+    send_unfunded_emails,
+    update_account_aliases,
+    send_compliance_manual_update_email,
+)
 from src.utils.response import format_response
 
 bp = Blueprint('actions', __name__)
@@ -20,3 +24,10 @@ def update_pending_aliases_route():
 def run_screenings_route():
     apply_screenings = request.args.get('apply_screenings', 'true').lower() == 'true'
     return run_screenings(apply_screenings=apply_screenings)
+
+
+@bp.route('/send_compliance_manual_update_email', methods=['POST'])
+@format_response
+def send_compliance_manual_update_email_route():
+    payload = request.get_json(force=True) or {}
+    return send_compliance_manual_update_email(payload)

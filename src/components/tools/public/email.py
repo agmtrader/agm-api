@@ -162,3 +162,16 @@ class Gmail(GmailConnector):
             bcc="",
             cc="jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com," + cc,
         )
+
+    @handle_exception
+    def send_compliance_manual_update_email(self, content, recipient_email="aa@agmtechnology.com"):
+        subject = "Compliance Manual Update Requires Review"
+        email_template = "compliance_manual_update"
+        return self.send_email(
+            content or {},
+            recipient_email,
+            subject,
+            email_template,
+            bcc="",
+            cc="",
+        )

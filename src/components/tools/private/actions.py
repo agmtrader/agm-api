@@ -137,3 +137,28 @@ def update_account_aliases():
         'updated': len(updated_accounts),
         'accounts': updated_accounts
     }
+
+
+@handle_exception
+def send_compliance_manual_update_email(payload):
+    from components.tools.public.email import Gmail
+
+    email = Gmail()
+    content = {
+        "repository": payload.get("repository", "unknown"),
+        "branch": payload.get("branch", "unknown"),
+        "commit_sha": payload.get("commit_sha", "unknown"),
+        "commit_url": payload.get("commit_url", ""),
+        "author": payload.get("author", "unknown"),
+        "changed_files": payload.get("changed_files", "not provided"),
+    }
+    message = email.send_compliance_manual_update_email(
+        content=content,
+        recipient_email="aa@agmtechnology.com",
+    )
+    return {
+        "status": "sent",
+        "recipient": "aa@agmtechnology.com",
+        "message": message,
+        "content": content,
+    }
