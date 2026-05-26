@@ -1,5 +1,5 @@
 import pandas as pd
-from src.components.tools.public.reporting import get_open_positions_report, get_proposals_equity_report, get_bond_report
+from src.components.tools.public.reporting import get_open_positions_report, get_proposals_equity_report, get_bond_report, get_ust_bond_report
 from src.components.clients.risk_profiles import risk_archetypes
 from src.utils.connectors.supabase import db
 from src.utils.exception import handle_exception
@@ -8,9 +8,138 @@ import numpy as np
 
 TOTAL_ASSETS = 20
 
+MOODYS_TO_SP_EQUIVALENT = {
+    'AAA': 'AAA',
+    'AA1': 'AA+',
+    'AA2': 'AA',
+    'AA3': 'AA-',
+    'A1': 'A+',
+    'A2': 'A',
+    'A3': 'A-',
+    'BAA1': 'BBB+',
+    'BAA2': 'BBB',
+    'BAA3': 'BBB-',
+    'BA1': 'BB+',
+    'BA2': 'BB',
+    'BA3': 'BB-',
+    'B1': 'B+',
+    'B2': 'B',
+    'B3': 'B-',
+    'CAA1': 'CCC+',
+    'CAA2': 'CCC',
+    'CAA3': 'CCC-',
+    'CA': 'CC',
+    'C': 'C',
+}
+
+
+def _normalize_rating_token(value: str) -> str:
+    token = str(value or '').strip().upper().replace(' ', '')
+    return token
+
+
+def _extract_sp_like_rating_from_text(value: str) -> str:
+    text = str(value or '').upper()
+    # Prefer explicit S&P-like tokens first.
+    candidates = [
+        'AAA', 'AA+', 'AA', 'AA-', 'A+', 'A', 'A-',
+        'BBB+', 'BBB', 'BBB-', 'BB+', 'BB', 'BB-',
+        'B+', 'B', 'B-', 'CCC+', 'CCC', 'CCC-', 'CC', 'C'
+    ]
+    for candidate in candidates:
+        if candidate in text:
+            return candidate
+    return ''
+
+
+def _is_likely_ust_record(row: dict) -> bool:
+    joined = ' '.join([
+        str(row.get('Issuer', '') or ''),
+        str(row.get('Company Name', '') or ''),
+        str(row.get('Financial Instrument', '') or ''),
+        str(row.get('Sector', '') or ''),
+        str(row.get('Industry', '') or ''),
+    ]).upper()
+
+    ust_tokens = ['UST', 'TREASURY', 'T-NOTE', 'TNOTE', 'T-BOND', 'TBOND', 'U.S. GOVT', 'US GOVT']
+    return any(token in joined for token in ust_tokens)
+
+
+def _resolve_rating(row: dict) -> str:
+    if _is_likely_ust_record(row):
+        return 'UST'
+
+    sp_equivalent = _normalize_rating_token(row.get('S&P Equivalent'))
+    if sp_equivalent:
+        return sp_equivalent
+
+    sp = _normalize_rating_token(row.get('SP'))
+    if sp:
+        return sp
+
+    ratings_text = _extract_sp_like_rating_from_text(row.get('Ratings'))
+    if ratings_text:
+        return ratings_text
+
+    moodys_raw = _normalize_rating_token(row.get('Moodys'))
+    if moodys_raw:
+        mapped = MOODYS_TO_SP_EQUIVALENT.get(moodys_raw)
+        if mapped:
+            return mapped
+
+    return ''
+
+
+def _to_float_or_none(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        cleaned = value.strip().replace('%', '')
+        if cleaned == '':
+            return None
+        try:
+            return float(cleaned)
+        except ValueError:
+            return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_yield_percent(value: float | None) -> float:
+    if value is None:
+        return 0.0
+    # If value is fractional (e.g., 0.045), convert to percent points (4.5).
+    if 0 <= value <= 1:
+        return round(value * 100, 4)
+    return round(value, 4)
+
+
+def _resolve_current_yield_percent(row: dict) -> float:
+    # Priority: explicit Current Yield, then CY, then YTM.
+    current_yield = _to_float_or_none(row.get('Current Yield'))
+    if current_yield is not None:
+        return _normalize_yield_percent(current_yield)
+
+    cy = _to_float_or_none(row.get('CY'))
+    if cy is not None:
+        return _normalize_yield_percent(cy)
+
+    ytm = _to_float_or_none(row.get('YTM'))
+    if ytm is not None:
+        return _normalize_yield_percent(ytm)
+
+    return 0.0
+
 
 def _build_investment_proposal_template() -> list[dict]:
     return [
+        {
+            'name': 'treasuries',
+            'equivalents': ['UST'],
+            'bonds': []
+        },
         {
             'name': 'bonds_aaa_a',
             'equivalents': ['AAA', 'AAA-', 'AAA+', 'AA', 'AA+', 'AA-', 'A', 'A-', 'A+'],
@@ -36,6 +165,8 @@ def _build_investment_proposal_template() -> list[dict]:
 
 def _get_bucket_for_rating(rating: str) -> str:
     normalized = str(rating).strip().upper().replace('+', '').replace('-', '')
+    if normalized == 'UST':
+        return 'treasuries'
     if normalized == 'ETF':
         return 'etfs'
     if normalized in {'AAA', 'AA', 'A'}:
@@ -113,10 +244,29 @@ def _load_investment_proposal_context() -> dict:
     rtd_report = get_bond_report()
     rtd_df = pd.DataFrame(rtd_report)
 
+    # Get UST bonds report
+    ust_report = get_ust_bond_report()
+    ust_df = pd.DataFrame(ust_report)
+
     # Remove IBCID Symbol column if it exists and clean it (though not strictly used for merge anymore)
     if 'Symbol' in rtd_df.columns:
         # logger.announcement(rtd_df['Symbol'].head(10))
         pass
+
+    if 'Symbol' in ust_df.columns:
+        # logger.announcement(ust_df['Symbol'].head(10))
+        pass
+
+    # Build merged bond universe for symbol validation (RTD + UST)
+    merged_universe_df = pd.concat([rtd_df.copy(), ust_df.copy()], ignore_index=True)
+    if 'Symbol' in merged_universe_df.columns:
+        merged_universe_df['Symbol'] = merged_universe_df['Symbol'].astype(str).str.strip()
+        merged_universe_df = merged_universe_df[merged_universe_df['Symbol'] != '']
+        merged_universe_df = merged_universe_df.drop_duplicates(subset=['Symbol'], keep='first')
+
+    logger.announcement(f'Total bonds from RTD: {len(rtd_df)}')
+    logger.announcement(f'Total bonds from UST: {len(ust_df)}')
+    logger.announcement(f'Total bonds from merged universe: {len(merged_universe_df)}')
 
     # Use RTD report as the base for candidates
     merged_df = rtd_df.copy()
@@ -175,6 +325,7 @@ def _load_investment_proposal_context() -> dict:
         'bonds_df_no_duplicates': bonds_df_no_duplicates,
         'avg_yield': avg_yield,
         'rtd_df': rtd_df,
+        'merged_universe_df': merged_universe_df,
         'merged_df': merged_df
     }
 
@@ -197,6 +348,7 @@ def _distribution_from_assets(investment_proposal: list[dict]) -> dict:
 
 def _distribution_from_risk_archetype(risk_archetype: dict) -> dict:
     distribution = {
+        'treasuries': risk_archetype.get('treasuries', 0),
         'bonds_aaa_a': risk_archetype.get('bonds_aaa_a', 0),
         'bonds_bbb': risk_archetype.get('bonds_bbb', 0),
         'bonds_bb': risk_archetype.get('bonds_bb', 0),
@@ -226,6 +378,7 @@ def _persist_investment_proposal(
         return [normalize_bond(b) for b in (bucket['bonds'] if bucket else [])]
 
     proposal_record = {
+        'treasury': get_bucket('treasuries'),
         'aaa_a': get_bucket('bonds_aaa_a'),
         'bbb': get_bucket('bonds_bbb'),
         'bb': get_bucket('bonds_bb'),
@@ -246,7 +399,7 @@ def create_investment_proposal_with_assets(assets: list[dict]):
 
     try:
         context = _load_investment_proposal_context()
-        rtd_df = context['rtd_df']
+        merged_universe_df = context['merged_universe_df']
         investment_proposal = _build_investment_proposal_template()
 
         if not isinstance(assets, list):
@@ -288,23 +441,31 @@ def create_investment_proposal_with_assets(assets: list[dict]):
             if not symbol or percentage is None:
                 raise Exception('Each asset must include symbol and percentage.')
 
-            rtd_match = rtd_df[rtd_df['Symbol'] == symbol]
-            if rtd_match.empty:
-                raise Exception(f'IBCID "{symbol}" not found in RTD report.')
+            normalized_symbol = str(symbol).strip()
+            universe_match = merged_universe_df[merged_universe_df['Symbol'] == normalized_symbol]
+            if universe_match.empty:
+                raise Exception(f'IBCID "{symbol}" not found in bond universe (RTD + UST).')
 
-            rtd_row = rtd_match.iloc[0].to_dict()
-            rating = rtd_row.get('S&P Equivalent') or rtd_row.get('SP')
+            rtd_row = universe_match.iloc[0].to_dict()
+            rating = _resolve_rating(rtd_row)
             if not rating:
-                raise Exception(f'No rating found in RTD report for IBCID "{symbol}".')
+                raise Exception(
+                    f'No rating found in bond universe for IBCID "{symbol}". '
+                    f'Fields: SP="{rtd_row.get("SP", "")}", '
+                    f'S&P Equivalent="{rtd_row.get("S&P Equivalent", "")}", '
+                    f'Ratings="{rtd_row.get("Ratings", "")}", '
+                    f'Moodys="{rtd_row.get("Moodys", "")}".'
+                )
 
             bucket_name = _get_bucket_for_rating(rating)
             if not bucket_name:
                 raise Exception(f'Unknown rating "{rating}" for asset {symbol}.')
 
             bucket = next(b for b in investment_proposal if b['name'] == bucket_name)
+            current_yield_pct = _resolve_current_yield_percent(rtd_row)
             bucket['bonds'].append({
                 'Symbol_x': str(rtd_row.get('Financial Instrument') or symbol),
-                'Current Yield_x': float(rtd_row.get('Current Yield') or 0),
+                'Current Yield_x': current_yield_pct,
                 'S&P Equivalent_x': str(rating),
                 'ibcid': str(symbol),
                 'percentage': float(percentage),
@@ -371,7 +532,7 @@ def create_investment_proposal_with_risk_profile(risk_profile: dict):
                 logger.info(f"Initialized used_symbols with {len(used_symbols)} existing tickers.")
 
         for asset_type in investment_proposal:
-            percentage = risk_archetype[asset_type['name']]
+            percentage = risk_archetype.get(asset_type['name'], 0)
             assets_to_invest = int(TOTAL_ASSETS * percentage)
 
             logger.info(f"--- Processing bucket: {asset_type['name']} ---")
@@ -436,7 +597,7 @@ def create_investment_proposal_with_risk_profile(risk_profile: dict):
 
         # Calculate how many more each bucket needs
         bucket_needs = {
-            b['name']: int(TOTAL_ASSETS * risk_archetype[b['name']]) - len(b['bonds'])
+            b['name']: int(TOTAL_ASSETS * risk_archetype.get(b['name'], 0)) - len(b['bonds'])
             for b in investment_proposal
         }
 
@@ -476,7 +637,7 @@ def create_investment_proposal_with_risk_profile(risk_profile: dict):
 
         for asset_type in investment_proposal:
             logger.announcement(f'Asset Type: {asset_type["name"]}')
-            logger.announcement(f'Percentage: {risk_archetype[asset_type["name"]]}')
+            logger.announcement(f'Percentage: {risk_archetype.get(asset_type["name"], 0)}')
             logger.announcement(f'Assets to invest: {len(asset_type["bonds"])}')
             for bond in asset_type['bonds']:
                 logger.info(f'Bond: {bond["Symbol_x"]} - {bond["Current Yield_x"]} - {bond["S&P Equivalent_x"]}')

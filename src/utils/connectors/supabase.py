@@ -190,6 +190,7 @@ class Supabase:
             risk_profile_id = Column(UUID(as_uuid=True), ForeignKey('risk_profile.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True, unique=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            treasury = Column(ARRAY(JSONB), nullable=True)
             aaa_a = Column(ARRAY(JSONB), nullable=False)
             bbb = Column(ARRAY(JSONB), nullable=False)
             bb = Column(ARRAY(JSONB), nullable=False)
