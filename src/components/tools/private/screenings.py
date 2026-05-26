@@ -61,6 +61,33 @@ def _compact_screenings_result(
     return result
 
 
+def _sanctions_overview(sanctions_comparison: dict | None) -> dict:
+    if not isinstance(sanctions_comparison, dict):
+        return {"available": False, "error": "invalid_sanctions_comparison"}
+
+    overview = {
+        "available": bool(sanctions_comparison.get("all_available")),
+        "all_same": bool(sanctions_comparison.get("all_same")),
+        "has_error": bool(sanctions_comparison.get("error")),
+        "lists": {},
+    }
+
+    for key in ("ofac", "uk", "un"):
+        comparison = sanctions_comparison.get(key) or {}
+        change_summary = comparison.get("change_summary") or {}
+        overview["lists"][key] = {
+            "both_available": bool(comparison.get("both_available")),
+            "is_same": bool(comparison.get("is_same")),
+            "missing_today": bool(comparison.get("missing_today")),
+            "missing_yesterday": bool(comparison.get("missing_yesterday")),
+            "has_error": bool(comparison.get("error")),
+            "added_count": int(change_summary.get("added_count", 0) or 0),
+            "removed_count": int(change_summary.get("removed_count", 0) or 0),
+        }
+
+    return overview
+
+
 def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
     sanctions_comparison = compare_all_sanctions_today_vs_yesterday()
 
@@ -121,11 +148,12 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
     elif len(unavailable_lists) > 0:
         raise Exception(f"Sanctions files unavailable: {', '.join(unavailable_lists)}")
     elif sanctions_comparison.get("all_available") and sanctions_comparison.get("all_same"):
+        sanctions_overview = _sanctions_overview(sanctions_comparison)
         return _compact_screenings_result({
             "apply_screenings": apply_screenings,
             "screenings_skipped": True,
             "skip_reason": "OFAC, UK, and UN sanctions lists unchanged vs yesterday",
-            "sanctions_comparison": sanctions_comparison,
+            "sanctions_comparison": sanctions_overview,
             "contacts_targeted": 0,
             "contacts_with_no_screenings": 0,
             "accounts_with_some_contacts_no_screenings": 0,
@@ -174,8 +202,8 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
     total_screenings_planned = 0
     screenings_executed = 0
     screening_errors = []
-    contacts_targeted_rows = []
     planned_contact_ids = []
+    sanctions_overview = _sanctions_overview(sanctions_comparison)
 
     today = date.today()
     created_value_today = today.strftime("%Y%m%d000000")
@@ -247,22 +275,6 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
             contacts_targeted += 1
             planned_contact_ids.append(person_contact_id)
             total_screenings_planned += screenings_planned_for_contact
-            contacts_targeted_rows.append(
-                {
-                    "account_id": account_id,
-                    "ibkr_number": ibkr_number,
-                    "date_opened": date_opened,
-                    "contact_id": person_contact_id,
-                    "contact_name": display_name,
-                    "roles": roles_str,
-                    "latest_screening_date": latest_screen_date.isoformat()
-                    if latest_screen_date
-                    else None,
-                    "screening_date": today.isoformat(),
-                    "screening_reason": screening_reason,
-                    "screenings_planned": screenings_planned_for_contact,
-                }
-            )
 
         if account_has_targeted_contacts:
             accounts_targeted += 1
@@ -287,11 +299,11 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
             "apply_screenings": apply_screenings,
             "screenings_skipped": True,
             "skip_reason": "All targeted contacts already have screenings for today",
-            "sanctions_comparison": sanctions_comparison,
+            "sanctions_comparison": sanctions_overview,
             "contacts_targeted": contacts_targeted,
             "contacts_with_no_screenings": contacts_with_no_screenings,
             "accounts_with_some_contacts_no_screenings": accounts_with_some_contacts_no_screenings,
-            "contacts_targeted_rows": contacts_targeted_rows,
+            "contacts_targeted_rows": [],
             "accounts_targeted": accounts_targeted,
             "accounts_with_no_screenings_at_all": accounts_with_no_screenings_at_all,
             "accounts_with_some_screenings": accounts_with_some_screenings,
@@ -314,11 +326,11 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
     result = {
         "apply_screenings": apply_screenings,
         "screenings_skipped": False,
-        "sanctions_comparison": sanctions_comparison,
+        "sanctions_comparison": sanctions_overview,
         "contacts_targeted": contacts_targeted,
         "contacts_with_no_screenings": contacts_with_no_screenings,
         "accounts_with_some_contacts_no_screenings": accounts_with_some_contacts_no_screenings,
-        "contacts_targeted_rows": contacts_targeted_rows,
+        "contacts_targeted_rows": [],
         "accounts_targeted": accounts_targeted,
         "accounts_with_no_screenings_at_all": accounts_with_no_screenings_at_all,
         "accounts_with_some_screenings": accounts_with_some_screenings,
