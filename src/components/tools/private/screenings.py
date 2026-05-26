@@ -160,6 +160,7 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
     screenings_executed = 0
     screening_errors = []
     contacts_targeted_rows = []
+    planned_contact_ids = []
 
     today = date.today()
     created_value_today = today.strftime("%Y%m%d000000")
@@ -227,25 +228,9 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
             screenings_planned_for_contact = 1
             screening_reason = "Daily full screening after sanctions list change"
 
-            if apply_screenings:
-                if not person_contact_id:
-                    screening_errors.append(
-                        f"{ibkr_number}/{display_name}: contact link not found"
-                    )
-                else:
-                    result = create_contact_screening_from_contact_id(
-                        contact_id=person_contact_id,
-                        created=created_value_today,
-                    )
-                    if isinstance(result, dict) and result.get("error"):
-                        screening_errors.append(
-                            f"{ibkr_number}/{display_name}: {result.get('error')}"
-                        )
-                    else:
-                        screenings_executed += 1
-
             account_has_targeted_contacts = True
             contacts_targeted += 1
+            planned_contact_ids.append(person_contact_id)
             total_screenings_planned += screenings_planned_for_contact
             contacts_targeted_rows.append(
                 {
@@ -273,6 +258,43 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
             accounts_with_no_screenings_at_all += 1
         else:
             accounts_with_some_screenings += 1
+
+    today_screened_contact_ids = {
+        screen.get("contact_id")
+        for screen in contact_screen_rows
+        if screen.get("contact_id")
+        and parse_screen_created(screen.get("created")) == today
+    }
+    planned_unique_contact_ids = {contact_id for contact_id in planned_contact_ids if contact_id}
+
+    if planned_unique_contact_ids and today_screened_contact_ids.issuperset(planned_unique_contact_ids):
+        return {
+            "apply_screenings": apply_screenings,
+            "screenings_skipped": True,
+            "skip_reason": "All targeted contacts already have screenings for today",
+            "sanctions_comparison": sanctions_comparison,
+            "contacts_targeted": contacts_targeted,
+            "contacts_with_no_screenings": contacts_with_no_screenings,
+            "accounts_with_some_contacts_no_screenings": accounts_with_some_contacts_no_screenings,
+            "contacts_targeted_rows": contacts_targeted_rows,
+            "accounts_targeted": accounts_targeted,
+            "accounts_with_no_screenings_at_all": accounts_with_no_screenings_at_all,
+            "accounts_with_some_screenings": accounts_with_some_screenings,
+            "total_screenings_planned": total_screenings_planned,
+            "screenings_executed": 0,
+            "screening_errors": [],
+        }
+
+    if apply_screenings:
+        for contact_id in planned_contact_ids:
+            result = create_contact_screening_from_contact_id(
+                contact_id=contact_id,
+                created=created_value_today,
+            )
+            if isinstance(result, dict) and result.get("error"):
+                screening_errors.append(f"{contact_id}: {result.get('error')}")
+            else:
+                screenings_executed += 1
 
     result = {
         "apply_screenings": apply_screenings,
