@@ -210,7 +210,6 @@ class Supabase:
             __tablename__ = 'risk_profile'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            risk_profile_id = Column(Integer, nullable=False)
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             score = Column(Text, nullable=False)
             name = Column(Text, nullable=True)

@@ -344,8 +344,13 @@ def create_investment_proposal_with_risk_profile(risk_profile: dict):
         risk_score = risk_profile['score']
         risk_profile_id = risk_profile['id']
         risk_archetype = next(
-            (rp for rp in risk_archetypes
-             if float(rp['min_score']) <= float(risk_score) and float(rp['max_score']) >= float(risk_score)),
+            (
+                rp for rp in risk_archetypes
+                if (
+                    float(rp['min_score']) <= float(risk_score) < float(rp['max_score'])
+                    or (float(risk_score) == float(rp['max_score']) and float(rp['max_score']) == 10)
+                )
+            ),
             None
         )
         if not risk_archetype:
