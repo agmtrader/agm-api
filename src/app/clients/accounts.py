@@ -2,7 +2,7 @@ from flask import Blueprint, request
 
 from src.components.clients.accounts import create_account, read_accounts, read_accounts_with_metadata, submit_documents, read_instructions, send_to_ibkr, read_account_contacts_and_screenings, send_account_credentials_email
 
-from src.components.clients.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, change_account_holder_external_id, withdraw_funds, transfer_position_internally, transfer_position_externally, get_financial_ranges, get_business_and_occupation, view_active_bank_instructions, view_withdrawable_cash
+from src.components.clients.accounts import read_account_details, get_forms, submit_documents, submit_all_agreements, update_account, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, change_account_holder_external_id, withdraw_funds, transfer_position_internally, transfer_position_externally, get_financial_ranges, get_business_and_occupation, view_active_bank_instructions, view_withdrawable_cash
 
 from src.components.clients.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts, get_account_statements, get_available_statements, get_portfolio_analyst_performance
 
@@ -136,6 +136,14 @@ def submit_documents_route():
     document_submission_data = payload.get('document_submission', None)
     master_account = payload.get('master_account', None)
     return submit_documents(document_submission=document_submission_data, master_account=master_account)
+
+@bp.route('/ibkr/submit_all_agreements', methods=['POST'])
+@format_response
+def submit_all_agreements_route():
+    payload = request.get_json(silent=True) or {}
+    master_account = payload.get('master_account', None)
+    forms = payload.get('forms', None)
+    return submit_all_agreements(master_account=master_account, forms=forms)
 
 @bp.route('/ibkr/fee_template', methods=['POST'])
 @format_response

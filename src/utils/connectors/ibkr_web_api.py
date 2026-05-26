@@ -11,6 +11,12 @@ from src.lib.ibkr_trading_api import MarketDataField
 logger.announcement('Initializing Interactive Brokers Web API Service', type='info')
 logger.announcement('Initialized Interactive Brokers Web API Service', type='success')
 
+DAILY_AGREEMENT_FORM_NUMBERS = [
+    3024, 4070, 9987, 8001, 3089, 4304, 4404, 6108, 5013, 6112,
+    4024, 9130, 3074, 3203, 3070, 3094, 3071, 4587, 4837, 2192,
+    4399, 8002, 2109, 4016, 4289, 4208, 9902, 3081, 3400,
+]
+
 def retry_on_connection_error(max_retries=3, delay=1):
     """Retry decorator to gracefully handle transient connection errors such as broken pipes.
 
@@ -48,6 +54,20 @@ def retry_on_connection_error(max_retries=3, delay=1):
             raise last_exception
         return wrapper
     return decorator
+
+def _ibkr_timestamp():
+    return time.strftime("%Y%m%d%H%M%S")
+
+def _normalize_form_number(form_number):
+    return str(form_number) if form_number is not None else None
+
+def _is_accepted_status(status):
+    normalized = str(status or "").strip().lower()
+    return normalized in ("accepted", "submitted", "processed", "success")
+
+def _is_rejected_status(status):
+    normalized = str(status or "").strip().lower()
+    return normalized not in ("", "accepted", "submitted", "processed", "success")
 
 class IBKRWebAPI:
 
@@ -1882,23 +1902,168 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
-    @handle_exception
-    def submit_all_agreements(self):
-        try:
-            original_creds = self._apply_credentials('I6413690')
-            url = f"{self.BASE_URL}/gw/api/v1/accounts/documents"
-            token = self.get_bearer_token()
-            if not token:
-                raise Exception("No token found")
+    def _build_daily_agreement_document(self, form_number, master_account, timestamp):
+        form_response = self.get_forms(forms=[form_number], master_account=master_account) or {}
+        form_details = form_response.get('formDetails') or []
+        file_data = form_response.get('fileData') or {}
 
-            headers = {
-                "Authorization": f"Bearer {token}"
+        if len(form_details) == 0:
+            return None, {
+                "formNumber": _normalize_form_number(form_number),
+                "formName": None,
+                "fileName": None,
+                "status": "Skipped",
+                "message": "Form details were not returned by IBKR.",
             }
+
+        form = form_details[0]
+        encoded_data = file_data.get('data')
+        missing_fields = [
+            field
+            for field in ("fileName", "fileLength", "sha1Checksum")
+            if form.get(field) in (None, "")
+        ]
+        if not encoded_data:
+            return None, {
+                "formNumber": _normalize_form_number(form.get('formNumber') or form_number),
+                "formName": form.get('formName'),
+                "fileName": form.get('fileName'),
+                "status": "Skipped",
+                "message": "Form file data was not returned by IBKR.",
+            }
+        if missing_fields:
+            return None, {
+                "formNumber": _normalize_form_number(form.get('formNumber') or form_number),
+                "formName": form.get('formName'),
+                "fileName": form.get('fileName'),
+                "status": "Skipped",
+                "message": f"Form is missing required field(s): {', '.join(missing_fields)}.",
+            }
+
+        document = {
+            "fileName": form.get('fileName'),
+            "fileLength": str(form.get('fileLength')),
+            "sha1Checksum": form.get('sha1Checksum'),
+            "formNumber": _normalize_form_number(form.get('formNumber') or form_number),
+            "execTimestamp": timestamp,
+            "execLoginTimestamp": timestamp,
+            "mimeType": "application/pdf",
+            "data": encoded_data,
+        }
+
+        result = {
+            "formNumber": document["formNumber"],
+            "formName": form.get('formName'),
+            "fileName": document["fileName"],
+            "status": "Prepared",
+            "message": None,
+        }
+
+        return document, result
+
+    def _extract_process_document_results(self, ibkr_response):
+        if not isinstance(ibkr_response, dict):
+            return []
+
+        candidates = [
+            ibkr_response.get('processDocuments'),
+            ibkr_response.get('data', {}).get('processDocuments') if isinstance(ibkr_response.get('data'), dict) else None,
+            ibkr_response.get('fileData', {}).get('data', {}).get('processDocuments') if isinstance(ibkr_response.get('fileData'), dict) and isinstance(ibkr_response.get('fileData', {}).get('data'), dict) else None,
+        ]
+
+        for candidate in candidates:
+            if isinstance(candidate, dict) and isinstance(candidate.get('documents'), list):
+                return candidate.get('documents')
+
+        if isinstance(ibkr_response.get('documents'), list):
+            return ibkr_response.get('documents')
+
+        return []
+
+    def _merge_daily_agreement_response(self, prepared_results, ibkr_response):
+        results_by_form = {
+            _normalize_form_number(result.get('formNumber')): dict(result)
+            for result in prepared_results
+            if result.get('status') != 'Skipped'
+        }
+
+        response_results = self._extract_process_document_results(ibkr_response)
+        for response_result in response_results:
+            if not isinstance(response_result, dict):
+                continue
+            form_number = _normalize_form_number(response_result.get('formNumber'))
+            if not form_number or form_number not in results_by_form:
+                continue
+
+            status = response_result.get('status') or response_result.get('state') or response_result.get('result')
+            message = response_result.get('message') or response_result.get('description') or response_result.get('error')
+            results_by_form[form_number].update({
+                "status": status or "Submitted",
+                "message": message,
+            })
+
+        merged_results = []
+        for result in prepared_results:
+            form_number = _normalize_form_number(result.get('formNumber'))
+            if result.get('status') == 'Skipped':
+                merged_results.append(result)
+            else:
+                merged_results.append(results_by_form.get(form_number, result))
+
+        has_response_statuses = any(
+            result.get('status') not in ('Prepared', 'Skipped')
+            for result in merged_results
+        )
+        if not has_response_statuses:
+            for result in merged_results:
+                if result.get('status') == 'Prepared':
+                    result['status'] = 'Accepted'
+
+        return merged_results
+
+    @handle_exception
+    def submit_all_agreements(self, master_account: str = 'I6413690', forms: list = None):
+        original_creds = None
+        try:
+            original_creds = self._apply_credentials(master_account)
+            resolved_master_account = master_account or 'I6413690'
+            form_numbers = forms or DAILY_AGREEMENT_FORM_NUMBERS
+            timestamp = _ibkr_timestamp()
+            url = f"{self.BASE_URL}/gw/api/v1/accounts/documents"
+
             documents = []
-            forms = [3024, 4070, 9987, 8001, 3089, 4304, 4404, 6108, 5013, 6112, 4024, 9130, 3074, 3203, 3070, 3094, 3071, 4587, 4837, 2192, 4399, 8002, 2109, 4016, 4289, 4208, 9902, 3081, 3400]
-            form_response = self.get_forms(forms=forms, master_account='I6413690')
-            for form in form_response['formDetails']:
-                documents.append(form)
+            results = []
+            for form_number in form_numbers:
+                try:
+                    document, result = self._build_daily_agreement_document(
+                        form_number=form_number,
+                        master_account=resolved_master_account,
+                        timestamp=timestamp,
+                    )
+                    if document:
+                        documents.append(document)
+                    results.append(result)
+                except Exception as exc:
+                    results.append({
+                        "formNumber": _normalize_form_number(form_number),
+                        "formName": None,
+                        "fileName": None,
+                        "status": "Skipped",
+                        "message": str(exc),
+                    })
+
+            if len(documents) == 0:
+                return {
+                    "ok": False,
+                    "masterAccount": resolved_master_account,
+                    "formsRequested": len(form_numbers),
+                    "documentsPrepared": 0,
+                    "accepted": 0,
+                    "rejected": 0,
+                    "skipped": len(results),
+                    "results": results,
+                    "ibkrResponse": None,
+                }
 
             body = {
                 "processDocuments": {
@@ -1908,15 +2073,43 @@ class IBKRWebAPI:
                 }
             }
 
-            response = requests.post(url, headers=headers, data=json.dumps(body))
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            signed_request = self.sign_request(body)
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt"
+            }
+
+            response = requests.post(url, headers=headers, data=signed_request)
 
             if response.status_code != 200:
                 raise Exception(f"Error {response.status_code}: {response.text}")
+
+            ibkr_response = response.json()
+            results = self._merge_daily_agreement_response(results, ibkr_response)
+            accepted = sum(1 for result in results if _is_accepted_status(result.get('status')))
+            skipped = sum(1 for result in results if result.get('status') == 'Skipped')
+            rejected = sum(1 for result in results if result.get('status') != 'Skipped' and _is_rejected_status(result.get('status')))
+
             logger.success("All agreements submitted successfully")
-            return response.json()
+            return {
+                "ok": rejected == 0 and skipped == 0,
+                "masterAccount": resolved_master_account,
+                "formsRequested": len(form_numbers),
+                "documentsPrepared": len(documents),
+                "accepted": accepted,
+                "rejected": rejected,
+                "skipped": skipped,
+                "results": results,
+                "ibkrResponse": ibkr_response,
+            }
 
         finally:
-            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+            if original_creds:
+                self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
 # Apply the retry decorator to all public methods that make HTTP requests
 for _method_name in [

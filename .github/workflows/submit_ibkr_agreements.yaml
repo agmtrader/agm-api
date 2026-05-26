@@ -1,0 +1,138 @@
+name: Submit IBKR Agreements
+
+on:
+  schedule:
+    - cron: '30 11 * * *' # Every day at 5:30 AM Costa Rica
+  workflow_dispatch:
+
+concurrency:
+  group: submit-ibkr-agreements
+  cancel-in-progress: false
+
+jobs:
+  submit-agreements:
+    runs-on: ubuntu-latest
+    outputs:
+      summary: ${{ steps.submit.outputs.summary }}
+    steps:
+      - name: Request token and submit agreements
+        id: submit
+        shell: bash
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"token":"all"}' \
+            https://api.agmtechnology.com/token)
+
+          http_status=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+
+          if [ "$http_status" != "200" ]; then
+            echo "Token request failed with status $http_status" >&2
+            exit 1
+          fi
+
+          access_token=$(echo "$body" | jq -r '.access_token')
+          if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
+            echo "access_token not found in response" >&2
+            exit 1
+          fi
+
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "Authorization: Bearer $access_token" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            https://api.agmtechnology.com/accounts/ibkr/submit_all_agreements)
+
+          http_status=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+
+          if [ "$http_status" != "200" ]; then
+            echo "Submit agreements failed with status $http_status" >&2
+            echo "$body"
+            exit 1
+          fi
+
+          ok=$(echo "$body" | jq -r '.ok // false')
+          master_account=$(echo "$body" | jq -r '.masterAccount // "unknown"')
+          forms_requested=$(echo "$body" | jq -r '.formsRequested // 0')
+          documents_prepared=$(echo "$body" | jq -r '.documentsPrepared // 0')
+          accepted=$(echo "$body" | jq -r '.accepted // 0')
+          rejected=$(echo "$body" | jq -r '.rejected // 0')
+          skipped=$(echo "$body" | jq -r '.skipped // 0')
+
+          exceptions=$(echo "$body" | jq -r '
+            [
+              .results[]?
+              | select(((.status // "") | ascii_downcase) as $status
+                | ($status != "accepted"
+                  and $status != "submitted"
+                  and $status != "processed"
+                  and $status != "success"))
+              | "- Form " + ((.formNumber // "unknown") | tostring)
+                + " (" + (.formName // "unknown") + ")"
+                + ": " + (.status // "unknown")
+                + if .message then " - " + (.message | tostring) else "" end
+            ] | if length > 0 then join("\n") else "None" end
+          ')
+
+          summary=$(cat <<EOF
+          Master account: $master_account
+          Forms requested: $forms_requested
+          Documents prepared: $documents_prepared
+          Accepted: $accepted
+          Rejected: $rejected
+          Skipped: $skipped
+
+          Exceptions:
+          $exceptions
+          EOF
+          )
+
+          printf "summary<<EOF\n%s\nEOF\n" "$summary" >> "$GITHUB_OUTPUT"
+          echo "$summary"
+
+          if [ "$ok" != "true" ]; then
+            echo "IBKR agreements submission completed with rejected or skipped documents." >&2
+            exit 1
+          fi
+
+  notify-success:
+    needs: submit-agreements
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send success email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "IBKR Agreements Submission SUCCEEDED"
+          to: cr@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: |
+            The daily IBKR agreements submission completed successfully.
+
+            ${{ needs.submit-agreements.outputs.summary }}
+
+  notify-failure:
+    needs: submit-agreements
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send failure email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "IBKR Agreements Submission FAILED"
+          to: cr@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: |
+            The daily IBKR agreements submission failed or completed with rejected/skipped documents.
+
+            ${{ needs.submit-agreements.outputs.summary }}

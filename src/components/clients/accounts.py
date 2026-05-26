@@ -469,6 +469,10 @@ def submit_documents(document_submission: dict = None, master_account: str = Non
     return ibkr_web_api.submit_documents(document_submission=document_submission, master_account=master_account)
 
 @handle_exception
+def submit_all_agreements(master_account: str = None, forms: list = None) -> dict:
+    return ibkr_web_api.submit_all_agreements(master_account=master_account or 'I6413690', forms=forms)
+
+@handle_exception
 def apply_fee_template(account_id: str = None, template_name: str = None, master_account: str = None) -> dict:
     """Apply a fee template to an account via IBKR API."""
     return ibkr_web_api.apply_fee_template(account_id=account_id, template_name=template_name, master_account=master_account)
