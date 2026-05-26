@@ -25,6 +25,7 @@ steps:
           'agm-api',
         '--platform=managed',
         '--region=us-central1',
+        '--timeout=900',
         '--image=us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api',
         '--quiet'
       ]
