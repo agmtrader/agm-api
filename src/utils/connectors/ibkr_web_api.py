@@ -12,9 +12,9 @@ logger.announcement('Initializing Interactive Brokers Web API Service', type='in
 logger.announcement('Initialized Interactive Brokers Web API Service', type='success')
 
 DAILY_AGREEMENT_FORM_NUMBERS = [
-    3024, 4070, 9987, 8001, 3089, 4304, 4404, 6108, 5013, 6112,
+    3024, 4070, 3089, 4304, 4404, 6108, 5013, 6112,
     4024, 9130, 3074, 3203, 3070, 3094, 3071, 4587, 4837, 2192,
-    4399, 8002, 2109, 4016, 4289, 4208, 9902, 3081, 3400,
+    4399, 2109, 4016, 4289, 4208, 9902, 3081,
 ]
 
 def retry_on_connection_error(max_retries=3, delay=1):
@@ -2148,6 +2148,7 @@ for _method_name in [
     'get_open_orders',
     'get_account_statements',
     'get_available_statements',
+    'submit_all_agreements',
 ]:
     if 'IBKRWebAPI' in globals() and hasattr(IBKRWebAPI, _method_name):
         setattr(
