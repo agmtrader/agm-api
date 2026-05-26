@@ -9,7 +9,6 @@ from src.utils.connectors.supabase import db
 from src.utils.logger import logger
 
 APPLY_SCREENINGS = True
-
 # CHECK IF PEOPLE NEED SCREENING PENDING
 def normalize_name(name: str) -> str:
     if not name:
@@ -44,6 +43,22 @@ def person_name_candidates(person: dict) -> set[str]:
         raw_candidates.add(f"{first} {middle_initial} {last}")
 
     return {normalize_name(c) for c in raw_candidates if c.strip()}
+
+
+def _compact_screenings_result(
+    payload: dict,
+) -> dict:
+    result = dict(payload)
+    screening_errors = result.get("screening_errors") or []
+    contacts_targeted_rows = result.get("contacts_targeted_rows") or []
+
+    result["screening_errors_count"] = len(screening_errors)
+    result["contacts_targeted_rows_count"] = len(contacts_targeted_rows)
+    result["screening_errors_truncated"] = len(screening_errors) > 0
+    result["contacts_targeted_rows_truncated"] = len(contacts_targeted_rows) > 0
+    result["screening_errors"] = []
+    result["contacts_targeted_rows"] = []
+    return result
 
 
 def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
@@ -106,7 +121,7 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
     elif len(unavailable_lists) > 0:
         raise Exception(f"Sanctions files unavailable: {', '.join(unavailable_lists)}")
     elif sanctions_comparison.get("all_available") and sanctions_comparison.get("all_same"):
-        return {
+        return _compact_screenings_result({
             "apply_screenings": apply_screenings,
             "screenings_skipped": True,
             "skip_reason": "OFAC, UK, and UN sanctions lists unchanged vs yesterday",
@@ -121,7 +136,7 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
             "total_screenings_planned": 0,
             "screenings_executed": 0,
             "screening_errors": [],
-        }
+        })
 
     accounts = read_accounts({})
     details = get_ibkr_details()
@@ -268,7 +283,7 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
     planned_unique_contact_ids = {contact_id for contact_id in planned_contact_ids if contact_id}
 
     if planned_unique_contact_ids and today_screened_contact_ids.issuperset(planned_unique_contact_ids):
-        return {
+        return _compact_screenings_result({
             "apply_screenings": apply_screenings,
             "screenings_skipped": True,
             "skip_reason": "All targeted contacts already have screenings for today",
@@ -283,7 +298,7 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
             "total_screenings_planned": total_screenings_planned,
             "screenings_executed": 0,
             "screening_errors": [],
-        }
+        })
 
     if apply_screenings:
         for contact_id in planned_contact_ids:
@@ -311,4 +326,4 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
         "screenings_executed": screenings_executed,
         "screening_errors": screening_errors,
     }
-    return result
+    return _compact_screenings_result(result)
