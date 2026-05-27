@@ -1941,25 +1941,29 @@ class IBKRWebAPI:
             }
 
         document = {
-            "fileName": form.get('fileName'),
-            "fileLength": str(form.get('fileLength')),
-            "sha1Checksum": form.get('sha1Checksum'),
-            "formNumber": _normalize_form_number(form.get('formNumber') or form_number),
-            "execTimestamp": timestamp,
-            "execLoginTimestamp": timestamp,
-            "mimeType": "application/pdf",
-            "data": encoded_data,
+            "attachedFile": {
+                "fileName": form.get("fileName"),
+                "fileLength": str(form.get("fileLength")),
+                "sha1Checksum": form.get("sha1Checksum"),
+            },
+            "payload": {
+                "mimeType": "application/pdf",
+                "data": encoded_data,
+            },
+            "formNumber": _normalize_form_number(form.get("formNumber") or form_number),
+            "execLoginTimestamp": int(timestamp),
+            "execTimestamp": int(timestamp),
         }
 
         result = {
-            "formNumber": document["formNumber"],
+            "formNumber": _normalize_form_number(document["formNumber"]),
             "formName": form.get('formName'),
-            "fileName": document["fileName"],
+            "fileName": document["attachedFile"]["fileName"],
             "status": "Prepared",
             "message": None,
         }
 
-        return document, result
+        return {"document": document}, result
 
     def _extract_process_document_results(self, ibkr_response):
         if not isinstance(ibkr_response, dict):
@@ -2030,20 +2034,38 @@ class IBKRWebAPI:
             form_numbers = forms or DAILY_AGREEMENT_FORM_NUMBERS
             timestamp = _ibkr_timestamp()
             url = f"{self.BASE_URL}/gw/api/v1/accounts/documents"
+            logger.info(
+                f"Submitting all agreements for master_account={resolved_master_account}. "
+                f"forms_requested={len(form_numbers)}"
+            )
 
             documents = []
             results = []
             for form_number in form_numbers:
                 try:
-                    document, result = self._build_daily_agreement_document(
+                    built_document, result = self._build_daily_agreement_document(
                         form_number=form_number,
                         master_account=resolved_master_account,
                         timestamp=timestamp,
                     )
-                    if document:
+                    if built_document:
+                        document = built_document.get("document")
+                        payload = document.get("payload") or {}
+                        attached_file = document.get("attachedFile") or {}
+                        encoded_data = payload.get("data") or ""
+                        logger.info(
+                            f"Prepared agreement form={document.get('formNumber')} "
+                            f"file={attached_file.get('fileName')} "
+                            f"fileLength={attached_file.get('fileLength')} "
+                            f"sha1_len={len(str(attached_file.get('sha1Checksum') or ''))} "
+                            f"payload_data_chars={len(encoded_data)}"
+                        )
                         documents.append(document)
                     results.append(result)
                 except Exception as exc:
+                    logger.info(
+                        f"Failed to prepare agreement form={_normalize_form_number(form_number)}: {exc}"
+                    )
                     results.append({
                         "formNumber": _normalize_form_number(form_number),
                         "formName": None,
@@ -2053,6 +2075,7 @@ class IBKRWebAPI:
                     })
 
             if len(documents) == 0:
+                logger.error("No agreement documents were prepared. Skipping submit_all_agreements POST call.")
                 return {
                     "ok": False,
                     "masterAccount": resolved_master_account,
@@ -2064,6 +2087,22 @@ class IBKRWebAPI:
                     "results": results,
                     "ibkrResponse": None,
                 }
+
+            doc_preview = []
+            for document in documents[:5]:
+                attached_file = document.get("attachedFile") or {}
+                payload = document.get("payload") or {}
+                doc_preview.append({
+                    "formNumber": document.get("formNumber"),
+                    "fileName": attached_file.get("fileName"),
+                    "fileLength": attached_file.get("fileLength"),
+                    "sha1ChecksumPrefix": str(attached_file.get("sha1Checksum") or "")[:12],
+                    "dataPrefix": str(payload.get("data") or "")[:20],
+                })
+            logger.info(
+                f"submit_all_agreements payload summary: documents={len(documents)} "
+                f"preview_first_{len(doc_preview)}={doc_preview}"
+            )
 
             body = {
                 "processDocuments": {
@@ -2086,9 +2125,17 @@ class IBKRWebAPI:
             response = requests.post(url, headers=headers, data=signed_request)
 
             if response.status_code != 200:
+                logger.error(
+                    f"submit_all_agreements failed status={response.status_code} "
+                    f"response={response.text}"
+                )
                 raise Exception(f"Error {response.status_code}: {response.text}")
 
             ibkr_response = response.json()
+            logger.info(
+                f"submit_all_agreements success status=200 "
+                f"response_keys={list(ibkr_response.keys()) if isinstance(ibkr_response, dict) else type(ibkr_response)}"
+            )
             results = self._merge_daily_agreement_response(results, ibkr_response)
             accepted = sum(1 for result in results if _is_accepted_status(result.get('status')))
             skipped = sum(1 for result in results if result.get('status') == 'Skipped')
