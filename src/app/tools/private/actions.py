@@ -29,5 +29,4 @@ def run_screenings_route():
 @bp.route('/send_compliance_manual_update_email', methods=['POST'])
 @format_response
 def send_compliance_manual_update_email_route():
-    payload = request.get_json(force=True) or {}
-    return send_compliance_manual_update_email(payload)
+    return send_compliance_manual_update_email()

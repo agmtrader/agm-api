@@ -3,6 +3,7 @@ from src.utils.exception import handle_exception
 from src.components.tools.public.reporting import get_nav_report, get_clients_report
 import pandas as pd
 from src.utils.logger import logger
+from src.components.tools.public.email import Gmail
 
 @handle_exception
 def send_unfunded_emails():
@@ -140,25 +141,15 @@ def update_account_aliases():
 
 
 @handle_exception
-def send_compliance_manual_update_email(payload):
-    from components.tools.public.email import Gmail
+def send_compliance_manual_update_email():
 
     email = Gmail()
-    content = {
-        "repository": payload.get("repository", "unknown"),
-        "branch": payload.get("branch", "unknown"),
-        "commit_sha": payload.get("commit_sha", "unknown"),
-        "commit_url": payload.get("commit_url", ""),
-        "author": payload.get("author", "unknown"),
-        "changed_files": payload.get("changed_files", "not provided"),
-    }
     message = email.send_compliance_manual_update_email(
-        content=content,
+        content={},
         recipient_email="aa@agmtechnology.com",
     )
     return {
         "status": "sent",
         "recipient": "aa@agmtechnology.com",
         "message": message,
-        "content": content,
     }
