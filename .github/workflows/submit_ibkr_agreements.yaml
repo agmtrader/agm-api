@@ -92,8 +92,13 @@ jobs:
           printf "summary<<EOF\n%s\nEOF\n" "$summary" >> "$GITHUB_OUTPUT"
           echo "$summary"
 
-          if [ "$ok" != "true" ]; then
-            echo "IBKR agreements submission completed with rejected or skipped documents." >&2
+          if [ "$rejected" -gt 0 ]; then
+            echo "IBKR agreements submission completed with rejected documents." >&2
+            exit 1
+          fi
+
+          if [ "$documents_prepared" -eq 0 ]; then
+            echo "IBKR agreements submission prepared zero documents." >&2
             exit 1
           fi
 
