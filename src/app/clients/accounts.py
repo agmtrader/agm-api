@@ -94,7 +94,7 @@ def send_credentials_email_route():
 @bp.route('/instructions', methods=['GET'])
 @format_response
 def read_instruction_route():
-    """Read stored account instructions for an account."""
+    """Read the account banking instructions stored in the database for an account."""
     query = {}  
     account_id = request.args.get('account_id', None)
     if account_id:  
@@ -430,7 +430,7 @@ def get_portfolio_analyst_performance_route():
 @bp.route('/ibkr/forms', methods=['POST'])
 @format_response
 def get_forms_route():
-    """Read form definitions or agreement forms from the IBKR service for the provided request payload."""
+    """Download the IBKR agreements and disclosure forms used during account opening."""
     payload = request.get_json(force=True)
     forms_data = payload.get('forms', None)
     master_account = payload.get('master_account', None)
@@ -439,7 +439,7 @@ def get_forms_route():
 @bp.route('/ibkr/product_country_bundles', methods=['GET'])
 @format_response
 def get_product_country_bundles_route():
-    """Read the IBKR product-country bundle definitions exposed by the service."""
+    """Download the IBKR enum list of product-country bundles such as stocks or bonds by market."""
     return get_product_country_bundles()
 
 @bp.route('/ibkr/financial_ranges', methods=['GET'])

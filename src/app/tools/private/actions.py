@@ -18,7 +18,7 @@ def send_unfunded_emails_route():
 @bp.route('/update_pending_alias', methods=['PATCH'])
 @format_response
 def update_pending_aliases_route():
-    """Apply pending account alias updates."""
+    """Update the alias in IBKR for accounts that still do not have an alias configured."""
     return update_account_aliases()
 
 @bp.route('/run_screening_process', methods=['GET'])

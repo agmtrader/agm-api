@@ -49,7 +49,7 @@ def get_nav_report_monthly_route():
 @bp.route('/rtd', methods=['GET'])
 @format_response
 def get_bond_report_route():
-    """Read the RTD reporting dataset."""
+    """Download the large RTD bond list dataset, similar in scope to the U.S. Treasury bond report."""
     return get_bond_report()
 
 @bp.route('/stocks', methods=['GET'])
@@ -134,5 +134,5 @@ def get_trades_report_route():
 @bp.route('/ibkr_details', methods=['GET'])
 @format_response
 def get_ibkr_details_route():
-    """Read the reporting dataset built from IBKR account details."""
+    """Download the daily backup of IBKR account details, including account, financial, and account holder information."""
     return get_ibkr_details()

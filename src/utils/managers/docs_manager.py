@@ -209,14 +209,13 @@ def generate_docs(
     else:
         public_endpoints = set(public_endpoints)
 
-    rows: list[tuple[str, str, str, str, str, str]] = []
+    rows: list[tuple[str, str, str, str, str]] = []
     for rule in app.url_map.iter_rules():
         if rule.endpoint in skip_endpoints:
             continue
         # Extract allowed HTTP methods, ignoring implicit methods
         methods = sorted(m for m in rule.methods if m not in {'HEAD', 'OPTIONS'})
         method_str = ', '.join(methods)
-        path_params = ', '.join(sorted(rule.arguments)) if rule.arguments else ''
         view_func = app.view_functions.get(rule.endpoint)
         route_docs = _extract_route_docs(view_func, str(rule.rule), methods) if view_func else RouteDocs(_humanize_route(str(rule.rule), methods))
         description = _compose_description(
@@ -232,7 +231,6 @@ def generate_docs(
             str(rule.rule),
             method_str,
             description,
-            path_params,
             _format_params(route_docs.query_params),
             _format_params(route_docs.body_params),
         ))
@@ -262,16 +260,15 @@ def generate_docs(
         '<body>',
         '  <h1>AGM API Routes</h1>',
         '  <table>',
-        '    <tr><th>Route</th><th>Methods</th><th>Description</th><th>Path&nbsp;Parameters</th><th>Query&nbsp;Parameters</th><th>JSON&nbsp;Body</th></tr>'
+        '    <tr><th>Route</th><th>Methods</th><th>Description</th><th>Query&nbsp;Parameters</th><th>JSON&nbsp;Body</th></tr>'
     ]
 
-    for route, methods, description, path_params, query_params, body_params in rows:
+    for route, methods, description, query_params, body_params in rows:
         html_parts.append(
             '    <tr>'
             f'<td class="route"><code>{html.escape(route)}</code></td>'
             f'<td class="methods">{html.escape(methods)}</td>'
             f'<td>{_format_description(description)}</td>'
-            f'<td>{html.escape(path_params)}</td>'
             f'<td>{query_params}</td>'
             f'<td>{body_params}</td>'
             '</tr>'
