@@ -105,6 +105,21 @@ def get_stocks_report():
     return rtd
 
 @handle_exception
+def get_etfs_report():
+    """
+    Get the ETFs report.
+    
+    :return: Response object with ETFs report or error message
+    """
+    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
+    rtd_file = [rtd for rtd in files_in_resources_folder if 'ibkr_etfs_snapshot' in rtd['name']]
+    if len(rtd_file) != 1:
+        logger.error('ETFs file not found or multiple files found')
+        raise Exception('ETFs file not found or multiple files found')
+    rtd = Drive.download_file(file_id=rtd_file[0]['id'], parse=True)
+    return rtd
+
+@handle_exception
 def get_ust_bond_report():
     """
     Get the UST Bonds report.

@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.tools.public.reporting import get_clients_report, get_client_fees_report, get_monthly_client_fees, get_nav_report, get_nav_report_monthly, get_bond_report, get_stocks_report, get_ust_bond_report, get_proposals_equity_report, get_open_positions_report, get_deposits_withdrawals, get_monthly_deposits_withdrawals, get_trades_report, get_brokerage_commissions, get_management_commissions, get_ending_balances_from_statements, get_ibkr_details
+from src.components.tools.public.reporting import get_clients_report, get_client_fees_report, get_monthly_client_fees, get_nav_report, get_nav_report_monthly, get_bond_report, get_stocks_report, get_etfs_report, get_ust_bond_report, get_proposals_equity_report, get_open_positions_report, get_deposits_withdrawals, get_monthly_deposits_withdrawals, get_trades_report, get_brokerage_commissions, get_management_commissions, get_ending_balances_from_statements, get_ibkr_details
 from src.utils.response import format_response
 
 bp = Blueprint('reporting', __name__)
@@ -50,6 +50,11 @@ def get_bond_report_route():
 @format_response
 def get_stocks_report_route():
     return get_stocks_report()
+
+@bp.route('/etfs', methods=['GET'])
+@format_response
+def get_etfs_report_route():
+    return get_etfs_report()
 
 @bp.route('/ust_bonds', methods=['GET'])
 @format_response

@@ -548,38 +548,105 @@ def extract_bond_snapshot(config=None):
         logger.error(f'Error extracting bond snapshot: {e}')
         raise Exception(f'Error extracting bond snapshot: {e}')
 
-def extract_stock_snapshot(config=None):
-    
-    from src.utils.connectors.ibkr_web_api import IBKRWebAPI
-    ibkr_web_api = IBKRWebAPI()
-    ip = requests.get('https://api.ipify.org').content.decode('utf8')
-    ibkr_web_api.create_sso_session('agmtech212', ip)
-    ibkr_web_api.initialize_brokerage_session()
-    time.sleep(2)
+STOCK_SNAPSHOT_TICKERS = [
+    'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'GOOG', 'META', 'TSLA', 'AVGO', 'BRK.B',
+    'LLY', 'JPM', 'V', 'XOM', 'UNH', 'MA', 'COST', 'PG', 'WMT', 'HD',
+    'NFLX', 'JNJ', 'BAC', 'ABBV', 'CRM', 'ORCL', 'KO', 'MRK', 'CVX', 'WFC',
+    'CSCO', 'AMD', 'PEP', 'ACN', 'MCD', 'LIN', 'TMO', 'ADBE', 'ABT', 'DIS',
+    'IBM', 'GE', 'QCOM', 'CAT', 'NOW', 'TXN', 'PM', 'VZ', 'AMGN', 'INTU',
+    'ISRG', 'BKNG', 'SPGI', 'GS', 'RTX', 'NEE', 'AXP', 'PGR', 'UBER', 'PFE',
+    'LOW', 'HON', 'UNP', 'BLK', 'T', 'SCHW', 'TJX', 'SYK', 'ETN', 'COP',
+    'C', 'BA', 'PANW', 'DE', 'ADP', 'VRTX', 'MDT', 'LMT', 'CB', 'MU',
+    'ADI', 'MMC', 'PLD', 'AMAT', 'SBUX', 'GILD', 'LRCX', 'FI', 'REGN', 'NKE',
+    'SO', 'KLAC', 'BMY', 'UPS', 'ELV', 'MO', 'DUK', 'MCO', 'ICE', 'COIN',
+]
 
-    stock_snapshot_tickers = [
-        ('SPY', '756733'),
-        ('QQQ', '320227571'),
-        ('AAPL', '265598'),
-        ('AMZN', '3691937'),
-        ('NVDA', '4815747'),
-        ('META', '107113386'),
-        ('MSFT', '272093'),
-        ('GOOGL', '208813720'),
-        ('TSLA', '76792991'),
-        ('NFLX', '15124833'),
-        ('AMD', '4391'),
-        ('COIN', '459530964'),
-        ('BRK.B', '265598'),  # TODO: verify conid
-        ('MA', '38708077'),
-        ('DIS', '6459'),
-        ('XOM', '13977'),
-        ('GLD', '756733'),  # TODO: verify conid
-    ]
-    conids = ','.join([conid for _, conid in stock_snapshot_tickers])
-    
-    snapshot = ibkr_web_api.get_market_data_snapshot(conids)
+ETF_SNAPSHOT_TICKERS = [
+    'SPY', 'VOO', 'IVV', 'VTI', 'QQQ', 'QQQM', 'DIA', 'IWM', 'RSP', 'SCHB',
+    'VEA', 'IEFA', 'EFA', 'VWO', 'IEMG', 'VXUS', 'ACWI', 'VT', 'EEM', 'EWJ',
+    'AGG', 'BND', 'VCIT', 'VCSH', 'LQD', 'HYG', 'JNK', 'SHY', 'IEF', 'TLT',
+    'SGOV', 'BIL', 'TIP', 'MUB', 'BNDX', 'SPAB', 'MBB', 'EMB', 'USFR', 'TFLO',
+    'XLK', 'XLF', 'XLV', 'XLE', 'XLY', 'XLI', 'XLP', 'XLU', 'XLB', 'XLRE',
+    'SMH', 'SOXX', 'IBB', 'ARKK', 'VNQ', 'IYR', 'GLD', 'IAU', 'SLV', 'DBC',
+]
+
+def _initialize_ibkr_market_data_client():
+    from src.utils.connectors.ibkr_web_api import IBKRWebAPI
+    api_client = IBKRWebAPI()
+    ip = requests.get('https://api.ipify.org').content.decode('utf8')
+    api_client.create_sso_session('agmtech212', ip)
+    api_client.initialize_brokerage_session()
+    time.sleep(2)
+    return api_client
+
+def _resolve_snapshot_conids(api_client, tickers: list[str], sec_type: str = 'STK') -> list[str]:
+    conids = []
+    seen = set()
+
+    for ticker in tickers:
+        try:
+            results = api_client.get_securities_by_symbol(ticker, sec_type)
+        except Exception as exc:
+            logger.warning(f'Failed resolving {ticker}: {exc}')
+            continue
+
+        if not isinstance(results, list):
+            logger.warning(f'Unexpected security search response for {ticker}: {results}')
+            continue
+
+        exact_matches = [
+            item for item in results
+            if str(item.get('symbol', '')).upper() == ticker.upper()
+        ]
+        candidates = exact_matches or results
+
+        selected = None
+        for item in candidates:
+            sections = item.get('sections', [])
+            section_types = [
+                str(section.get('secType', '')).upper()
+                for section in sections
+                if isinstance(section, dict)
+            ]
+            if not section_types or sec_type.upper() in section_types:
+                selected = item
+                break
+
+        if not selected:
+            logger.warning(f'No {sec_type} contract found for {ticker}')
+            continue
+
+        conid = selected.get('conid')
+        if conid is None:
+            logger.warning(f'No conid returned for {ticker}: {selected}')
+            continue
+
+        conid = str(conid)
+        if conid in seen:
+            continue
+
+        seen.add(conid)
+        conids.append(conid)
+
+    return conids
+
+def _extract_equity_like_snapshot(tickers: list[str], config_name: str, snapshot_type: str, config=None):
+    api_client = _initialize_ibkr_market_data_client()
+    conids = _resolve_snapshot_conids(api_client, tickers, sec_type='STK')
+
+    if not conids:
+        raise Exception(f'No {snapshot_type} conids resolved from IBKR security search')
+
+    snapshot = _get_market_data_snapshot_in_chunks(
+        api_client=api_client,
+        conids=conids,
+        chunk_size=75,
+        sleep_seconds=0.25
+    )
     df = pd.DataFrame(snapshot)
+
+    if df.empty:
+        raise Exception(f'No {snapshot_type} market data returned from IBKR')
 
     df.columns = df.columns.str.capitalize()
 
@@ -589,11 +656,13 @@ def extract_stock_snapshot(config=None):
     df['Payment Frequency'] = ''
     df['Trading Currency'] = 'USD'
     df['Sector'] = ''
+    df['Snapshot Type'] = snapshot_type
 
-    def extract_numbers(text):
-        return ''.join(filter(str.isdigit, text))
+    def extract_price(text):
+        match = re.search(r'[-+]?\d*\.?\d+', str(text or '').replace(',', ''))
+        return match.group(0) if match else ''
 
-    df['Last'] = df['Last_price'].astype(str).apply(extract_numbers)
+    df['Last'] = df['Last_price'].astype(str).apply(extract_price)
     df['Last'] = pd.to_numeric(df['Last'], errors='coerce').fillna(0.0)
 
     rename_map = {
@@ -612,12 +681,34 @@ def extract_stock_snapshot(config=None):
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
     df['Timestamp'] = timestamp
 
-    market_data_snapshot_config = config or _get_file_config('stocks_snapshot', [market_data_etl])
+    market_data_snapshot_config = config or _get_file_config(config_name, [market_data_etl])
     if market_data_snapshot_config is None:
-        raise Exception('Missing report config for stocks_snapshot')
+        raise Exception(f'Missing report config for {config_name}')
+
     file_name = market_data_snapshot_config['backup_name']
-    Drive.upload_file(file_name=file_name, mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=market_data_snapshot_config['backup_folder_id'])
+    Drive.upload_file(
+        file_name=file_name,
+        mime_type='text/csv',
+        file_data=df.to_dict(orient='records'),
+        parent_folder_id=market_data_snapshot_config['backup_folder_id']
+    )
     return df
+
+def extract_stock_snapshot(config=None):
+    return _extract_equity_like_snapshot(
+        tickers=STOCK_SNAPSHOT_TICKERS,
+        config_name='stocks_snapshot',
+        snapshot_type='STOCK',
+        config=config,
+    )
+
+def extract_etf_snapshot(config=None):
+    return _extract_equity_like_snapshot(
+        tickers=ETF_SNAPSHOT_TICKERS,
+        config_name='etfs_snapshot',
+        snapshot_type='ETF',
+        config=config,
+    )
 
 def _collect_watchlist_bond_conids(api_client, watchlist_id: str, max_retries: int = 5, sleep_seconds: int = 2, target_size: int = 500) -> list:
     """Collect unique BOND conids from a watchlist with retry polling."""
@@ -1436,6 +1527,16 @@ market_data_report_configs = [
         'extract_func': extract_stock_snapshot,
         'transform_func': None,
         'output_filename': 'ibkr_stocks_snapshot.csv'
+    },
+    {
+        'name': 'etfs_snapshot',
+        'pipeline': 'market_data',
+        'backup_folder_id': '1eo9yhD76i2oDf2UhE-GgVRyMsisf6iZO',
+        'flex': False,
+        'backup_name': 'etfs_snapshot' + '_' + today_date + '.csv',
+        'extract_func': extract_etf_snapshot,
+        'transform_func': None,
+        'output_filename': 'ibkr_etfs_snapshot.csv'
     }
 ]
 
