@@ -14,6 +14,7 @@ bp = Blueprint('document_review_responsibles', __name__)
 @bp.route('/create', methods=['POST'])
 @format_response
 def create_document_review_responsible_route():
+    """Create an explicit reviewer assignment for an account or contact document workflow."""
     payload = request.get_json(force=True)
     document_review_responsible = payload.get('document_review_responsible', None)
     return create_document_review_responsible(document_review_responsible=document_review_responsible)
@@ -22,6 +23,7 @@ def create_document_review_responsible_route():
 @bp.route('/read', methods=['GET'])
 @format_response
 def read_document_review_responsibles_route():
+    """Read document review assignments filtered by id, account, contact, or responsible user."""
     query = {}
     id = request.args.get('id', None)
     account_id = request.args.get('account_id', None)
@@ -43,6 +45,7 @@ def read_document_review_responsibles_route():
 @bp.route('/delete', methods=['POST'])
 @format_response
 def delete_document_review_responsible_route():
+    """Delete document review assignments that match the provided query payload."""
     payload = request.get_json(force=True)
     query = payload.get('query', None)
     return delete_document_review_responsible(query=query)
@@ -51,6 +54,7 @@ def delete_document_review_responsible_route():
 @bp.route('/upsert', methods=['POST'])
 @format_response
 def upsert_document_review_responsible_route():
+    """Create or replace the responsible reviewer assignment for the given account/contact/user combination."""
     payload = request.get_json(force=True)
     account_id = payload.get('account_id', None)
     contact_id = payload.get('contact_id', None)

@@ -7,6 +7,7 @@ bp = Blueprint('fee_template_requests', __name__)
 @bp.route('/create', methods=['POST'])
 @format_response
 def create():
+    """Create a fee template request record for an account."""
     payload = request.get_json(force=True)
     fee_template_request = payload['fee_template_request']
     
@@ -16,6 +17,7 @@ def create():
 @bp.route('/read', methods=['GET'])
 @format_response
 def read_fee_template_requests_route():
+    """Read fee template requests filtered by request id or account_id."""
     query = {}
     id = request.args.get('id', None)
     account_id = request.args.get('account_id', None)
@@ -28,6 +30,7 @@ def read_fee_template_requests_route():
 @bp.route('/update', methods=['POST'])
 @format_response
 def update():
+    """Update the data payload of an existing fee template request by request id."""
     payload = request.get_json(force=True)
     fee_template_request_id = payload.get('fee_template_request_id')
     data = payload.get('data')

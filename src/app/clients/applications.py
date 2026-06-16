@@ -8,6 +8,7 @@ bp = Blueprint('applications', __name__)
 @bp.route('/create', methods=['POST'])
 @format_response
 def create_route():
+    """Create an application record."""
     payload = request.get_json(force=True)
     application = payload.get('application', None)
     return create_application(application=application)
@@ -15,6 +16,7 @@ def create_route():
 @bp.route('/read', methods=['GET'])
 @format_response
 def read_route():
+    """Read applications by id or user_id, with an option to strip the raw application payload from the response."""
     query = {}
     id = request.args.get('id', None)
     user_id = request.args.get('user_id', None)
@@ -36,6 +38,7 @@ def read_route():
 @bp.route('/update', methods=['POST'])
 @format_response
 def update_route():
+    """Update application records selected by the provided query payload."""
     payload = request.get_json(force=True)
     application = payload.get('application', None)
     query = payload.get('query', None)

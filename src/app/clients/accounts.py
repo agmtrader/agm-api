@@ -13,6 +13,7 @@ bp = Blueprint('accounts', __name__)
 @bp.route('/create', methods=['POST'])
 @format_response
 def create_route():
+    """Create an account record in the AGM database."""
     payload = request.get_json(force=True)
     account_data = payload.get('account', None)
     return create_account(account=account_data)
@@ -20,6 +21,7 @@ def create_route():
 @bp.route('/read', methods=['GET'])
 @format_response        
 def read_route():
+    """Read accounts from the database filtered by id, user_id, or advisor_code."""
     query = {}
     id = request.args.get('id', None)
     user_id = request.args.get('user_id', None)
@@ -36,6 +38,7 @@ def read_route():
 @bp.route('/contacts_screenings_summary', methods=['GET'])
 @format_response
 def read_contacts_screenings_summary_route():
+    """Read the contact and screening summary for a single account."""
     account_id = request.args.get('account_id', None)
     return read_account_contacts_and_screenings(account_id=account_id)
 
@@ -44,6 +47,7 @@ def read_contacts_screenings_summary_route():
 @bp.route('/with-metadata', methods=['GET'])
 @format_response
 def read_with_metadata_route():
+    """Read accounts together with derived metadata and optional advisor details."""
     query = {}
     id = request.args.get('id', None)
     user_id = request.args.get('user_id', None)
@@ -67,6 +71,7 @@ def read_with_metadata_route():
 @bp.route('/update', methods=['POST'])
 @format_response
 def update_account_route():
+    """Update account records selected by the provided query payload."""
     payload = request.get_json(force=True)
     query = payload.get('query', None)
     account = payload.get('account', None)
@@ -75,6 +80,7 @@ def update_account_route():
 @bp.route('/send_credentials_email', methods=['POST'])
 @format_response
 def send_credentials_email_route():
+    """Send the account credentials email flow for a client account."""
     payload = request.get_json(force=True)
     return send_account_credentials_email(
         account_id=payload.get('account_id'),
@@ -88,6 +94,7 @@ def send_credentials_email_route():
 @bp.route('/instructions', methods=['GET'])
 @format_response
 def read_instruction_route():
+    """Read stored account instructions for an account."""
     query = {}  
     account_id = request.args.get('account_id', None)
     if account_id:  
@@ -97,6 +104,7 @@ def read_instruction_route():
 @bp.route('/send_to_ibkr', methods=['POST'])
 @format_response
 def send_to_ibkr_route():
+    """Submit an AGM account application to the IBKR onboarding flow."""
     payload = request.get_json(force=True)
     account_id = payload.get('account_id', None)
     master_account = payload.get('master_account', None)
@@ -107,6 +115,7 @@ def send_to_ibkr_route():
 @bp.route('/ibkr/details', methods=['GET'])
 @format_response
 def read_accounts_details_route():
+    """Read detailed account information from the IBKR service."""
     account_id = request.args.get('account_id', None)
     master_account = request.args.get('master_account', None)
     return read_account_details(account_id=account_id, master_account=master_account)
@@ -114,6 +123,7 @@ def read_accounts_details_route():
 @bp.route('/ibkr/registration_tasks', methods=['GET'])
 @format_response
 def registration_tasks_route():
+    """Read pending IBKR registration tasks for an account."""
     account_id = request.args.get('account_id', None)
     master_account = request.args.get('master_account', None)
     if not account_id:
@@ -123,6 +133,7 @@ def registration_tasks_route():
 @bp.route('/ibkr/pending_tasks', methods=['GET'])
 @format_response
 def pending_tasks_route():
+    """Read current IBKR pending tasks for an account."""
     account_id = request.args.get('account_id', None)
     master_account = request.args.get('master_account', None)
     if not account_id:
@@ -132,6 +143,7 @@ def pending_tasks_route():
 @bp.route('/ibkr/documents', methods=['POST'])
 @format_response
 def submit_documents_route():
+    """Submit account documents to the IBKR service."""
     payload = request.get_json(force=True)
     document_submission_data = payload.get('document_submission', None)
     master_account = payload.get('master_account', None)
@@ -140,6 +152,7 @@ def submit_documents_route():
 @bp.route('/ibkr/submit_all_agreements', methods=['POST'])
 @format_response
 def submit_all_agreements_route():
+    """Submit all pending IBKR agreements for the provided account context."""
     payload = request.get_json(silent=True) or {}
     master_account = payload.get('master_account', None)
     forms = payload.get('forms', None)
@@ -148,6 +161,7 @@ def submit_all_agreements_route():
 @bp.route('/ibkr/fee_template', methods=['POST'])
 @format_response
 def apply_fee_template_route():
+    """Apply an IBKR fee template to an account."""
     payload = request.get_json(force=True)
     account_id = payload.get('account_id')
     template_name = payload.get('template_name')
@@ -159,6 +173,7 @@ def apply_fee_template_route():
 @bp.route('/ibkr/account_email', methods=['POST'])
 @format_response
 def update_account_email_route():
+    """Update the email address associated with an IBKR account user."""
     payload = request.get_json(force=True)
     reference_user_name = payload.get('reference_user_name')
     new_email = payload.get('new_email')
@@ -171,6 +186,7 @@ def update_account_email_route():
 @bp.route('/ibkr/trading_permissions', methods=['POST'])
 @format_response
 def add_trading_permissions_route():
+    """Add or update IBKR trading permissions for an account."""
     payload = request.get_json(force=True)
     account_id = payload.get('account_id')
     trading_permissions = payload.get('trading_permissions', [])
@@ -180,6 +196,7 @@ def add_trading_permissions_route():
 @bp.route('/ibkr/change_financial_information', methods=['POST'])
 @format_response
 def change_financial_information_route():
+    """Update the financial information fields held by IBKR for an account."""
     payload = request.get_json(force=True)
     account_id = payload.get('account_id', None)
     master_account = payload.get('master_account', None)
@@ -212,6 +229,7 @@ def change_financial_information_route():
 @bp.route('/ibkr/clp_capability', methods=['POST'])
 @format_response
 def add_clp_capability_route():
+    """Enable CLP capability for an IBKR account, optionally with supporting documents."""
     payload = request.get_json(force=True)
     account_id = payload.get('account_id')
     document_submission = payload.get('document_submission', None)
@@ -221,6 +239,7 @@ def add_clp_capability_route():
 @bp.route('/ibkr/transfer_position_internally', methods=['POST'])
 @format_response
 def transfer_position_internally_route():
+    """Transfer a position between two internal IBKR accounts."""
     payload = request.get_json(force=True)
     source_account_id = payload.get('source_account_id', None)
     target_account_id = payload.get('target_account_id', None)
@@ -234,6 +253,7 @@ def transfer_position_internally_route():
 @bp.route('/ibkr/transfer_position_externally', methods=['POST'])
 @format_response
 def transfer_position_externally_route():
+    """Transfer a position from an IBKR account to an external broker account."""
     payload = request.get_json(force=True)
     account_id = payload.get('account_id', None)
     client_instruction_id = payload.get('client_instruction_id', None)
@@ -249,6 +269,7 @@ def transfer_position_externally_route():
 @bp.route('/ibkr/deposit', methods=['POST'])
 @format_response
 def deposit_funds_route():
+    """Create or submit an IBKR deposit instruction for an account."""
     payload = request.get_json(force=True)
     master_account = payload.get('master_account', None)
     instruction = payload.get('instruction', None)
@@ -258,6 +279,7 @@ def deposit_funds_route():
 @bp.route('/ibkr/withdraw', methods=['POST'])
 @format_response
 def withdraw_funds_route():
+    """Create or submit an IBKR withdrawal instruction for an account."""
     payload = request.get_json(force=True)
     master_account = payload.get('master_account', None)
     instruction = payload.get('instruction', None)
@@ -267,6 +289,7 @@ def withdraw_funds_route():
 @bp.route('/ibkr/instructions', methods=['GET'])
 @format_response
 def get_status_of_instruction_route():
+    """Read the current status of an IBKR cash instruction."""
     client_instruction_id = request.args.get('client_instruction_id', None)
     if not client_instruction_id:
         return {"error": "Missing client_instruction_id"}, 400
@@ -275,6 +298,7 @@ def get_status_of_instruction_route():
 @bp.route('/ibkr/active_bank_instructions', methods=['POST'])
 @format_response
 def view_active_bank_instructions_route():
+    """Read the active bank instructions available for an IBKR cash instruction."""
     payload = request.get_json(force=True)
     master_account = payload.get('master_account', None)
     account_id = payload.get('account_id', None)
@@ -294,6 +318,7 @@ def view_active_bank_instructions_route():
 @bp.route('/ibkr/withdrawable_cash', methods=['POST'])
 @format_response
 def view_withdrawable_cash_route():
+    """Read the withdrawable cash available for an IBKR account and instruction context."""
     payload = request.get_json(force=True)
     master_account = payload.get('master_account', None)
     account_id = payload.get('account_id', None)
@@ -311,6 +336,7 @@ def view_withdrawable_cash_route():
 @bp.route('/ibkr/wire_instructions', methods=['POST'])
 @format_response
 def get_wire_instructions_route():
+    """Read IBKR wire instructions for an account and currency."""
     payload = request.get_json(force=True)
     master_account = payload.get('master_account', None)
     account_id = payload.get('account_id', None)
@@ -322,6 +348,7 @@ def get_wire_instructions_route():
 @bp.route('/ibkr/statements', methods=['POST'])
 @format_response
 def get_account_statements_route():
+    """Read account statements from the IBKR service for a date range."""
     payload = request.get_json(force=True)
 
     account_id = payload.get('account_id', None)
@@ -337,6 +364,7 @@ def get_account_statements_route():
 @bp.route('/ibkr/statements/available', methods=['GET'])
 @format_response
 def get_available_statements_route():
+    """Read the list of statement periods available in IBKR for an account."""
     account_id = request.args.get('account_id', None)
     master_account = request.args.get('master_account', None)
     
@@ -349,6 +377,7 @@ def get_available_statements_route():
 @bp.route('/ibkr/sso/create', methods=['POST'])
 @format_response
 def create_sso_session_route():
+    """Create an IBKR SSO session using the provided credential payload."""
     payload = request.get_json(force=True)
     credential = payload.get('credential', None)
     ip = payload.get('ip', None)
@@ -357,21 +386,25 @@ def create_sso_session_route():
 @bp.route('/ibkr/sso/initialize', methods=['POST'])
 @format_response
 def initialize_brokerage_session_route():
+    """Initialize the current IBKR brokerage web session."""
     return initialize_brokerage_session()
 
 @bp.route('/ibkr/sso/logout', methods=['POST'])
 @format_response
 def logout_of_brokerage_session_route():
+    """Log out of the current IBKR brokerage web session."""
     return logout_of_brokerage_session()
 
 @bp.route('/ibkr/sso/accounts', methods=['GET'])
 @format_response
 def get_brokerage_accounts_route():
+    """Read the brokerage accounts available in the active IBKR web session."""
     return get_brokerage_accounts()
 
 @bp.route('/ibkr/portfolio-analyst', methods=['GET', 'POST'])
 @format_response
 def get_portfolio_analyst_performance_route():
+    """Read PortfolioAnalyst performance for one or more account ids and a required frequency."""
     if request.method == 'POST':
         payload = request.get_json(force=True) or {}
         raw_acct_ids = payload.get('acctIds', [])
@@ -397,6 +430,7 @@ def get_portfolio_analyst_performance_route():
 @bp.route('/ibkr/forms', methods=['POST'])
 @format_response
 def get_forms_route():
+    """Read form definitions or agreement forms from the IBKR service for the provided request payload."""
     payload = request.get_json(force=True)
     forms_data = payload.get('forms', None)
     master_account = payload.get('master_account', None)
@@ -405,14 +439,17 @@ def get_forms_route():
 @bp.route('/ibkr/product_country_bundles', methods=['GET'])
 @format_response
 def get_product_country_bundles_route():
+    """Read the IBKR product-country bundle definitions exposed by the service."""
     return get_product_country_bundles()
 
 @bp.route('/ibkr/financial_ranges', methods=['GET'])
 @format_response
 def get_financial_ranges_route():
+    """Read the financial range types from the IBKR service."""
     return get_financial_ranges()
 
 @bp.route('/ibkr/business_and_occupation', methods=['GET'])
 @format_response
 def get_business_and_occupation_route():
+    """Read the business and occupation types from the IBKR service."""
     return get_business_and_occupation()

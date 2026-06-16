@@ -9,6 +9,7 @@ bp = Blueprint('users', __name__)
 @bp.route('/create', methods=['POST'])
 @format_response
 def create():
+    """Create a user record after removing any incoming password hash and enforcing email uniqueness."""
     payload = request.get_json(force=True)
     user = payload['user']
     user.pop('password_hash', None)
@@ -26,6 +27,7 @@ def create():
 @bp.route('/login', methods=['POST'])
 @format_response
 def login():
+    """Authenticate a user by email and password and return the sanitized user record for valid credentials."""
     payload = request.get_json(force=True)
     email = payload['email']
     password = payload['password']
@@ -44,6 +46,7 @@ def login():
 @bp.route('/read', methods=['GET'])
 @format_response
 def read_users_route():
+    """Read users from the database, optionally filtered by internal id or user_id."""
     query = {}
     id = request.args.get('id', None)
     user_id = request.args.get('user_id', None)
@@ -56,6 +59,7 @@ def read_users_route():
 @bp.route('/update', methods=['POST'])
 @format_response
 def update_user_route():
+    """Update a user record selected by id or email without allowing password_hash updates through this route."""
     payload = request.get_json(force=True)
     user = payload.get('user', None)
     if user:

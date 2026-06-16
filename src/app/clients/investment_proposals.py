@@ -11,6 +11,7 @@ bp = Blueprint('investment_proposals', __name__)
 @bp.route('/create/risk', methods=['POST'])
 @format_response
 def create_with_risk_profile_route():
+    """Create an investment proposal from a risk profile payload."""
     payload = request.get_json(force=True)
     risk_profile = payload.get('risk_profile', None)
     return create_investment_proposal_with_risk_profile(risk_profile=risk_profile)
@@ -18,6 +19,7 @@ def create_with_risk_profile_route():
 @bp.route('/create/assets', methods=['POST'])
 @format_response
 def create_with_assets_route():
+    """Create an investment proposal from an explicit asset allocation payload."""
     payload = request.get_json(force=True)
     assets = payload.get('assets', None)
     return create_investment_proposal_with_assets(assets=assets)
@@ -25,6 +27,7 @@ def create_with_assets_route():
 @bp.route('/read', methods=['GET'])
 @format_response
 def read_route():
+    """Read investment proposals filtered by proposal id, risk_profile_id, or account_id."""
     query = {}
     id = request.args.get('id', None)
     risk_profile_id = request.args.get('risk_profile_id', None)

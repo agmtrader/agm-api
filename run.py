@@ -56,11 +56,13 @@ def start_api():
     # Index page
     @app.route('/')
     def index():
+        """Serve the static AGM API landing page."""
         return send_from_directory('public/static', 'index.html')
     
     # Documentation page
     @app.route('/docs')
     def docs():
+        """Serve the generated AGM API route documentation page."""
         return send_from_directory('public/static', 'docs.html')
     
     # Error handlers
@@ -91,6 +93,7 @@ def start_api():
     @app.route('/token', methods=['POST'])
     @format_response
     def token():
+        """Generate a short-lived API access token for the special local token payload."""
         logger.announcement('Token request.')
         payload = request.get_json(force=True)
 
@@ -156,7 +159,7 @@ logger.announcement('Successfully started AGM API', type='success')
 # Generate docs
 from src.utils.managers.docs_manager import generate_docs
 try:
-    generate_docs(app)
+    generate_docs(app, public_endpoints=public_routes)
     logger.announcement('Documentation generated', type='success')
 except Exception as e:
     logger.error(f'Failed to generate docs: {e}')

@@ -7,11 +7,13 @@ bp = Blueprint('documents', __name__)
 @bp.route('/read', methods=['GET'])
 @format_response
 def read_documents_route():
+    """Read all document records and account-document links without returning raw file data."""
     documents, account_documents = read_documents(strip_data=True)
     return {'documents': documents, 'account_documents': account_documents }
 
 @bp.route('/get_document_data', methods=['GET'])
 @format_response
 def get_document_data_route():
+    """Read the raw stored data for a single document by document_id."""
     document_id = request.args.get('document_id', None)
     return get_document_data(document_id=document_id)

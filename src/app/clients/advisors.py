@@ -7,6 +7,7 @@ bp = Blueprint('advisors', __name__)
 @bp.route('/create', methods=['POST'])
 @format_response
 def create_advisor_route():
+    """Create an advisor record."""
     payload = request.get_json(force=True)  
     advisor = payload.get('advisor', None)
     return create_advisor(advisor)
@@ -14,6 +15,7 @@ def create_advisor_route():
 @bp.route('/read', methods=['GET'])
 @format_response
 def advisors_route():
+    """Read advisors from the database filtered by id, advisor code, or contact_id."""
     query = {}
     id = request.args.get('id', None)
     code = request.args.get('code', None)

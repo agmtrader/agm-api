@@ -8,13 +8,7 @@ bp = Blueprint('management_type_requests', __name__)
 @bp.route('/create', methods=['POST'])
 @format_response
 def create():
-    """Endpoint to create a new management_type_request record.
-
-    Expects JSON body like:
-    {
-        "management_type_request": { ... }
-    }
-    """
+    """Create a management type change request for an account."""
     payload = request.get_json(force=True)
     management_type_request = payload.get('management_type_request')
     if management_type_request is None:
@@ -27,10 +21,7 @@ def create():
 @bp.route('/read', methods=['GET'])
 @format_response
 def read():
-    """Endpoint to read management_type_request records.
-
-    Optional query params: id, account_id
-    """
+    """Read management type change requests filtered by request id or account_id."""
     query = {}
     id_ = request.args.get('id')
     account_id = request.args.get('account_id')
