@@ -14,7 +14,7 @@ def send_unfunded_emails():
     from src.components.clients.accounts import read_accounts
     from src.components.clients.contacts import read_contacts
     from src.components.clients.advisors import read_advisors
-    from components.tools.public.email import Gmail
+    from src.components.tools.public.email import Gmail
 
     email = Gmail()
 
@@ -110,7 +110,7 @@ def send_unfunded_emails():
 @handle_exception
 def update_account_aliases():
     """Fetch clients report, filter accounts without alias, update each alias, and return list."""
-    from components.tools.public.reporting import get_clients_report
+    from src.components.tools.public.reporting import get_clients_report
     from src.components.clients.accounts import update_account_alias
     clients = get_clients_report()
     pending_accounts = [c for c in clients if (c.get('Alias') in (None, '')) and c.get('Status') not in ('Rejected', 'Closed', 'Funded Pending')]

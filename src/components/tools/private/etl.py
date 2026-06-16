@@ -472,7 +472,7 @@ def extract_bond_snapshot(config=None):
 
         df = df.dropna(subset=['Financial Instrument'])
 
-        from components.tools.public.trade_tickets import extract_bond_details
+        from src.components.tools.public.trade_tickets import extract_bond_details
         for index, row in df.iterrows():
             bond_details = extract_bond_details(row['Financial Instrument'])
             df.at[index, 'Coupon'] = float(bond_details['coupon']) if bond_details['coupon'] != '' else 0.0
@@ -795,7 +795,7 @@ def extract_ust_bond_snapshot(config=None):
     df['Financial Instrument'] = df['Symbol'] + ' ' + df['Contract_description_2']
     df['Symbol'] = 'IBCID' + df['Conidex']
 
-    from components.tools.public.trade_tickets import extract_bond_details
+    from src.components.tools.public.trade_tickets import extract_bond_details
     for index, row in df.iterrows():
         bond_details = extract_bond_details(row['Financial Instrument'])
         coupon = bond_details.get('coupon')
@@ -884,7 +884,7 @@ def extract_sovereign_bond_snapshot():
     df['Financial Instrument'] = df['Symbol'] + ' ' + df['Contract_description_2']
     df['Symbol'] = 'IBCID' + df['Conidex']
 
-    from components.tools.public.trade_tickets import extract_bond_details
+    from src.components.tools.public.trade_tickets import extract_bond_details
     for index, row in df.iterrows():
         bond_details = extract_bond_details(row['Financial Instrument'])
         df.at[index, 'Coupon'] = float(bond_details['coupon']) if bond_details['coupon'] != '' else 0.0
