@@ -319,6 +319,43 @@ class DatabaseManager:
 
         return _create(table, data)
 
+    def create_many(self, table: str, data: list[dict] = None, batch_size: int = 500) -> int:
+        @self.with_session
+        def _create_many(session, table: str, data: list[dict] = None, batch_size: int = 500):
+            logger.info(f'Attempting to create {len(data or [])} entries in table: {table}')
+
+            if not data or not isinstance(data, list):
+                raise Exception("Data to create must be provided as a non-empty list.")
+
+            tbl = Table(table, self.metadata, autoload_with=self.engine)
+            current_time = datetime.now().strftime('%Y%m%d%H%M%S')
+            prepared_rows = []
+
+            for item in data:
+                if not isinstance(item, dict):
+                    raise Exception("Each item to create must be a dictionary.")
+
+                normalized = self._dates_to_timestamp(dict(item))
+                normalized = self._ids_to_string(normalized)
+                normalized = self._none_to_null(normalized)
+                prepared_rows.append({
+                    'created': current_time,
+                    'updated': current_time,
+                    **normalized
+                })
+
+            inserted = 0
+            for i in range(0, len(prepared_rows), batch_size):
+                chunk = prepared_rows[i:i + batch_size]
+                session.execute(tbl.insert(), chunk)
+                inserted += len(chunk)
+
+            session.flush()
+            logger.success(f'Successfully created {inserted} entries in table: {table}')
+            return inserted
+
+        return _create_many(table, data, batch_size)
+
     def read(self, table: str, query: dict = None, exclude_columns: list = None) -> list:
         @self.with_session(commit=False)
         def _read(session, table: str, query: dict = None, exclude_columns: list = None):

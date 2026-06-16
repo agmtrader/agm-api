@@ -197,6 +197,65 @@ def create_contact_screening(
     })
 
 
+def build_contact_screening_payload(
+    contact: dict,
+    account_row: dict | None,
+    ibkr_detail: dict | None,
+    account_contact_link: dict | None,
+    created: Optional[str] = None,
+    sanctions_indexes: Optional[tuple[dict[str, list[dict]], dict[str, list[dict]], dict[str, list[dict]]]] = None,
+) -> dict:
+    contact_id = contact.get('id') if isinstance(contact, dict) else None
+    if not contact_id:
+        raise Exception('contact_id is required')
+
+    contact_name = (contact.get('name') or '').strip()
+    normalized_contact_name = _normalize_name(contact_name)
+    if not normalized_contact_name:
+        raise Exception('contact name is required for screening')
+
+    if not account_row:
+        raise Exception('linked account not found for screening')
+
+    ofac_index, uk_index, un_index = sanctions_indexes or _get_sanctions_match_indexes()
+    ofac_results = _unique_rows(list(ofac_index.get(normalized_contact_name, [])))
+    uk_status = _unique_rows(list(uk_index.get(normalized_contact_name, [])))
+    un_matches = _unique_rows(list(un_index.get(normalized_contact_name, [])))
+    un_status = un_matches if len(un_matches) > 0 else None
+    uk_status_value = uk_status if len(uk_status) > 0 else None
+    ofac_results_value = ofac_results if len(ofac_results) > 0 else None
+    risk_score = _compute_weighted_holder_risk_score(
+        contact=contact,
+        account_row=account_row,
+        ibkr_detail=ibkr_detail,
+        account_contact_link=account_contact_link,
+    )
+    if ofac_results or uk_status or un_matches:
+        risk_score = max(risk_score, 9.0)
+
+    return {
+        'contact_id': contact_id,
+        'risk_score': risk_score,
+        'fatf_status': None,
+        'un_status': un_status,
+        'uk_status': uk_status_value,
+        'ofac_results': ofac_results_value,
+        'created': created or datetime.now().strftime('%Y%m%d%H%M%S'),
+    }
+
+
+@handle_exception
+def create_contact_screenings_batch(screenings: list[dict], batch_size: int = 500):
+    if not screenings:
+        raise Exception('screenings are required')
+    inserted = db.create_many(
+        table=contact_screening_table,
+        data=screenings,
+        batch_size=batch_size,
+    )
+    return {'inserted': inserted}
+
+
 def _normalize_name(value: str) -> str:
     if not value:
         return ""
@@ -667,31 +726,14 @@ def create_contact_screening_from_contact_id(contact_id: str = None, created: Op
     ibkr_account_number = str(account_row.get('ibkr_account_number') or '').strip()
     ibkr_detail = _get_ibkr_details_by_account_id().get(ibkr_account_number) if ibkr_account_number else None
 
-    ofac_index, uk_index, un_index = _get_sanctions_match_indexes()
-    ofac_results = _unique_rows(list(ofac_index.get(normalized_contact_name, [])))
-    uk_status = _unique_rows(list(uk_index.get(normalized_contact_name, [])))
-    un_matches = _unique_rows(list(un_index.get(normalized_contact_name, [])))
-    un_status = un_matches if len(un_matches) > 0 else None
-    uk_status_value = uk_status if len(uk_status) > 0 else None
-    ofac_results_value = ofac_results if len(ofac_results) > 0 else None
-    risk_score = _compute_weighted_holder_risk_score(
+    screening_payload = build_contact_screening_payload(
         contact=contact,
         account_row=account_row,
         ibkr_detail=ibkr_detail,
         account_contact_link=latest_contact_link,
+        created=created,
     )
-    if ofac_results or uk_status or un_matches:
-        risk_score = max(risk_score, 9.0)
-
-    return create_contact_screening(
-        contact_id=contact_id,
-        risk_score=risk_score,
-        fatf_status=None,
-        un_status=un_status,
-        uk_status=uk_status_value,
-        ofac_results=ofac_results_value,
-        created=created or datetime.now().strftime('%Y%m%d%H%M%S'),
-    )
+    return create_contact_screening(**screening_payload)
 
 
 @handle_exception

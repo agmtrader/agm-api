@@ -2,7 +2,10 @@ from datetime import date, datetime
 import re
 import unicodedata
 from src.components.clients.accounts import read_accounts
-from src.components.clients.contacts import create_contact_screening_from_contact_id
+from src.components.clients.contacts import (
+    build_contact_screening_payload,
+    create_contact_screenings_batch,
+)
 from src.components.tools.public.reporting import get_ibkr_details
 from src.components.tools.public.reporting import compare_all_sanctions_today_vs_yesterday
 from src.utils.connectors.supabase import db
@@ -202,7 +205,7 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
     total_screenings_planned = 0
     screenings_executed = 0
     screening_errors = []
-    planned_contact_ids = []
+    planned_contact_rows = []
     sanctions_overview = _sanctions_overview(sanctions_comparison)
 
     today = date.today()
@@ -268,13 +271,15 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
                 if created_date and (latest_screen_date is None or created_date > latest_screen_date):
                     latest_screen_date = created_date
 
-            screenings_planned_for_contact = 1
-            screening_reason = "Daily full screening after sanctions list change"
-
             account_has_targeted_contacts = True
             contacts_targeted += 1
-            planned_contact_ids.append(person_contact_id)
-            total_screenings_planned += screenings_planned_for_contact
+            planned_contact_rows.append({
+                "contact_id": person_contact_id,
+                "contact": contact,
+                "account_row": account,
+                "ibkr_detail": detail if isinstance(detail, dict) else None,
+                "account_contact_link": link,
+            })
 
         if account_has_targeted_contacts:
             accounts_targeted += 1
@@ -292,7 +297,13 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
         if screen.get("contact_id")
         and parse_screen_created(screen.get("created")) == today
     }
-    planned_unique_contact_ids = {contact_id for contact_id in planned_contact_ids if contact_id}
+    planned_contacts_by_id = {}
+    for row in planned_contact_rows:
+        contact_id = row.get("contact_id")
+        if contact_id and contact_id not in planned_contacts_by_id:
+            planned_contacts_by_id[contact_id] = row
+    planned_unique_contact_ids = set(planned_contacts_by_id.keys())
+    total_screenings_planned = len(planned_unique_contact_ids)
 
     if planned_unique_contact_ids and today_screened_contact_ids.issuperset(planned_unique_contact_ids):
         return _compact_screenings_result({
@@ -313,15 +324,25 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
         })
 
     if apply_screenings:
-        for contact_id in planned_contact_ids:
-            result = create_contact_screening_from_contact_id(
-                contact_id=contact_id,
-                created=created_value_today,
-            )
-            if isinstance(result, dict) and result.get("error"):
-                screening_errors.append(f"{contact_id}: {result.get('error')}")
+        screening_payloads = []
+        for contact_id, row in planned_contacts_by_id.items():
+            try:
+                screening_payloads.append(build_contact_screening_payload(
+                    contact=row.get("contact") or {},
+                    account_row=row.get("account_row") or {},
+                    ibkr_detail=row.get("ibkr_detail"),
+                    account_contact_link=row.get("account_contact_link") or {},
+                    created=created_value_today,
+                ))
+            except Exception as e:
+                screening_errors.append(f"{contact_id}: {str(e)}")
+
+        if screening_payloads:
+            batch_result = create_contact_screenings_batch(screening_payloads)
+            if isinstance(batch_result, dict) and batch_result.get("error"):
+                screening_errors.append(batch_result.get("error"))
             else:
-                screenings_executed += 1
+                screenings_executed = int((batch_result or {}).get("inserted", len(screening_payloads)))
 
     result = {
         "apply_screenings": apply_screenings,
