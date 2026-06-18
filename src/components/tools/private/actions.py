@@ -112,31 +112,72 @@ def update_account_aliases():
     """Fetch clients report, filter accounts without alias, update each alias, and return list."""
     from src.components.tools.public.reporting import get_clients_report
     from src.components.clients.accounts import update_account_alias
+
+    def _is_blank(value):
+        if value is None:
+            return True
+        if isinstance(value, str):
+            return value.strip() == ''
+        return pd.isna(value)
+
     clients = get_clients_report()
-    pending_accounts = [c for c in clients if (c.get('Alias') in (None, '')) and c.get('Status') not in ('Rejected', 'Closed', 'Funded Pending')]
+    pending_accounts = [
+        c for c in clients
+        if _is_blank(c.get('Alias')) and c.get('Status') not in ('Rejected', 'Closed', 'Funded Pending')
+    ]
     updated_accounts = []
+    failed_accounts = []
+    skipped_accounts = []
+
     for account in pending_accounts:
-        account_id = account.get('Account ID')
-        title = account.get('Title')
+        account_id = str(account.get('Account ID') or '').strip()
+        title = str(account.get('Title') or '').strip()
         old_alias = account.get('Alias')
-        master_account = account.get('Master Account')
-        if account_id and title is not None:
-            if master_account:
-                new_alias = f"{account_id} {title}"
-                try:
-                    # Reuse existing helper to update alias via IBKR API
-                    update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
-                    updated_accounts.append({
-                        'account_id': account_id,
-                        'old_alias': old_alias,
-                        'new_alias': new_alias
-                    })
-                    logger.success(f"Updated alias for {account_id}: {old_alias} -> {new_alias}")
-                except Exception as e:
-                    logger.error(f"Failed to update alias for {account_id}: {e}")
+        master_account = account.get('Master Account') or None
+
+        if not account_id or not title:
+            skipped_accounts.append({
+                'account_id': account_id or None,
+                'old_alias': old_alias,
+                'master_account': master_account,
+                'reason': 'Missing Account ID or Title'
+            })
+            logger.warning(f"Skipping alias update for account_id={account_id!r} title={title!r}")
+            continue
+
+        new_alias = f"{account_id} {title}"
+        try:
+            # When master_account is missing, the IBKR client falls back to the default credentials.
+            update_account_alias(
+                account_id=account_id,
+                new_alias=new_alias,
+                master_account=master_account
+            )
+            updated_accounts.append({
+                'account_id': account_id,
+                'old_alias': old_alias,
+                'new_alias': new_alias,
+                'master_account': master_account
+            })
+            logger.success(f"Updated alias for {account_id}: {old_alias} -> {new_alias}")
+        except Exception as e:
+            failed_accounts.append({
+                'account_id': account_id,
+                'old_alias': old_alias,
+                'new_alias': new_alias,
+                'master_account': master_account,
+                'error': str(e)
+            })
+            logger.error(f"Failed to update alias for {account_id}: {e}")
+
     return {
+        'pending': len(pending_accounts),
         'updated': len(updated_accounts),
-        'accounts': updated_accounts
+        'failed': len(failed_accounts),
+        'skipped': len(skipped_accounts),
+        'accounts': updated_accounts,
+        'failed_accounts': failed_accounts,
+        'skipped_accounts': skipped_accounts
     }
 
 
