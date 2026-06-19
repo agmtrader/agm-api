@@ -47,16 +47,29 @@ jobs:
             exit 1
           fi
 
-          accounts_due_now=$(echo "$body" | jq -r '.accounts_due_now // 0')
-          individuals_with_no_screenings=$(echo "$body" | jq -r '.individuals_with_no_screenings // 0')
-          total_screenings_to_be_done=$(echo "$body" | jq -r '.total_screenings_to_be_done // 0')
+          screenings_skipped=$(echo "$body" | jq -r '.screenings_skipped // false')
+          skip_reason=$(echo "$body" | jq -r '.skip_reason // ""')
+          total_screenings_planned=$(echo "$body" | jq -r '.total_screenings_planned // 0')
           screenings_executed=$(echo "$body" | jq -r '.screenings_executed // 0')
-          screening_errors=$(echo "$body" | jq -r '.screening_errors | length')
+          screening_errors=$(echo "$body" | jq -r '.screening_errors_count // (.screening_errors | length) // 0')
+          sanctions_available=$(echo "$body" | jq -r '.sanctions_comparison.available // false')
+          sanctions_all_same=$(echo "$body" | jq -r '.sanctions_comparison.all_same // false')
+          ofac_added=$(echo "$body" | jq -r '.sanctions_comparison.lists.ofac.added_count // 0')
+          ofac_removed=$(echo "$body" | jq -r '.sanctions_comparison.lists.ofac.removed_count // 0')
+          uk_added=$(echo "$body" | jq -r '.sanctions_comparison.lists.uk.added_count // 0')
+          uk_removed=$(echo "$body" | jq -r '.sanctions_comparison.lists.uk.removed_count // 0')
+          un_added=$(echo "$body" | jq -r '.sanctions_comparison.lists.un.added_count // 0')
+          un_removed=$(echo "$body" | jq -r '.sanctions_comparison.lists.un.removed_count // 0')
 
           summary=$(cat <<EOF
-          Accounts due now: $accounts_due_now
-          Individuals with no screenings: $individuals_with_no_screenings
-          Total screenings to be done: $total_screenings_to_be_done
+          Screenings skipped: $screenings_skipped
+          Skip reason: ${skip_reason:-N/A}
+          Sanctions available: $sanctions_available
+          Sanctions all same: $sanctions_all_same
+          OFAC delta: +$ofac_added / -$ofac_removed
+          UK delta: +$uk_added / -$uk_removed
+          UN delta: +$un_added / -$un_removed
+          Total screenings planned: $total_screenings_planned
           Screenings executed: $screenings_executed
           Screening errors: $screening_errors
           EOF

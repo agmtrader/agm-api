@@ -85,8 +85,6 @@ jobs:
               - Sort batch files: $backup_sort_status (moved: $backup_sort_count, failed: $backup_sort_failed)
               - Clear batch folder: $backup_clear_status
             Transform status: $transform_status (total: $transform_total, successful: $transform_success, failed: $transform_failed)
-            Full overview JSON:
-            $(echo "$body" | jq '.overview')
             EOF
             )
 
