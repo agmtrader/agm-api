@@ -40,6 +40,37 @@ OECD_FATF_WELL_REGULATED = {
 }
 HIGH_RISK_JURISDICTIONS = {'AFG', 'MMR', 'YEM', 'SSD', 'SOM', 'COD', 'IRQ', 'LBN', 'NGA', 'PAK', 'SYR', 'VEN'}
 SANCTIONED_OR_FATF_HIGH_RISK = {'IRN', 'PRK', 'CUB', 'RUS', 'BLR'}
+FATF_LISTED_COUNTRY_CODES = {
+    'AGO', 'BOL', 'BGR', 'CMR', 'CIV', 'COD', 'DZA', 'HTI', 'IRN', 'KEN', 'KWT', 'LAO',
+    'LBN', 'MCO', 'MMR', 'NAM', 'NPL', 'PNG', 'PRK', 'SSD', 'SYR', 'VEN', 'VGB', 'VNM', 'YEM',
+}
+FATF_LISTED_COUNTRY_NAMES = {
+    'ALGERIA',
+    'ANGOLA',
+    'BOLIVIA',
+    'BULGARIA',
+    'CAMEROON',
+    'COTE D IVOIRE',
+    'DEMOCRATIC PEOPLE S REPUBLIC OF KOREA',
+    'DEMOCRATIC REPUBLIC OF CONGO',
+    'HAITI',
+    'IRAN',
+    'KENYA',
+    'KUWAIT',
+    'LAO PEOPLE S DEMOCRATIC REPUBLIC',
+    'LEBANON',
+    'MONACO',
+    'MYANMAR',
+    'NAMIBIA',
+    'NEPAL',
+    'PAPUA NEW GUINEA',
+    'SOUTH SUDAN',
+    'SYRIA',
+    'VENEZUELA',
+    'VIETNAM',
+    'VIRGIN ISLANDS UK',
+    'YEMEN',
+}
 SIMPLE_PRODUCTS = {'STK', 'BOND', 'FUND', 'CASH', 'ETF'}
 DERIVATIVE_PRODUCTS = {'OPT', 'FUT'}
 COMPLEX_PRODUCTS = {'CFD', 'WAR', 'SSF', 'FOP', 'COMB', 'MRGN'}
@@ -236,7 +267,7 @@ def build_contact_screening_payload(
     return {
         'contact_id': contact_id,
         'risk_score': risk_score,
-        'fatf_status': None,
+        'fatf_status': _get_fatf_status(_get_contact_risk_country(contact, account_row, ibkr_detail, account_contact_link)),
         'un_status': un_status,
         'uk_status': uk_status_value,
         'ofac_results': ofac_results_value,
@@ -270,6 +301,32 @@ def _normalize_name(value: str) -> str:
 
 def _to_upper(value) -> str:
     return str(value or '').strip().upper()
+
+
+def _normalize_country_name(value: str | None) -> str:
+    if not value:
+        return ''
+    ascii_name = (
+        unicodedata.normalize("NFKD", str(value))
+        .encode("ascii", "ignore")
+        .decode("ascii")
+    )
+    normalized = re.sub(r"[^A-Z0-9 ]+", " ", ascii_name.upper())
+    return " ".join(normalized.split())
+
+
+def _get_fatf_status(country_code_or_name: str | None) -> str | None:
+    country_value = str(country_code_or_name or '').strip()
+    if not country_value:
+        return None
+
+    if _to_upper(country_value) in FATF_LISTED_COUNTRY_CODES:
+        return 'Listed'
+
+    if _normalize_country_name(country_value) in FATF_LISTED_COUNTRY_NAMES:
+        return 'Listed'
+
+    return None
 
 
 def _clamp_risk_score(value: float) -> float:
@@ -474,6 +531,53 @@ def _resolve_customer_type(value: str | None) -> str:
     if customer_type == 'ORGANIZATION':
         return 'ORG'
     return customer_type
+
+
+def _get_contact_risk_country(contact: dict, account_row: dict | None, ibkr_detail: dict | None, account_contact_link: dict | None) -> str:
+    if ibkr_detail:
+        associated_people = ibkr_detail.get('associatedPersons') or []
+        holder_details = _match_associated_person(contact=contact, associated_people=associated_people)
+        residence = holder_details.get('residence') or {}
+        return (
+            residence.get('country')
+            or ((holder_details.get('legalResidence') or {}).get('country') if isinstance(holder_details, dict) else '')
+            or holder_details.get('countryOfLegalResidence')
+            or ''
+        )
+
+    application_json = (account_row or {}).get('application_json') or {}
+    customer = (application_json.get('customer') or {})
+    customer_type = _resolve_customer_type(customer.get('type'))
+    holder_details = {}
+
+    if customer_type == 'INDIVIDUAL':
+        holder_details = ((customer.get('accountHolder') or {}).get('accountHolderDetails') or [{}])[0] or {}
+    elif customer_type == 'JOINT':
+        joint = customer.get('jointHolders') or {}
+        first_holder = (joint.get('firstHolderDetails') or [{}])[0] or {}
+        second_holder = (joint.get('secondHolderDetails') or [{}])[0] or {}
+        entity_id = account_contact_link.get('entity_id') if isinstance(account_contact_link, dict) else None
+        if entity_id is not None and str(first_holder.get('entityId')) == str(entity_id):
+            holder_details = first_holder
+        elif entity_id is not None and str(second_holder.get('entityId')) == str(entity_id):
+            holder_details = second_holder
+        else:
+            holder_details = first_holder if first_holder else second_holder
+    elif customer_type == 'ORG':
+        organization = customer.get('organization') or {}
+        associated_individuals = ((organization.get('associatedEntities') or {}).get('associatedIndividuals')) or []
+        entity_id = account_contact_link.get('entity_id') if isinstance(account_contact_link, dict) else None
+        if entity_id is not None:
+            holder_details = next((p for p in associated_individuals if str(p.get('entityId')) == str(entity_id)), {})
+        if not holder_details and associated_individuals:
+            holder_details = associated_individuals[0]
+
+    return (
+        (holder_details.get('residence') or {}).get('country')
+        or (holder_details.get('countryOfLegalResidence') if isinstance(holder_details, dict) else '')
+        or ((holder_details.get('legalResidence') or {}).get('country') if isinstance(holder_details, dict) else '')
+        or ''
+    )
 
 
 def _compute_weighted_holder_risk_score(contact: dict, account_row: dict | None, ibkr_detail: dict | None, account_contact_link: dict | None) -> float:

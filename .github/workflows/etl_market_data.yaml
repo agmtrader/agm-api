@@ -110,7 +110,7 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: "✅ Market Data ETL Pipeline SUCCEEDED"
-          to: cr@agmtechnology.com
+          to: cr@agmtechnology.com,aa@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
             The Market Data ETL Pipeline completed successfully.
@@ -130,7 +130,7 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: "🚨 Market Data ETL Pipeline FAILED"
-          to: cr@agmtechnology.com
+          to: cr@agmtechnology.com,aa@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
             The Market Data ETL Pipeline failed.
