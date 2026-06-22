@@ -59,3 +59,4 @@ langchain_google_genai==3.0.0
 
 # PDF Generation
 reportlab==4.1.0
+pypdf==5.9.0

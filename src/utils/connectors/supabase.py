@@ -125,6 +125,7 @@ class Supabase:
             document_id = Column(UUID(as_uuid=True), ForeignKey('document.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
             category = Column(Text, nullable=True)
             type = Column(Text, nullable=True)
+            document_language = Column(Text, nullable=True)
             issued_date = Column(Text, nullable=True)
             expiry_date = Column(Text, nullable=True)
             comment = Column(Text, nullable=True)
@@ -151,6 +152,19 @@ class Supabase:
             sha1_checksum = Column(Text, nullable=False)
             mime_type = Column(Text, nullable=False)
             data = Column(Text, nullable=False)
+
+        class DocumentProcessing(self.Base):
+            __tablename__ = 'document_processing'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            document_id = Column(UUID(as_uuid=True), ForeignKey('document.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            process_type = Column(Text, nullable=False)
+            status = Column(Text, nullable=False)
+            source_language = Column(Text, nullable=True)
+            output_text = Column(Text, nullable=True)
+            provider = Column(Text, nullable=True)
+            error = Column(Text, nullable=True)
 
         class DocumentReviewResponsible(self.Base):
             __tablename__ = 'document_review_responsible'
@@ -234,6 +248,7 @@ class Supabase:
         self.ContactScreening = ContactScreening
         self.ContactDocument = ContactDocument
         self.Document = Document
+        self.DocumentProcessing = DocumentProcessing
         self.DocumentReviewResponsible = DocumentReviewResponsible
         self.FeeTemplateRequest = FeeTemplateRequest
         self.FlaggedDeposit = FlaggedDeposit

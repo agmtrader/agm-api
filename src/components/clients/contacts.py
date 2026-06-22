@@ -11,6 +11,7 @@ from src.components.tools.public.reporting import (
     get_un_sanctions_list,
     get_ibkr_details,
 )
+from src.components.clients.document_processing import process_document_text_extraction
 
 logger.announcement('Initializing Contacts Service', type='info')
 logger.announcement('Initialized Contacts Service', type='success')
@@ -114,6 +115,7 @@ def upload_contact_document(
     data: str = None,
     category: str = None,
     type: str = None,
+    document_language: str = None,
     issued_date: str = None,
     expiry_date: str = None,
     comment: Optional[str] = None
@@ -142,12 +144,14 @@ def upload_contact_document(
             'document_id': document_id,
             'category': category,
             'type': type,
+            'document_language': document_language,
             'issued_date': issued_date,
             'expiry_date': expiry_date,
             'comment': comment
         }
     )
-    return {'id': link_id, 'document_id': document_id}
+    processing_result = process_document_text_extraction(document_id=document_id, source_language=document_language)
+    return {'id': link_id, 'document_id': document_id, 'document_processing': processing_result}
 
 
 @handle_exception
@@ -181,6 +185,7 @@ def update_contact_document(
     document_id: str = None,
     category: str = None,
     type: str = None,
+    document_language: str = None,
     issued_date: str = None,
     expiry_date: str = None,
     comment: Optional[str] = None
@@ -191,6 +196,7 @@ def update_contact_document(
         data={
             'category': category,
             'type': type,
+            'document_language': document_language,
             'issued_date': issued_date,
             'expiry_date': expiry_date,
             'comment': comment

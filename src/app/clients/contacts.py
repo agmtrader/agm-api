@@ -76,6 +76,7 @@ def upload_contact_document_route():
         data=payload.get('data'),
         category=payload.get('category'),
         type=payload.get('type'),
+        document_language=payload.get('document_language'),
         issued_date=payload.get('issued_date'),
         expiry_date=payload.get('expiry_date'),
         comment=payload.get('comment')
@@ -91,6 +92,7 @@ def update_contact_document_route():
         document_id=payload.get('document_id'),
         category=payload.get('category'),
         type=payload.get('type'),
+        document_language=payload.get('document_language'),
         issued_date=payload.get('issued_date'),
         expiry_date=payload.get('expiry_date'),
         comment=payload.get('comment')
