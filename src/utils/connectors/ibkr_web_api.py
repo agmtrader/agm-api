@@ -634,16 +634,14 @@ class IBKRWebAPI:
 
             body = {
                 "accountManagementRequests": {
-                    "changeFinancialInformation": [
-                        {
-                            "accountId": account_id,
-                            "newFinancialInformation": new_financial_information or {},
-                        }
-                    ]
+                    "changeFinancialInformation": {
+                        "accountId": account_id,
+                        "newFinancialInformation": new_financial_information or {},
+                    }
                 }
             }
 
-            if not body["accountManagementRequests"]["changeFinancialInformation"][0]["newFinancialInformation"]:
+            if not body["accountManagementRequests"]["changeFinancialInformation"]["newFinancialInformation"]:
                 raise Exception("At least one financial information field is required")
 
             token = self.get_bearer_token()
