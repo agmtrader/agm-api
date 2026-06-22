@@ -1,6 +1,7 @@
 from flask import Blueprint, request
 from src.components.clients.investment_proposals import (
     create_investment_proposal_with_assets,
+    create_investment_proposal_with_portfolio_plan,
     create_investment_proposal_with_risk_profile,
     read_investment_proposals,
 )
@@ -24,18 +25,30 @@ def create_with_assets_route():
     assets = payload.get('assets', None)
     return create_investment_proposal_with_assets(assets=assets)
 
+
+@bp.route('/create/plan', methods=['POST'])
+@format_response
+def create_with_portfolio_plan_route():
+    """Create an investment proposal from a saved portfolio plan payload."""
+    payload = request.get_json(force=True)
+    portfolio_plan = payload.get('portfolio_plan', None)
+    return create_investment_proposal_with_portfolio_plan(portfolio_plan=portfolio_plan)
+
 @bp.route('/read', methods=['GET'])
 @format_response
 def read_route():
-    """Read investment proposals filtered by proposal id, risk_profile_id, or account_id."""
+    """Read investment proposals filtered by proposal id, risk_profile_id, portfolio_plan_id, or account_id."""
     query = {}
     id = request.args.get('id', None)
     risk_profile_id = request.args.get('risk_profile_id', None)
+    portfolio_plan_id = request.args.get('portfolio_plan_id', None)
     account_id = request.args.get('account_id', None)
     if id:
         query['id'] = id
     if risk_profile_id:
         query['risk_profile_id'] = risk_profile_id
+    if portfolio_plan_id:
+        query['portfolio_plan_id'] = portfolio_plan_id
     if account_id:
         query['account_id'] = account_id
     return read_investment_proposals(query=query)

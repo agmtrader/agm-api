@@ -202,6 +202,7 @@ class Supabase:
             __tablename__ = 'investment_proposal'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
             risk_profile_id = Column(UUID(as_uuid=True), ForeignKey('risk_profile.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True, unique=True)
+            portfolio_plan_id = Column(UUID(as_uuid=True), ForeignKey('portfolio_plan.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True, unique=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             treasury = Column(ARRAY(JSONB), nullable=True)
@@ -229,6 +230,34 @@ class Supabase:
             score = Column(Text, nullable=False)
             name = Column(Text, nullable=True)
             answers = Column(JSONB, nullable=True)
+            raw_answers = Column(JSONB, nullable=True)
+            assigned_risk_archetype = Column(Text, nullable=True)
+
+        class PortfolioPlan(self.Base):
+            __tablename__ = 'portfolio_plan'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            risk_profile_id = Column(UUID(as_uuid=True), ForeignKey('risk_profile.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False, unique=True)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            name = Column(Text, nullable=True)
+            target_return = Column(Text, nullable=False)
+            starting_amount = Column(BIGINT, nullable=False)
+            risk_tolerance = Column(Text, nullable=False)
+            selected_risk_archetype = Column(Text, nullable=True)
+            allocation = Column(JSONB, nullable=False)
+            bond_rating_allocation = Column(JSONB, nullable=False)
+            locked_assets = Column(JSONB, nullable=True)
+            locked_bond_ratings = Column(JSONB, nullable=True)
+            expected_return = Column(Text, nullable=True)
+            volatility = Column(Text, nullable=True)
+            one_year_gain = Column(Text, nullable=True)
+            one_year_range_low = Column(Text, nullable=True)
+            one_year_range_high = Column(Text, nullable=True)
+            risk_tier = Column(Text, nullable=True)
+            guidance = Column(ARRAY(Text), nullable=True)
+            data_source = Column(Text, nullable=True)
+            assumptions = Column(JSONB, nullable=True)
 
         class TradeTicket(self.Base):
             __tablename__ = 'trade_ticket'
@@ -254,6 +283,7 @@ class Supabase:
         self.FlaggedDeposit = FlaggedDeposit
         self.InvestmentProposal = InvestmentProposal
         self.ManagementTypeRequest = ManagementTypeRequest
+        self.PortfolioPlan = PortfolioPlan
         self.RiskProfile = RiskProfile    
         self.TradeTicket = TradeTicket
         self.User = User

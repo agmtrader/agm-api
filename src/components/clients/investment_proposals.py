@@ -357,10 +357,144 @@ def _distribution_from_risk_archetype(risk_archetype: dict) -> dict:
     return _normalize_distribution(distribution)
 
 
+def _distribution_from_portfolio_plan(portfolio_plan: dict) -> dict:
+    allocation = portfolio_plan.get('allocation') or {}
+    bond_rating_allocation = portfolio_plan.get('bond_rating_allocation') or {}
+
+    cash = float(allocation.get('cash') or 0) / 100
+    treasuries = float(allocation.get('treasuries') or 0) / 100
+    bonds = float(allocation.get('bonds') or 0) / 100
+    stocks = float(allocation.get('stocks') or 0) / 100
+
+    aaa = float(bond_rating_allocation.get('aaa') or 0) / 100
+    bbb = float(bond_rating_allocation.get('bbb') or 0) / 100
+    bb = float(bond_rating_allocation.get('bb') or 0) / 100
+
+    distribution = {
+        'treasuries': cash + treasuries,
+        'bonds_aaa_a': bonds * aaa,
+        'bonds_bbb': bonds * bbb,
+        'bonds_bb': bonds * bb,
+        'etfs': stocks,
+    }
+    return _normalize_distribution(distribution)
+
+
+def _initialize_used_symbols(bonds_df_no_duplicates: pd.DataFrame) -> set[str]:
+    used_symbols: set[str] = set()
+    if not bonds_df_no_duplicates.empty and 'Symbol_x' in bonds_df_no_duplicates.columns:
+        existing_tickers = bonds_df_no_duplicates['Symbol_x'].astype(str).str.strip().str.split().str[0].tolist()
+        used_symbols.update(existing_tickers)
+        logger.info(f"Initialized used_symbols with {len(used_symbols)} existing tickers.")
+    return used_symbols
+
+
+def _populate_investment_proposal_from_distribution(
+    investment_proposal: list[dict],
+    distribution: dict,
+    context: dict,
+):
+    bonds_df_no_duplicates = context['bonds_df_no_duplicates']
+    avg_yield = context['avg_yield']
+    merged_df = context['merged_df']
+    normalized_distribution = _normalize_distribution(distribution)
+
+    used_symbols = _initialize_used_symbols(bonds_df_no_duplicates)
+
+    for asset_type in investment_proposal:
+        percentage = float(normalized_distribution.get(asset_type['name'], 0) or 0)
+        assets_to_invest = int(round(TOTAL_ASSETS * percentage))
+
+        logger.info(f"--- Processing bucket: {asset_type['name']} ---")
+        logger.info(f"Distribution percentage: {percentage}")
+        logger.info(f"Assets to invest: {assets_to_invest}")
+        logger.info(f"Current bonds in bucket: {len(asset_type['bonds'])}")
+
+        if asset_type['name'] == 'etfs' and assets_to_invest > 0:
+            asset_type['bonds'].append({
+                'Symbol_x': 'SPY',
+                'Current Yield_x': float(avg_yield) if avg_yield is not None else 0.0,
+                'S&P Equivalent_x': 'ETF',
+            })
+            used_symbols.add('SPY')
+
+        sanitized_equivalents = asset_type['equivalents']
+        combined_df = merged_df[
+            merged_df['S&P Equivalent_x']
+                .astype(str)
+                .str.replace(r'[+\-]', '', regex=True)
+                .isin(sanitized_equivalents)
+        ]
+
+        combined_df = (
+            combined_df
+                .sort_values(by='Current Yield_x', ascending=False)
+                .groupby('Ticker')
+                .head(1)
+        )
+
+        combined_df = combined_df[~combined_df['Ticker'].isin(used_symbols)]
+        top_bonds = combined_df.head(max(0, assets_to_invest - len(asset_type['bonds'])))
+
+        asset_type['bonds'].extend(
+            top_bonds[['Symbol_x', 'Current Yield_x', 'S&P Equivalent_x']].to_dict(orient='records')
+        )
+        used_symbols.update(top_bonds['Ticker'].tolist())
+
+    rating_to_bucket = {}
+    for bucket in investment_proposal:
+        for equiv in bucket['equivalents']:
+            rating_to_bucket[equiv.replace('+', '').replace('-', '')] = bucket
+
+    bucket_needs = {
+        bucket['name']: max(0, int(round(TOTAL_ASSETS * float(normalized_distribution.get(bucket['name'], 0) or 0))) - len(bucket['bonds']))
+        for bucket in investment_proposal
+    }
+
+    remaining_needed = sum(bucket_needs.values())
+
+    if remaining_needed > 0:
+        remaining_pool = (
+            merged_df[~merged_df['Ticker'].isin(used_symbols)]
+                .sort_values(by='Current Yield_x', ascending=False)
+                .groupby('Ticker')
+                .head(1)
+        )
+
+        for _, row in remaining_pool.iterrows():
+            if remaining_needed == 0:
+                break
+
+            rating_key = str(row['S&P Equivalent_x']).replace('+', '').replace('-', '')
+            bucket = rating_to_bucket.get(rating_key)
+            if not bucket:
+                bucket = next(bucket_ref for bucket_ref in investment_proposal if bucket_ref['name'] == 'bonds_bb')
+
+            if bucket_needs[bucket['name']] <= 0:
+                continue
+
+            bucket['bonds'].append({
+                'Symbol_x': row['Symbol_x'],
+                'Current Yield_x': row['Current Yield_x'],
+                'S&P Equivalent_x': row['S&P Equivalent_x'],
+            })
+            used_symbols.add(row['Ticker'])
+            bucket_needs[bucket['name']] -= 1
+            remaining_needed -= 1
+
+    for asset_type in investment_proposal:
+        logger.announcement(f'Asset Type: {asset_type["name"]}')
+        logger.announcement(f'Percentage: {normalized_distribution.get(asset_type["name"], 0)}')
+        logger.announcement(f'Assets to invest: {len(asset_type["bonds"])}')
+        for bond in asset_type['bonds']:
+            logger.info(f'Bond: {bond["Symbol_x"]} - {bond["Current Yield_x"]} - {bond["S&P Equivalent_x"]}')
+
+
 def _persist_investment_proposal(
     investment_proposal: list[dict],
     risk_profile_id,
     distribution: dict,
+    portfolio_plan_id=None,
 ):
     # Normalize and persist investment proposal to match database schema
     def normalize_bond(record: dict):
@@ -384,14 +518,32 @@ def _persist_investment_proposal(
         'bb': get_bucket('bonds_bb'),
         'etfs': get_bucket('etfs'),
         'risk_profile_id': risk_profile_id,
+        'portfolio_plan_id': portfolio_plan_id,
         'distribution': distribution,
     }
 
     logger.announcement('Saving investment proposal...')
-    proposal_id = db.create(table='investment_proposal', data=proposal_record)
-    logger.success(f'Investment proposal saved with id: {proposal_id}')
+    existing_proposals = []
+    if portfolio_plan_id:
+        existing_proposals = db.read(table='investment_proposal', query={'portfolio_plan_id': portfolio_plan_id}) or []
+    elif risk_profile_id:
+        existing_proposals = db.read(table='investment_proposal', query={'risk_profile_id': risk_profile_id}) or []
 
-    return proposal_record
+    if existing_proposals:
+        proposal_id = db.update(
+            table='investment_proposal',
+            query={'id': existing_proposals[0]['id']},
+            data=proposal_record,
+        )
+        logger.success(f'Investment proposal updated with id: {proposal_id}')
+    else:
+        proposal_id = db.create(table='investment_proposal', data=proposal_record)
+        logger.success(f'Investment proposal saved with id: {proposal_id}')
+
+    return {
+        'id': proposal_id,
+        **proposal_record,
+    }
 
 @handle_exception
 def create_investment_proposal_with_assets(assets: list[dict]):
@@ -496,9 +648,6 @@ def create_investment_proposal_with_risk_profile(risk_profile: dict):
             raise Exception('Risk profile is required when assets are not provided.')
 
         context = _load_investment_proposal_context()
-        bonds_df_no_duplicates = context['bonds_df_no_duplicates']
-        avg_yield = context['avg_yield']
-        merged_df = context['merged_df']
         investment_proposal = _build_investment_proposal_template()
 
         logger.announcement(f'Risk profile: {risk_profile}')
@@ -518,136 +667,50 @@ def create_investment_proposal_with_risk_profile(risk_profile: dict):
             logger.error(f'Risk profile with score {risk_score} not found')
             raise Exception(f'Risk profile with score {risk_score} not found')
 
-        # Populate bonds for each asset type
-        # Keep track of already selected tickers to avoid duplicates across buckets
-        used_symbols: set[str] = set()
-
-        # Initialize used_symbols with tickers from open positions to avoid recommending what is already owned
-        if not bonds_df_no_duplicates.empty:
-            # Assuming 'Issuer_x' or 'Symbol_x' contains the ticker in open_positions
-            # Based on previous code, Ticker was derived from Symbol_x
-            if 'Symbol_x' in bonds_df_no_duplicates.columns:
-                existing_tickers = bonds_df_no_duplicates['Symbol_x'].astype(str).str.strip().str.split().str[0].tolist()
-                used_symbols.update(existing_tickers)
-                logger.info(f"Initialized used_symbols with {len(used_symbols)} existing tickers.")
-
-        for asset_type in investment_proposal:
-            percentage = risk_archetype.get(asset_type['name'], 0)
-            assets_to_invest = int(TOTAL_ASSETS * percentage)
-
-            logger.info(f"--- Processing bucket: {asset_type['name']} ---")
-            logger.info(f"Assets to invest: {assets_to_invest}")
-            logger.info(f"Current bonds in bucket: {len(asset_type['bonds'])}")
-
-            # Special handling for ETF bucket – always add SPY first
-            if asset_type['name'] == 'etfs':
-                asset_type['bonds'].append({
-                    'Symbol_x': 'SPY',
-                    'Current Yield_x': float(avg_yield) if avg_yield is not None else 0.0,
-                    'S&P Equivalent_x': 'ETF',
-                })
-                used_symbols.add('SPY')
-
-            # Build a combined dataframe for all equivalents that belong to this asset type
-            sanitized_equivalents = asset_type['equivalents']
-
-            # Log what we are looking for
-            logger.info(f"Sanitized equivalents for {asset_type['name']}: {sanitized_equivalents}")
-
-            combined_df = merged_df[
-                merged_df['S&P Equivalent_x']
-                    .astype(str)
-                    .str.replace(r'[+\-]', '', regex=True)
-                    .isin(sanitized_equivalents)
-            ]
-
-            logger.info(f"Found {len(combined_df)} matches for {asset_type['name']}")
-            if len(combined_df) == 0:
-                # Debug why no matches if we expected some
-                logger.info("Debugging first 5 sanitized S&P values from merged_df:")
-                debug_vals = merged_df['S&P Equivalent_x'].astype(str).str.replace(r'[+\-]', '', regex=True).head()
-                logger.info(debug_vals)
-
-            # Deduplicate by ticker and order by yield
-            combined_df = (
-                combined_df
-                    .sort_values(by='Current Yield_x', ascending=False)
-                    .groupby('Ticker')  # one bond per issuer ticker across coupons/maturities
-                    .head(1)
-            )
-
-            # Exclude tickers that have already been used in previous buckets
-            combined_df = combined_df[~combined_df['Ticker'].isin(used_symbols)]
-
-            # Take the required number of assets for this bucket
-            top_bonds = combined_df.head(assets_to_invest - len(asset_type['bonds']))
-
-            # Append to bucket and register symbols as used
-            asset_type['bonds'].extend(
-                top_bonds[['Symbol_x', 'Current Yield_x', 'S&P Equivalent_x']].to_dict(orient='records')
-            )
-            used_symbols.update(top_bonds['Ticker'].tolist())
-
-        # -------------------- Back-fill to reach target counts --------------------
-        # Build quick lookup: rating (stripped of +/-) -> bucket reference
-        rating_to_bucket = {}
-        for bucket in investment_proposal:
-            for equiv in bucket['equivalents']:
-                rating_to_bucket[equiv.replace('+', '').replace('-', '')] = bucket
-
-        # Calculate how many more each bucket needs
-        bucket_needs = {
-            b['name']: int(TOTAL_ASSETS * risk_archetype.get(b['name'], 0)) - len(b['bonds'])
-            for b in investment_proposal
-        }
-
-        remaining_needed = sum(v for v in bucket_needs.values() if v > 0)
-
-        if remaining_needed > 0:
-            # Candidate pool: not yet used tickers, highest yield first, unique per ticker
-            remaining_pool = (
-                merged_df[~merged_df['Ticker'].isin(used_symbols)]
-                    .sort_values(by='Current Yield_x', ascending=False)
-                    .groupby('Ticker')
-                    .head(1)
-            )
-
-            for _, row in remaining_pool.iterrows():
-                if remaining_needed == 0:
-                    break
-
-                rating_key = str(row['S&P Equivalent_x']).replace('+', '').replace('-', '')
-                bucket = rating_to_bucket.get(rating_key)
-                if not bucket:
-                    # default to lowest grade bucket
-                    bucket = next(b for b in investment_proposal if b['name'] == 'bonds_bb')
-
-                if bucket_needs[bucket['name']] <= 0:
-                    continue
-
-                bucket['bonds'].append({
-                    'Symbol_x': row['Symbol_x'],
-                    'Current Yield_x': row['Current Yield_x'],
-                    'S&P Equivalent_x': row['S&P Equivalent_x'],
-                })
-
-                used_symbols.add(row['Ticker'])
-                bucket_needs[bucket['name']] -= 1
-                remaining_needed -= 1
-
-        for asset_type in investment_proposal:
-            logger.announcement(f'Asset Type: {asset_type["name"]}')
-            logger.announcement(f'Percentage: {risk_archetype.get(asset_type["name"], 0)}')
-            logger.announcement(f'Assets to invest: {len(asset_type["bonds"])}')
-            for bond in asset_type['bonds']:
-                logger.info(f'Bond: {bond["Symbol_x"]} - {bond["Current Yield_x"]} - {bond["S&P Equivalent_x"]}')
+        distribution = _distribution_from_risk_archetype(risk_archetype)
+        _populate_investment_proposal_from_distribution(
+            investment_proposal=investment_proposal,
+            distribution=distribution,
+            context=context,
+        )
 
     except Exception as exc:
         logger.error(f'Failed creating investment proposal: {exc}')
         raise Exception(f'Failed creating investment proposal: {exc}')
 
-    distribution = _distribution_from_risk_archetype(risk_archetype)
     return _persist_investment_proposal(investment_proposal, risk_profile_id, distribution)
+
+
+@handle_exception
+def create_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
+    logger.announcement('Generating investment proposal from portfolio plan...')
+
+    try:
+        if not portfolio_plan:
+            raise Exception('Portfolio plan is required when generating an investment proposal from a plan.')
+
+        context = _load_investment_proposal_context()
+        investment_proposal = _build_investment_proposal_template()
+        distribution = _distribution_from_portfolio_plan(portfolio_plan)
+        risk_profile_id = portfolio_plan.get('risk_profile_id')
+        portfolio_plan_id = portfolio_plan.get('id')
+
+        _populate_investment_proposal_from_distribution(
+            investment_proposal=investment_proposal,
+            distribution=distribution,
+            context=context,
+        )
+
+    except Exception as exc:
+        logger.error(f'Failed creating investment proposal from plan: {exc}')
+        raise Exception(f'Failed creating investment proposal from plan: {exc}')
+
+    return _persist_investment_proposal(
+        investment_proposal,
+        risk_profile_id,
+        distribution,
+        portfolio_plan_id=portfolio_plan_id,
+    )
 
 @handle_exception
 def read_investment_proposals(query: dict = None):
