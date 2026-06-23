@@ -429,6 +429,24 @@ def _assets_from_saved_proposal(proposal: dict) -> dict:
     return legacy_assets
 
 
+def _distribution_from_saved_assets_payload(assets: dict) -> dict | None:
+    if not isinstance(assets, dict):
+        return None
+
+    raw_distribution = {
+        'treasuries': len(assets.get('treasury') or []),
+        'bonds_aaa_a': len(assets.get('aaa_a') or []),
+        'bonds_bbb': len(assets.get('bbb') or []),
+        'bonds_bb': len(assets.get('bb') or []),
+        'etfs': len(assets.get('etfs') or []),
+    }
+
+    if sum(raw_distribution.values()) == 0:
+        return None
+
+    return _normalize_distribution(raw_distribution)
+
+
 def _distribution_from_risk_archetype(risk_archetype: dict) -> dict:
     distribution = {
         'treasuries': risk_archetype.get('treasuries', 0),
@@ -651,24 +669,20 @@ def _persist_investment_proposal(
     investment_proposal: list[dict],
     risk_profile_id,
     source_type: str,
-    portfolio_plan_id=None,
 ):
     proposal_record = _serialize_investment_proposal(
         investment_proposal=investment_proposal,
         risk_profile_id=risk_profile_id,
         source_type=source_type,
-        portfolio_plan_id=portfolio_plan_id,
     )
 
     logger.announcement('Saving investment proposal...')
     existing_proposals = []
-    if portfolio_plan_id:
-        existing_proposals = db.read(table='investment_proposal', query={'portfolio_plan_id': portfolio_plan_id}) or []
-    elif risk_profile_id:
+    if risk_profile_id:
         matching_risk_profile_proposals = db.read(table='investment_proposal', query={'risk_profile_id': risk_profile_id}) or []
         existing_proposals = [
             proposal for proposal in matching_risk_profile_proposals
-            if not proposal.get('portfolio_plan_id')
+            if str(proposal.get('source_type') or '').strip() == source_type
         ]
 
     existing_proposals = sorted(
@@ -697,9 +711,9 @@ def _persist_investment_proposal(
 
 def _normalize_bond_record(record: dict):
     normalized = {
-        'symbol': str(record.get('Symbol_x', '')),
-        'current_yield': float(record.get('Current Yield_x', 0) or 0),
-        'equivalent': str(record.get('S&P Equivalent_x', '')),
+        'symbol': str(record.get('symbol', record.get('Symbol_x', ''))),
+        'current_yield': float(record.get('current_yield', record.get('Current Yield_x', 0)) or 0),
+        'equivalent': str(record.get('equivalent', record.get('S&P Equivalent_x', ''))),
     }
     if 'percentage' in record:
         normalized['percentage'] = float(record.get('percentage') or 0)
@@ -710,12 +724,10 @@ def _serialize_investment_proposal(
     investment_proposal: list[dict],
     risk_profile_id,
     source_type: str,
-    portfolio_plan_id=None,
 ):
     return {
         'assets': _assets_from_investment_proposal(investment_proposal),
         'risk_profile_id': risk_profile_id,
-        'portfolio_plan_id': portfolio_plan_id,
         'source_type': source_type,
     }
 
@@ -730,14 +742,12 @@ def _build_investment_proposal_preview(
     investment_proposal: list[dict],
     risk_profile_id,
     distribution: dict,
-    portfolio_plan_id=None,
 ):
     normalized_distribution = _normalize_distribution(distribution)
     proposal_record = _serialize_investment_proposal(
         investment_proposal=investment_proposal,
         risk_profile_id=risk_profile_id,
         source_type='planner',
-        portfolio_plan_id=portfolio_plan_id,
     )
 
     bucket_mapping = [
@@ -777,13 +787,12 @@ def _build_investment_proposal_preview(
 
 def _derive_distribution_for_saved_proposal(proposal: dict) -> dict | None:
     source_type = str(proposal.get('source_type') or '').strip()
-    portfolio_plan_id = proposal.get('portfolio_plan_id')
     risk_profile_id = proposal.get('risk_profile_id')
 
-    if source_type == 'planner' and portfolio_plan_id:
-        portfolio_plans = db.read(table='portfolio_plan', query={'id': portfolio_plan_id}) or []
-        if portfolio_plans:
-            return _distribution_from_portfolio_plan(portfolio_plans[0])
+    if source_type == 'planner':
+        derived_from_assets = _distribution_from_saved_assets_payload(_assets_from_saved_proposal(proposal))
+        if derived_from_assets:
+            return derived_from_assets
 
     if risk_profile_id:
         risk_profiles = db.read(table='risk_profile', query={'id': risk_profile_id}) or []
@@ -798,7 +807,7 @@ def _derive_distribution_for_saved_proposal(proposal: dict) -> dict | None:
 def _normalize_saved_investment_proposal(proposal: dict) -> dict:
     normalized_source_type = str(proposal.get('source_type') or '').strip()
     if normalized_source_type not in {'hub_original', 'planner', 'custom'}:
-        normalized_source_type = 'planner' if proposal.get('portfolio_plan_id') else 'hub_original'
+        normalized_source_type = 'hub_original'
 
     return {
         **proposal,
@@ -945,7 +954,6 @@ def create_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
         investment_proposal = _build_investment_proposal_template()
         distribution = _distribution_from_portfolio_plan(portfolio_plan)
         risk_profile_id = portfolio_plan.get('risk_profile_id')
-        portfolio_plan_id = portfolio_plan.get('id')
 
         _populate_investment_proposal_from_distribution(
             investment_proposal=investment_proposal,
@@ -961,7 +969,6 @@ def create_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
         investment_proposal,
         risk_profile_id,
         'planner',
-        portfolio_plan_id=portfolio_plan_id,
     )
 
 
@@ -977,7 +984,6 @@ def preview_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
         investment_proposal = _build_investment_proposal_template()
         distribution = _distribution_from_portfolio_plan(portfolio_plan)
         risk_profile_id = portfolio_plan.get('risk_profile_id')
-        portfolio_plan_id = portfolio_plan.get('id')
 
         _populate_investment_proposal_from_distribution(
             investment_proposal=investment_proposal,
@@ -992,7 +998,6 @@ def preview_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
         investment_proposal,
         risk_profile_id,
         distribution,
-        portfolio_plan_id=portfolio_plan_id,
     )
 
 @handle_exception

@@ -47,18 +47,15 @@ def preview_with_portfolio_plan_route():
 @bp.route('/read', methods=['GET'])
 @format_response
 def read_route():
-    """Read investment proposals filtered by proposal id, risk_profile_id, portfolio_plan_id, or account_id."""
+    """Read investment proposals filtered by proposal id, risk_profile_id, or account_id."""
     query = {}
     id = request.args.get('id', None)
     risk_profile_id = request.args.get('risk_profile_id', None)
-    portfolio_plan_id = request.args.get('portfolio_plan_id', None)
     account_id = request.args.get('account_id', None)
     if id:
         query['id'] = id
     if risk_profile_id:
         query['risk_profile_id'] = risk_profile_id
-    if portfolio_plan_id:
-        query['portfolio_plan_id'] = portfolio_plan_id
     if account_id:
         query['account_id'] = account_id
     return read_investment_proposals(query=query)
