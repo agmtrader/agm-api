@@ -100,12 +100,44 @@ risk_archetypes = [
 def list_risk_archetypes():
     return risk_archetypes
 
+
+def get_risk_archetype_for_score(score) -> dict | None:
+    try:
+        normalized_score = float(score)
+    except (TypeError, ValueError):
+        return None
+
+    return next(
+        (
+            risk_archetype for risk_archetype in risk_archetypes
+            if (
+                float(risk_archetype['min_score']) <= normalized_score < float(risk_archetype['max_score'])
+                or (normalized_score == float(risk_archetype['max_score']) and float(risk_archetype['max_score']) == 10)
+            )
+        ),
+        None
+    )
+
+
+def _with_derived_risk_archetype(risk_profile: dict) -> dict:
+    if not isinstance(risk_profile, dict):
+        return risk_profile
+
+    derived_risk_archetype = get_risk_archetype_for_score(risk_profile.get('score'))
+    return {
+        **risk_profile,
+        'assigned_risk_archetype': derived_risk_archetype.get('name') if derived_risk_archetype else None,
+    }
+
+
 @handle_exception
 def create_risk_profile(data: dict):
-    risk_profile_id = db.create(table='risk_profile', data=data)
+    data_to_save = {**(data or {})}
+    data_to_save.pop('assigned_risk_archetype', None)
+    risk_profile_id = db.create(table='risk_profile', data=data_to_save)
     return {'id': risk_profile_id}
 
 @handle_exception
 def read_risk_profiles(query: dict = None):
     risk_profiles = db.read(table='risk_profile', query=query)
-    return risk_profiles
+    return [_with_derived_risk_archetype(risk_profile) for risk_profile in risk_profiles]

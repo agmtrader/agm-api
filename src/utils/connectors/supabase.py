@@ -205,12 +205,8 @@ class Supabase:
             portfolio_plan_id = Column(UUID(as_uuid=True), ForeignKey('portfolio_plan.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            treasury = Column(ARRAY(JSONB), nullable=True)
-            aaa_a = Column(ARRAY(JSONB), nullable=False)
-            bbb = Column(ARRAY(JSONB), nullable=False)
-            bb = Column(ARRAY(JSONB), nullable=False)
-            etfs = Column(ARRAY(JSONB), nullable=False)
-            distribution = Column(JSONB, nullable=True)
+            source_type = Column(Text, nullable=False)
+            assets = Column(JSONB, nullable=True)
 
         class ManagementTypeRequest(self.Base):
             __tablename__ = 'management_type_request'
@@ -231,7 +227,6 @@ class Supabase:
             name = Column(Text, nullable=True)
             answers = Column(JSONB, nullable=True)
             raw_answers = Column(JSONB, nullable=True)
-            assigned_risk_archetype = Column(Text, nullable=True)
 
         class PortfolioPlan(self.Base):
             __tablename__ = 'portfolio_plan'
