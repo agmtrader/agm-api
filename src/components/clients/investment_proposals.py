@@ -335,12 +335,8 @@ def _load_investment_proposal_context() -> dict:
                 .str[0]
         )
 
-    merged_df['Current Yield_x'] = (
-        merged_df['Current Yield_x']
-            .astype(str)
-            .str.replace('%', '', regex=False)
-            .astype(float)
-            .round(2)
+    merged_df['Current Yield_x'] = merged_df['Current Yield_x'].apply(
+        lambda value: _normalize_yield_percent(_to_float_or_none(value))
     )
 
     merged_df = (
