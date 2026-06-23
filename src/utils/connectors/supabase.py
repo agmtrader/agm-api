@@ -206,6 +206,7 @@ class Supabase:
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             source_type = Column(Text, nullable=False)
             assets = Column(JSONB, nullable=True)
+            planner_inputs = Column(JSONB, nullable=True)
 
         class ManagementTypeRequest(self.Base):
             __tablename__ = 'management_type_request'
