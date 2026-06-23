@@ -3,6 +3,7 @@
 - Be direct and honest. Do not sugarcoat results.
 - If context is missing, ask before guessing.
 - Prefer showing the exact payload/error over summarizing too early.
+- If backend code needs database schema changes, add the SQL migration script in the same change. Do not ship API model changes without SQL.
 
 ## Python Environment
 

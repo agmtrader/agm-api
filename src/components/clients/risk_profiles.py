@@ -6,87 +6,95 @@ logger.announcement('Initializing Risk Profile Service', type='info')
 logger.announcement('Initialized Risk Profile Service', type='success')
 
 risk_archetypes = [
-  {
-    'id': 1,
-    'name': 'Conservative A',
-    'bonds_aaa_a': 0.3,
-    'bonds_bbb': 0.7,
-    'bonds_bb': 0,
-    'etfs': 0,
-    'min_score': 0,
-    'max_score': 0.9
-  },
-  {
-    'id': 2,
-    'name': 'Conservative B',
-    'bonds_aaa_a': 0.18,
-    'bonds_bbb': 0.54,
-    'bonds_bb': .18,
-    'etfs': .1,
-    'min_score': 0.9,
-    'max_score': 1.25
-  },
-  {
-    'id': 3,
-    'name': 'Moderate A',
-    'bonds_aaa_a': 0.16,
-    'bonds_bbb': 0.48,
-    'bonds_bb': 0.16,
-    'etfs': 0.2,
-    'min_score': 1.25,
-    'max_score': 1.5
-  },
-  {
-    'id': 4,
-    'name': 'Moderate B',
-    'bonds_aaa_a': 0.15,
-    'bonds_bbb': 0.375,
-    'bonds_bb': 0.15,
-    'etfs': 0.25,
-    'min_score': 1.5,
-    'max_score': 2
-  },
-  {
-    'id': 5,
-    'name': 'Moderate C',
-    'bonds_aaa_a': 0.14,
-    'bonds_bbb': 0.35,
-    'bonds_bb': 0.21,
-    'etfs': 0.3,
-    'min_score': 2,
-    'max_score': 2.5
-  },
-  {
-    'id': 6,
-    'name': 'Aggressive A',
-    'bonds_aaa_a': 0.13,
-    'bonds_bbb': 0.325,
-    'bonds_bb': .195,
-    'etfs': .35,
-    'min_score': 2.5,
-    'max_score': 2.75
-  },
-  {
-    'id': 7,
-    'name': 'Aggressive B',
-    'bonds_aaa_a': 0.12,
-    'bonds_bbb': 0.30,
-    'bonds_bb': 0.18,
-    'etfs': 0.4,
-    'min_score': 2.75,
-    'max_score': 3
-  },
-  {
-    'id': 8,
-    'name': 'Aggressive C',
-    'bonds_aaa_a': 0.05,
-    'bonds_bbb': 0.25,
-    'bonds_bb': 0.20,
-    'etfs': 0.5,
-    'min_score': 3,
-    'max_score': 10
-  }
-]
+    {
+      "id": 1,
+      "name": "Conservative A",
+      "treasuries": 0.5,
+      "bonds_aaa_a": 0.15,
+      "bonds_bbb": 0.35,
+      "bonds_bb": 0.0,
+      "etfs": 0.0,
+      "min_score": 0,
+      "max_score": 0.9
+    },
+    {
+      "id": 2,
+      "name": "Conservative B",
+      "treasuries": 0.0,
+      "bonds_aaa_a": 0.18,
+      "bonds_bbb": 0.54,
+      "bonds_bb": 0.08,
+      "etfs": 0.2,
+      "min_score": 0.9,
+      "max_score": 1.25
+    },
+    {
+      "id": 3,
+      "name": "Moderate A",
+      "treasuries": 0.0,
+      "bonds_aaa_a": 0.104,
+      "bonds_bbb": 0.312,
+      "bonds_bb": 0.234,
+      "etfs": 0.35,
+      "min_score": 1.25,
+      "max_score": 1.5
+    },
+    {
+      "id": 4,
+      "name": "Moderate B",
+      "treasuries": 0.0,
+      "bonds_aaa_a": 0.0,
+      "bonds_bbb": 0.25,
+      "bonds_bb": 0.25,
+      "etfs": 0.5,
+      "min_score": 1.5,
+      "max_score": 2
+    },
+    {
+      "id": 5,
+      "name": "Moderate C",
+      "treasuries": 0.0,
+      "bonds_aaa_a": 0.0,
+      "bonds_bbb": 0.16,
+      "bonds_bb": 0.24,
+      "etfs": 0.6,
+      "min_score": 2,
+      "max_score": 2.5
+    },
+    {
+      "id": 6,
+      "name": "Aggressive A",
+      "treasuries": 0.0,
+      "bonds_aaa_a": 0.0,
+      "bonds_bbb": 0.075,
+      "bonds_bb": 0.175,
+      "etfs": 0.75,
+      "min_score": 2.5,
+      "max_score": 2.75
+    },
+    {
+      "id": 7,
+      "name": "Aggressive B",
+      "treasuries": 0.0,
+      "bonds_aaa_a": 0.0,
+      "bonds_bbb": 0.04,
+      "bonds_bb": 0.16,
+      "etfs": 0.8,
+      "min_score": 2.75,
+      "max_score": 3
+    },
+    {
+      "id": 8,
+      "name": "Aggressive C",
+      "treasuries": 0.0,
+      "bonds_aaa_a": 0.0,
+      "bonds_bbb": 0.0,
+      "bonds_bb": 0.0,
+      "etfs": 1.0,
+      "min_score": 3,
+      "max_score": 10
+    }
+  ]
 
 @handle_exception
 def list_risk_archetypes():

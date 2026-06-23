@@ -5,8 +5,13 @@ from src.utils.connectors.supabase import db
 from src.utils.exception import handle_exception
 from src.utils.logger import logger
 import numpy as np
+import re
+import time
 
 TOTAL_ASSETS = 20
+INVESTMENT_PROPOSAL_CONTEXT_TTL_SECONDS = 300
+_investment_proposal_context_cache: dict | None = None
+_investment_proposal_context_cached_at = 0.0
 
 MOODYS_TO_SP_EQUIVALENT = {
     'AAA': 'AAA',
@@ -56,13 +61,23 @@ def _is_likely_ust_record(row: dict) -> bool:
     joined = ' '.join([
         str(row.get('Issuer', '') or ''),
         str(row.get('Company Name', '') or ''),
+        str(row.get('Ticker', '') or ''),
+        str(row.get('Symbol_x', '') or ''),
         str(row.get('Financial Instrument', '') or ''),
         str(row.get('Sector', '') or ''),
         str(row.get('Industry', '') or ''),
     ]).upper()
 
-    ust_tokens = ['UST', 'TREASURY', 'T-NOTE', 'TNOTE', 'T-BOND', 'TBOND', 'U.S. GOVT', 'US GOVT']
-    return any(token in joined for token in ust_tokens)
+    ust_patterns = [
+        r'\bUST\b',
+        r'\bTREASURY\b',
+        r'\bUNITED STATES TREASURY\b',
+        r'\bUS-T\b',
+        r'\bT-?NOTE\b',
+        r'\bT-?BOND\b',
+        r'\bU\.?S\.?\s+GOVT\b',
+    ]
+    return any(re.search(pattern, joined) for pattern in ust_patterns)
 
 
 def _resolve_rating(row: dict) -> str:
@@ -179,6 +194,18 @@ def _get_bucket_for_rating(rating: str) -> str:
 
 
 def _load_investment_proposal_context() -> dict:
+    global _investment_proposal_context_cache
+    global _investment_proposal_context_cached_at
+
+    now = time.monotonic()
+    cache_is_fresh = (
+        _investment_proposal_context_cache is not None
+        and (now - _investment_proposal_context_cached_at) < INVESTMENT_PROPOSAL_CONTEXT_TTL_SECONDS
+    )
+    if cache_is_fresh:
+        logger.info('Using cached investment proposal context.')
+        return _investment_proposal_context_cache
+
     # Get open positions
     open_positions = get_open_positions_report()
     open_positions_df = pd.DataFrame(open_positions)
@@ -268,8 +295,9 @@ def _load_investment_proposal_context() -> dict:
     logger.announcement(f'Total bonds from UST: {len(ust_df)}')
     logger.announcement(f'Total bonds from merged universe: {len(merged_universe_df)}')
 
-    # Use RTD report as the base for candidates
-    merged_df = rtd_df.copy()
+    # Use the combined corporate + UST universe as the base for candidates so
+    # treasury allocations can actually populate the treasury bucket.
+    merged_df = pd.concat([rtd_df.copy(), ust_df.copy()], ignore_index=True)
 
     # Rename columns to match expected format (using _x suffix as legacy from previous merge)
     merged_df = merged_df.rename(columns={
@@ -281,6 +309,14 @@ def _load_investment_proposal_context() -> dict:
 
     logger.announcement(f'Total bonds from RTD: {len(merged_df)}')
     logger.info(f"Merged DF columns: {merged_df.columns.tolist()}")
+
+    if 'S&P Equivalent_x' in merged_df.columns:
+        missing_equivalent_mask = merged_df['S&P Equivalent_x'].astype(str).str.strip() == ''
+        if missing_equivalent_mask.any():
+            merged_df.loc[missing_equivalent_mask, 'S&P Equivalent_x'] = merged_df[missing_equivalent_mask].apply(
+                lambda row: _resolve_rating(row.to_dict()),
+                axis=1,
+            )
 
     if 'S&P Equivalent_x' in merged_df.columns:
         logger.info(f"S&P Equivalent_x unique values: {merged_df['S&P Equivalent_x'].unique()}")
@@ -321,13 +357,17 @@ def _load_investment_proposal_context() -> dict:
     non_numeric_cols = merged_df.select_dtypes(exclude=['number']).columns
     merged_df[non_numeric_cols] = merged_df[non_numeric_cols].fillna('')
 
-    return {
+    context = {
         'bonds_df_no_duplicates': bonds_df_no_duplicates,
         'avg_yield': avg_yield,
         'rtd_df': rtd_df,
         'merged_universe_df': merged_universe_df,
         'merged_df': merged_df
     }
+    _investment_proposal_context_cache = context
+    _investment_proposal_context_cached_at = now
+    logger.info(f'Cached investment proposal context for {INVESTMENT_PROPOSAL_CONTEXT_TTL_SECONDS} seconds.')
+    return context
 
 
 def _normalize_distribution(distribution: dict) -> dict:
@@ -357,7 +397,70 @@ def _distribution_from_risk_archetype(risk_archetype: dict) -> dict:
     return _normalize_distribution(distribution)
 
 
+def _js_round(value: float) -> int:
+    return int(np.floor(float(value) + 0.5))
+
+
+def _default_allocation_from_risk_archetype(risk_archetype: dict) -> dict:
+    bonds = _js_round((
+        float(risk_archetype.get('bonds_aaa_a', 0) or 0)
+        + float(risk_archetype.get('bonds_bbb', 0) or 0)
+        + float(risk_archetype.get('bonds_bb', 0) or 0)
+    ) * 100)
+
+    return {
+        'cash': 0,
+        'treasuries': _js_round(float(risk_archetype.get('treasuries', 0) or 0) * 100),
+        'bonds': bonds,
+        'stocks': _js_round(float(risk_archetype.get('etfs', 0) or 0) * 100),
+    }
+
+
+def _default_bond_rating_allocation_from_risk_archetype(risk_archetype: dict) -> dict:
+    total_bond_share = (
+        float(risk_archetype.get('bonds_aaa_a', 0) or 0)
+        + float(risk_archetype.get('bonds_bbb', 0) or 0)
+        + float(risk_archetype.get('bonds_bb', 0) or 0)
+    )
+
+    if total_bond_share <= 0:
+        return {'aaa': 0, 'bbb': 50, 'bb': 50}
+
+    aaa = _js_round((float(risk_archetype.get('bonds_aaa_a', 0) or 0) / total_bond_share) * 100)
+    bbb = _js_round((float(risk_archetype.get('bonds_bbb', 0) or 0) / total_bond_share) * 100)
+    bb = max(0, 100 - aaa - bbb)
+    return {'aaa': aaa, 'bbb': bbb, 'bb': bb}
+
+
+def _portfolio_plan_matches_selected_archetype_defaults(portfolio_plan: dict, risk_archetype: dict) -> bool:
+    allocation = portfolio_plan.get('allocation') or {}
+    bond_rating_allocation = portfolio_plan.get('bond_rating_allocation') or {}
+
+    expected_allocation = _default_allocation_from_risk_archetype(risk_archetype)
+    expected_bond_rating_allocation = _default_bond_rating_allocation_from_risk_archetype(risk_archetype)
+
+    allocation_matches = all(
+        float(allocation.get(key) or 0) == float(expected_allocation.get(key) or 0)
+        for key in expected_allocation
+    )
+    bond_rating_matches = all(
+        float(bond_rating_allocation.get(key) or 0) == float(expected_bond_rating_allocation.get(key) or 0)
+        for key in expected_bond_rating_allocation
+    )
+
+    return allocation_matches and bond_rating_matches
+
+
 def _distribution_from_portfolio_plan(portfolio_plan: dict) -> dict:
+    selected_archetype_name = str(portfolio_plan.get('selected_risk_archetype') or '').strip()
+    if selected_archetype_name:
+        selected_archetype = next(
+            (risk_archetype for risk_archetype in risk_archetypes if str(risk_archetype.get('name') or '').strip() == selected_archetype_name),
+            None,
+        )
+        if selected_archetype and _portfolio_plan_matches_selected_archetype_defaults(portfolio_plan, selected_archetype):
+            return _distribution_from_risk_archetype(selected_archetype)
+
     allocation = portfolio_plan.get('allocation') or {}
     bond_rating_allocation = portfolio_plan.get('bond_rating_allocation') or {}
 
@@ -419,12 +522,17 @@ def _populate_investment_proposal_from_distribution(
             used_symbols.add('SPY')
 
         sanitized_equivalents = asset_type['equivalents']
-        combined_df = merged_df[
-            merged_df['S&P Equivalent_x']
-                .astype(str)
-                .str.replace(r'[+\-]', '', regex=True)
-                .isin(sanitized_equivalents)
-        ]
+        if asset_type['name'] == 'treasuries':
+            combined_df = merged_df[
+                merged_df.apply(lambda row: _resolve_rating(row.to_dict()) == 'UST', axis=1)
+            ]
+        else:
+            combined_df = merged_df[
+                merged_df['S&P Equivalent_x']
+                    .astype(str)
+                    .str.replace(r'[+\-]', '', regex=True)
+                    .isin(sanitized_equivalents)
+            ]
 
         combined_df = (
             combined_df
@@ -436,9 +544,15 @@ def _populate_investment_proposal_from_distribution(
         combined_df = combined_df[~combined_df['Ticker'].isin(used_symbols)]
         top_bonds = combined_df.head(max(0, assets_to_invest - len(asset_type['bonds'])))
 
-        asset_type['bonds'].extend(
-            top_bonds[['Symbol_x', 'Current Yield_x', 'S&P Equivalent_x']].to_dict(orient='records')
-        )
+        normalized_top_bonds = []
+        for _, row in top_bonds.iterrows():
+            normalized_top_bonds.append({
+                'Symbol_x': row['Symbol_x'],
+                'Current Yield_x': row['Current Yield_x'],
+                'S&P Equivalent_x': _resolve_rating(row.to_dict()) or row['S&P Equivalent_x'],
+            })
+
+        asset_type['bonds'].extend(normalized_top_bonds)
         used_symbols.update(top_bonds['Ticker'].tolist())
 
     rating_to_bucket = {}
@@ -496,38 +610,29 @@ def _persist_investment_proposal(
     distribution: dict,
     portfolio_plan_id=None,
 ):
-    # Normalize and persist investment proposal to match database schema
-    def normalize_bond(record: dict):
-        normalized = {
-            'symbol': str(record.get('Symbol_x', '')),
-            'current_yield': float(record.get('Current Yield_x', 0) or 0),
-            'equivalent': str(record.get('S&P Equivalent_x', '')),
-        }
-        if 'percentage' in record:
-            normalized['percentage'] = float(record.get('percentage') or 0)
-        return normalized
-
-    def get_bucket(name: str):
-        bucket = next((x for x in investment_proposal if x['name'] == name), None)
-        return [normalize_bond(b) for b in (bucket['bonds'] if bucket else [])]
-
-    proposal_record = {
-        'treasury': get_bucket('treasuries'),
-        'aaa_a': get_bucket('bonds_aaa_a'),
-        'bbb': get_bucket('bonds_bbb'),
-        'bb': get_bucket('bonds_bb'),
-        'etfs': get_bucket('etfs'),
-        'risk_profile_id': risk_profile_id,
-        'portfolio_plan_id': portfolio_plan_id,
-        'distribution': distribution,
-    }
+    proposal_record = _serialize_investment_proposal(
+        investment_proposal=investment_proposal,
+        risk_profile_id=risk_profile_id,
+        distribution=distribution,
+        portfolio_plan_id=portfolio_plan_id,
+    )
 
     logger.announcement('Saving investment proposal...')
     existing_proposals = []
     if portfolio_plan_id:
         existing_proposals = db.read(table='investment_proposal', query={'portfolio_plan_id': portfolio_plan_id}) or []
     elif risk_profile_id:
-        existing_proposals = db.read(table='investment_proposal', query={'risk_profile_id': risk_profile_id}) or []
+        matching_risk_profile_proposals = db.read(table='investment_proposal', query={'risk_profile_id': risk_profile_id}) or []
+        existing_proposals = [
+            proposal for proposal in matching_risk_profile_proposals
+            if not proposal.get('portfolio_plan_id')
+        ]
+
+    existing_proposals = sorted(
+        existing_proposals,
+        key=lambda proposal: str(proposal.get('created') or ''),
+        reverse=True,
+    )
 
     if existing_proposals:
         proposal_id = db.update(
@@ -540,9 +645,97 @@ def _persist_investment_proposal(
         proposal_id = db.create(table='investment_proposal', data=proposal_record)
         logger.success(f'Investment proposal saved with id: {proposal_id}')
 
+    saved_proposals = db.read(table='investment_proposal', query={'id': proposal_id}) or []
+    if saved_proposals:
+        return saved_proposals[0]
+
+    return {'id': proposal_id, **proposal_record}
+
+
+def _normalize_bond_record(record: dict):
+    normalized = {
+        'symbol': str(record.get('Symbol_x', '')),
+        'current_yield': float(record.get('Current Yield_x', 0) or 0),
+        'equivalent': str(record.get('S&P Equivalent_x', '')),
+    }
+    if 'percentage' in record:
+        normalized['percentage'] = float(record.get('percentage') or 0)
+    return normalized
+
+
+def _serialize_investment_proposal(
+    investment_proposal: list[dict],
+    risk_profile_id,
+    distribution: dict,
+    portfolio_plan_id=None,
+):
+    def get_bucket(name: str):
+        bucket = next((x for x in investment_proposal if x['name'] == name), None)
+        return [_normalize_bond_record(bond) for bond in (bucket['bonds'] if bucket else [])]
+
     return {
-        'id': proposal_id,
+        'treasury': get_bucket('treasuries'),
+        'aaa_a': get_bucket('bonds_aaa_a'),
+        'bbb': get_bucket('bonds_bbb'),
+        'bb': get_bucket('bonds_bb'),
+        'etfs': get_bucket('etfs'),
+        'risk_profile_id': risk_profile_id,
+        'portfolio_plan_id': portfolio_plan_id,
+        'distribution': distribution,
+    }
+
+
+def _average_bucket_yield(bonds: list[dict]) -> float:
+    if not bonds:
+        return 0.0
+    return sum(float(bond.get('current_yield') or 0) for bond in bonds) / len(bonds)
+
+
+def _build_investment_proposal_preview(
+    investment_proposal: list[dict],
+    risk_profile_id,
+    distribution: dict,
+    portfolio_plan_id=None,
+):
+    normalized_distribution = _normalize_distribution(distribution)
+    proposal_record = _serialize_investment_proposal(
+        investment_proposal=investment_proposal,
+        risk_profile_id=risk_profile_id,
+        distribution=normalized_distribution,
+        portfolio_plan_id=portfolio_plan_id,
+    )
+
+    bucket_mapping = [
+        ('treasury', 'treasuries'),
+        ('aaa_a', 'bonds_aaa_a'),
+        ('bbb', 'bonds_bbb'),
+        ('bb', 'bonds_bb'),
+        ('etfs', 'etfs'),
+    ]
+
+    bucket_summaries = []
+    expected_average_yield = 0.0
+    total_assets = 0
+
+    for record_key, distribution_key in bucket_mapping:
+        bonds = proposal_record.get(record_key, [])
+        average_yield = _average_bucket_yield(bonds)
+        weight = float(normalized_distribution.get(distribution_key, 0) or 0)
+        total_assets += len(bonds)
+        expected_average_yield += average_yield * weight
+        bucket_summaries.append({
+            'key': distribution_key,
+            'weight': weight,
+            'asset_count': len(bonds),
+            'average_yield': average_yield,
+        })
+
+    return {
         **proposal_record,
+        'total_assets': total_assets,
+        'bucket_summaries': bucket_summaries,
+        'expected_average_yield': round(expected_average_yield, 6),
+        'expected_return_decimal': round(expected_average_yield / 100, 8),
     }
 
 @handle_exception
@@ -706,6 +899,37 @@ def create_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
         raise Exception(f'Failed creating investment proposal from plan: {exc}')
 
     return _persist_investment_proposal(
+        investment_proposal,
+        risk_profile_id,
+        distribution,
+        portfolio_plan_id=portfolio_plan_id,
+    )
+
+
+@handle_exception
+def preview_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
+    logger.announcement('Previewing investment proposal from portfolio plan...')
+
+    try:
+        if not portfolio_plan:
+            raise Exception('Portfolio plan is required when previewing an investment proposal from a plan.')
+
+        context = _load_investment_proposal_context()
+        investment_proposal = _build_investment_proposal_template()
+        distribution = _distribution_from_portfolio_plan(portfolio_plan)
+        risk_profile_id = portfolio_plan.get('risk_profile_id')
+        portfolio_plan_id = portfolio_plan.get('id')
+
+        _populate_investment_proposal_from_distribution(
+            investment_proposal=investment_proposal,
+            distribution=distribution,
+            context=context,
+        )
+    except Exception as exc:
+        logger.error(f'Failed previewing investment proposal from plan: {exc}')
+        raise Exception(f'Failed previewing investment proposal from plan: {exc}')
+
+    return _build_investment_proposal_preview(
         investment_proposal,
         risk_profile_id,
         distribution,

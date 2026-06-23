@@ -3,6 +3,7 @@ from src.components.clients.investment_proposals import (
     create_investment_proposal_with_assets,
     create_investment_proposal_with_portfolio_plan,
     create_investment_proposal_with_risk_profile,
+    preview_investment_proposal_with_portfolio_plan,
     read_investment_proposals,
 )
 from src.utils.response import format_response
@@ -33,6 +34,15 @@ def create_with_portfolio_plan_route():
     payload = request.get_json(force=True)
     portfolio_plan = payload.get('portfolio_plan', None)
     return create_investment_proposal_with_portfolio_plan(portfolio_plan=portfolio_plan)
+
+
+@bp.route('/preview/plan', methods=['POST'])
+@format_response
+def preview_with_portfolio_plan_route():
+    """Preview an investment proposal from a portfolio plan payload without persisting it."""
+    payload = request.get_json(force=True)
+    portfolio_plan = payload.get('portfolio_plan', None)
+    return preview_investment_proposal_with_portfolio_plan(portfolio_plan=portfolio_plan)
 
 @bp.route('/read', methods=['GET'])
 @format_response
