@@ -447,6 +447,96 @@ def _distribution_from_saved_assets_payload(assets: dict) -> dict | None:
     return _normalize_distribution(raw_distribution)
 
 
+def _clean_candidate_pool(candidate_df: pd.DataFrame) -> pd.DataFrame:
+    if candidate_df.empty:
+        return candidate_df
+
+    cleaned = candidate_df.copy()
+    cleaned = cleaned[cleaned['Ticker'].astype(str).str.strip() != '']
+    cleaned = cleaned[cleaned['Current Yield_x'].notna()]
+    cleaned = cleaned[cleaned['Current Yield_x'] > 0]
+    cleaned = cleaned[cleaned['Current Yield_x'] <= 25]
+    return cleaned.reset_index(drop=True)
+
+
+def _bucket_selection_profile(candidate_df: pd.DataFrame) -> dict | None:
+    if candidate_df.empty:
+        return None
+
+    yields = candidate_df['Current Yield_x'].astype(float)
+    median_yield = float(yields.median())
+    mad = float((yields - median_yield).abs().median())
+    mad_floor = max(mad, 0.35)
+    lower_bound = max(0.0, median_yield - (2.5 * mad_floor))
+    upper_bound = min(float(yields.quantile(0.90)), median_yield + (2.5 * mad_floor))
+    target_yield = min(float(yields.quantile(0.75)), median_yield + (1.25 * mad_floor))
+    spread = max(upper_bound - lower_bound, 1.0)
+
+    return {
+        'median_yield': median_yield,
+        'mad': mad_floor,
+        'lower_bound': lower_bound,
+        'upper_bound': upper_bound,
+        'target_yield': target_yield,
+        'spread': spread,
+    }
+
+
+def _screen_outliers_for_bucket(candidate_df: pd.DataFrame, selection_profile: dict | None) -> pd.DataFrame:
+    if candidate_df.empty or not selection_profile:
+        return candidate_df
+
+    screened = candidate_df[
+        (candidate_df['Current Yield_x'] >= selection_profile['lower_bound'])
+        & (candidate_df['Current Yield_x'] <= selection_profile['upper_bound'])
+    ]
+
+    if len(screened) >= max(3, min(5, len(candidate_df))):
+        return screened.reset_index(drop=True)
+    return candidate_df.reset_index(drop=True)
+
+
+def _score_candidates_for_bucket(candidate_df: pd.DataFrame, selection_profile: dict | None) -> pd.DataFrame:
+    if candidate_df.empty:
+        return candidate_df
+
+    if not selection_profile:
+        scored = candidate_df.copy()
+        scored['_selector_score'] = 0.0
+        return scored
+
+    target_yield = float(selection_profile['target_yield'])
+    spread = float(selection_profile['spread'])
+
+    scored = candidate_df.copy()
+    scored['_selector_score'] = scored['Current Yield_x'].apply(
+        lambda candidate_yield: max(0.0, 1.0 - (abs(float(candidate_yield) - target_yield) / spread))
+    )
+    scored['_distance_to_target'] = scored['Current Yield_x'].apply(
+        lambda candidate_yield: abs(float(candidate_yield) - target_yield)
+    )
+
+    scored = scored.sort_values(
+        by=['_selector_score', '_distance_to_target', 'Current Yield_x'],
+        ascending=[False, True, False],
+    )
+    return scored
+
+
+def _prepare_bucket_candidates(
+    candidate_df: pd.DataFrame,
+    used_symbols: set[str],
+) -> tuple[pd.DataFrame, dict | None]:
+    cleaned_candidates = _clean_candidate_pool(candidate_df)
+    selection_profile = _bucket_selection_profile(cleaned_candidates)
+    screened_candidates = _screen_outliers_for_bucket(cleaned_candidates, selection_profile)
+    rescored_profile = _bucket_selection_profile(screened_candidates) or selection_profile
+    ranked_candidates = _score_candidates_for_bucket(screened_candidates, rescored_profile)
+    ranked_candidates = ranked_candidates.groupby('Ticker').head(1)
+    ranked_candidates = ranked_candidates[~ranked_candidates['Ticker'].isin(used_symbols)]
+    return ranked_candidates, rescored_profile
+
+
 def _normalize_planner_inputs(planner_inputs: dict | None) -> dict | None:
     if not isinstance(planner_inputs, dict):
         return None
@@ -582,6 +672,7 @@ def _populate_investment_proposal_from_distribution(
     normalized_distribution = _normalize_distribution(distribution)
 
     used_symbols = _initialize_used_symbols(bonds_df_no_duplicates)
+    bucket_selection_profiles: dict[str, dict | None] = {}
 
     for asset_type in investment_proposal:
         percentage = float(normalized_distribution.get(asset_type['name'], 0) or 0)
@@ -613,15 +704,12 @@ def _populate_investment_proposal_from_distribution(
                     .isin(sanitized_equivalents)
             ]
 
-        combined_df = (
-            combined_df
-                .sort_values(by='Current Yield_x', ascending=False)
-                .groupby('Ticker')
-                .head(1)
+        ranked_candidates, selection_profile = _prepare_bucket_candidates(
+            candidate_df=combined_df,
+            used_symbols=used_symbols,
         )
-
-        combined_df = combined_df[~combined_df['Ticker'].isin(used_symbols)]
-        top_bonds = combined_df.head(max(0, assets_to_invest - len(asset_type['bonds'])))
+        bucket_selection_profiles[asset_type['name']] = selection_profile
+        top_bonds = ranked_candidates.head(max(0, assets_to_invest - len(asset_type['bonds'])))
 
         normalized_top_bonds = []
         for _, row in top_bonds.iterrows():
@@ -648,20 +736,43 @@ def _populate_investment_proposal_from_distribution(
 
     if remaining_needed > 0:
         remaining_pool = (
-            merged_df[~merged_df['Ticker'].isin(used_symbols)]
-                .sort_values(by='Current Yield_x', ascending=False)
-                .groupby('Ticker')
-                .head(1)
+            _clean_candidate_pool(merged_df[~merged_df['Ticker'].isin(used_symbols)])
         )
+        scored_remaining_pool = []
+        for _, row in remaining_pool.iterrows():
+            rating_key = str(row['S&P Equivalent_x']).replace('+', '').replace('-', '')
+            bucket = rating_to_bucket.get(rating_key)
+            if not bucket:
+                bucket = next(bucket_ref for bucket_ref in investment_proposal if bucket_ref['name'] == 'bonds_bb')
+
+            selection_profile = bucket_selection_profiles.get(bucket['name'])
+            target_yield = float(selection_profile['target_yield']) if selection_profile else float(row['Current Yield_x'])
+            spread = float(selection_profile['spread']) if selection_profile else 1.0
+            selector_score = max(0.0, 1.0 - (abs(float(row['Current Yield_x']) - target_yield) / spread))
+
+            scored_remaining_pool.append({
+                **row.to_dict(),
+                '_bucket_name': bucket['name'],
+                '_selector_score': selector_score,
+            })
+
+        remaining_pool = pd.DataFrame(scored_remaining_pool)
+        if not remaining_pool.empty:
+            remaining_pool = (
+                remaining_pool
+                    .sort_values(by=['_selector_score', 'Current Yield_x'], ascending=[False, False])
+                    .groupby('Ticker')
+                    .head(1)
+            )
 
         for _, row in remaining_pool.iterrows():
             if remaining_needed == 0:
                 break
 
-            rating_key = str(row['S&P Equivalent_x']).replace('+', '').replace('-', '')
-            bucket = rating_to_bucket.get(rating_key)
-            if not bucket:
-                bucket = next(bucket_ref for bucket_ref in investment_proposal if bucket_ref['name'] == 'bonds_bb')
+            bucket = next(
+                bucket_ref for bucket_ref in investment_proposal
+                if bucket_ref['name'] == str(row.get('_bucket_name') or 'bonds_bb')
+            )
 
             if bucket_needs[bucket['name']] <= 0:
                 continue
