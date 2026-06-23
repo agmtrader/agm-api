@@ -704,9 +704,9 @@ def _persist_investment_proposal(
 
     saved_proposals = db.read(table='investment_proposal', query={'id': proposal_id}) or []
     if saved_proposals:
-        return saved_proposals[0]
+        return _normalize_saved_investment_proposal(saved_proposals[0])
 
-    return {'id': proposal_id, **proposal_record}
+    return _normalize_saved_investment_proposal({'id': proposal_id, **proposal_record})
 
 
 def _normalize_bond_record(record: dict):
