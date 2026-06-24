@@ -87,6 +87,7 @@ jobs:
             Below is the list of aliases updated:
 
             ${{ needs.update-aliases.outputs.accounts }}
+            
 
   notify-failure:
     needs: update-aliases
