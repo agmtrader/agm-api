@@ -91,14 +91,16 @@ def get_deposits_withdrawals_route():
 @bp.route('/deposits_withdrawals/monthly', methods=['GET'])
 @format_response
 def get_monthly_deposits_withdrawals_route():
-    """Read monthly deposits and withdrawals filtered by one or more years and months."""
+    """Read deposits and withdrawals filtered by date range or one or more years and months."""
     years = request.args.get('years', request.args.get('year', '')).split(',')
     months = request.args.get('months', request.args.get('month', '')).split(',')
+    start_date = request.args.get('start_date', '').strip() or None
+    end_date = request.args.get('end_date', '').strip() or None
 
     years = [y.strip() for y in years if y.strip()]
     months = [m.strip() for m in months if m.strip()]
 
-    return get_monthly_deposits_withdrawals(years, months)
+    return get_monthly_deposits_withdrawals(years, months, start_date=start_date, end_date=end_date)
 
 @bp.route('/brokerage_commissions', methods=['GET'])
 @format_response

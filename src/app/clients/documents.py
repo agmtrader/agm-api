@@ -8,7 +8,8 @@ bp = Blueprint('documents', __name__)
 @format_response
 def read_documents_route():
     """Read all document records and account-document links without returning raw file data."""
-    documents, account_documents = read_documents(strip_data=True)
+    include_processing = request.args.get('include_processing', 'false').strip().lower() in ('1', 'true', 'yes')
+    documents, account_documents = read_documents(strip_data=True, include_processing=include_processing)
     return {'documents': documents, 'account_documents': account_documents }
 
 @bp.route('/get_document_data', methods=['GET'])

@@ -159,7 +159,8 @@ def read_contact_documents(
     contact_id: str = None,
     document_ids: list[str] = None,
     include_data: bool = False,
-    include_documents: bool = True
+    include_documents: bool = True,
+    include_processing: bool = False,
 ):
     query = {'contact_id': contact_id} if contact_id else {}
     links = db.read(table=contact_document_table, query=query) or []
@@ -170,13 +171,57 @@ def read_contact_documents(
             if str(link.get('document_id') or '') in requested_document_ids
         ]
     if not include_documents:
-        return {'documents': [], 'contact_documents': links}
+        documents = []
+        if include_processing and links:
+            processing_rows = db.read(
+                table='document_processing',
+                query={'process_type': 'text_extraction'},
+            ) or []
+            processing_by_document_id = {
+                str(processing.get('document_id') or '').strip(): processing
+                for processing in processing_rows
+                if str(processing.get('document_id') or '').strip()
+            }
+            links = [
+                {
+                    **link,
+                    'document_processing': processing_by_document_id.get(str(link.get('document_id') or '').strip()),
+                }
+                for link in links
+            ]
+        return {'documents': documents, 'contact_documents': links}
 
+    requested_document_ids = {
+        str(link.get('document_id') or '').strip()
+        for link in links
+        if str(link.get('document_id') or '').strip()
+    }
     documents = []
     exclude = None if include_data else ['data']
-    for link in links:
-        document = db.read(table='document', query={'id': link.get('document_id')}, exclude_columns=exclude) or []
-        documents.extend(document)
+    processing_by_document_id = {}
+    if include_processing:
+        processing_rows = db.read(
+            table='document_processing',
+            query={'process_type': 'text_extraction'},
+        ) or []
+        processing_by_document_id = {
+            str(processing.get('document_id') or '').strip(): processing
+            for processing in processing_rows
+            if str(processing.get('document_id') or '').strip()
+        }
+    if requested_document_ids:
+        documents = [
+            doc for doc in (db.read(table='document', query={}, exclude_columns=exclude) or [])
+            if str(doc.get('id') or '').strip() in requested_document_ids
+        ]
+        if include_processing:
+            documents = [
+                {
+                    **doc,
+                    'document_processing': processing_by_document_id.get(str(doc.get('id') or '').strip()),
+                }
+                for doc in documents
+            ]
     return {'documents': documents, 'contact_documents': links}
 
 

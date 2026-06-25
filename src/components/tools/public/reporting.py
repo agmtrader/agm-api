@@ -352,20 +352,75 @@ def get_deposits_withdrawals():
     deposits_withdrawals = Drive.download_file(file_id=deposits_withdrawals_file[0]['id'], parse=True)
     return deposits_withdrawals
 
+def _parse_report_datetime(value):
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    normalized = text.replace('Z', '+00:00')
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        for fmt in ('%Y-%m-%d', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M'):
+            try:
+                parsed = datetime.strptime(text, fmt)
+                break
+            except ValueError:
+                continue
+        else:
+            return None
+
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(pytz.UTC).replace(tzinfo=None)
+
+    return parsed
+
+
+def _get_year_months_between(start_date: datetime, end_date: datetime):
+    periods = []
+    cursor = datetime(start_date.year, start_date.month, 1)
+    last_month = datetime(end_date.year, end_date.month, 1)
+
+    while cursor <= last_month:
+        periods.append((str(cursor.year), f'{cursor.month:02d}'))
+        if cursor.month == 12:
+            cursor = datetime(cursor.year + 1, 1, 1)
+        else:
+            cursor = datetime(cursor.year, cursor.month + 1, 1)
+
+    return periods
+
+
 @handle_exception
-def get_monthly_deposits_withdrawals(years: list, months: list):
+def get_monthly_deposits_withdrawals(years: list, months: list, start_date=None, end_date=None):
     """
     Extract deposits/withdrawals information grouped by year and month,
     keeping only the latest file available for each month.
 
     :param years: List of years to include
     :param months: List of months to include (as strings, e.g., '01', '02')
+    :param start_date: Inclusive lower datetime bound
+    :param end_date: Inclusive upper datetime bound
     :return: List of deposits/withdrawals records
     """
     deposits_withdrawals_root_folder_id = '1ZCJfH2hxvMLuP470HMa-D33_R_l-Lhtx'
 
+    start_date = _parse_report_datetime(start_date)
+    end_date = _parse_report_datetime(end_date)
+
+    if start_date and end_date and start_date > end_date:
+        raise ServiceError('start_date cannot be after end_date', 400)
+
     years = [str(y).strip() for y in years if str(y).strip()]
     months = [str(m).strip().zfill(2) for m in months if str(m).strip()]
+
+    if start_date and end_date:
+        year_month_pairs = _get_year_months_between(start_date, end_date)
+        years = sorted({year for year, _ in year_month_pairs})
+        months = sorted({month for _, month in year_month_pairs})
 
     # If no months are provided, include all months in each requested year.
     if not months:
@@ -476,6 +531,17 @@ def get_monthly_deposits_withdrawals(years: list, months: list):
 
     combined_deposits_withdrawals_df = pd.concat(all_deposits_withdrawals_dfs, ignore_index=True)
     combined_deposits_withdrawals_df = combined_deposits_withdrawals_df.fillna('')
+
+    if start_date or end_date:
+        parsed_datetimes = pd.to_datetime(combined_deposits_withdrawals_df['Date/Time'], errors='coerce')
+        mask = parsed_datetimes.notna()
+
+        if start_date:
+            mask &= parsed_datetimes >= pd.Timestamp(start_date)
+        if end_date:
+            mask &= parsed_datetimes <= pd.Timestamp(end_date)
+
+        combined_deposits_withdrawals_df = combined_deposits_withdrawals_df.loc[mask]
 
     return combined_deposits_withdrawals_df.to_dict(orient='records')
 
