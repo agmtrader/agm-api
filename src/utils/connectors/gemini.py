@@ -1,32 +1,14 @@
 from src.utils.logger import logger
 from src.utils.managers.secret_manager import get_secret
 
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
-from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import create_agent
-from langchain.tools import tool
-
-from langchain_community.document_loaders import WebBaseLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 import os
 
 # Retrieve and set the Google GenAI API key
 api_key = get_secret("GOOGLE_GENAI_API_KEY")
 os.environ["GOOGLE_API_KEY"] = api_key
-
-# ------- Optional Retrieval Helpers (Embeddings & VectorStore) -------
-embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
-vector_store = InMemoryVectorStore(embeddings)
-
-@tool(response_format="content_and_artifact")
-def retrieve_context(query: str):
-    """Retrieve relevant context chunks from the in-memory vector store."""
-    retrieved_docs = vector_store.similarity_search(query, k=2)
-    serialized = "\n\n".join(
-        (f"Source: {doc.metadata}\nContent: {doc.page_content}") for doc in retrieved_docs
-    )
-    return serialized, retrieved_docs
 
 # --------------------------------------------------------------------
 
@@ -48,26 +30,6 @@ class Gemini:
         logger.announcement("Initializing Gemini Client...", "info")
         try:
             tools = []
-
-            """
-
-            loader = WebBaseLoader(
-                web_paths=("https://www.interactivebrokers.com/",)
-            )
-            docs = loader.load()
-            logger.info(f"Total docs: {len(docs)}")
-            
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000,
-                chunk_overlap=200,
-                add_start_index=True,
-            )
-            all_splits = text_splitter.split_documents(docs)
-            logger.info(f"Total splits: {len(all_splits)}")
-            vector_store.add_documents(documents=all_splits)
-
-            tools = [retrieve_context]
-            """
 
             model = ChatGoogleGenerativeAI(
                 model="gemini-2.5-flash",
