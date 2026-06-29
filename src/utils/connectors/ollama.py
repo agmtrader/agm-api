@@ -29,19 +29,18 @@ class Ollama:
         self._initialized = True
         logger.announcement("Ollama Client initialized", "success")
 
-    def chat(self, messages: list[dict[str, Any]]):
+    def chat(self, messages: list[dict[str, Any]], response_format: str | dict[str, Any] | None = None):
         """Send a list of chat messages to Ollama and return the assistant response."""
         try:
             logger.info(f"User is sending messages to Ollama: {messages}")
-            response = requests.post(
-                f"{self.base_url}/api/chat",
-                json={
-                    "model": self.model,
-                    "messages": messages,
-                    "stream": False,
-                },
-                timeout=self.timeout,
-            )
+            payload: dict[str, Any] = {
+                "model": self.model,
+                "messages": messages,
+                "stream": False,
+            }
+            if response_format is not None:
+                payload["format"] = response_format
+            response = requests.post(f"{self.base_url}/api/chat", json=payload, timeout=self.timeout)
             response.raise_for_status()
             data = response.json()
             message = ((data.get("message") or {}).get("content") or "").strip()
