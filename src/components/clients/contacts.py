@@ -210,9 +210,19 @@ def read_contact_documents(
             if str(processing.get('document_id') or '').strip()
         }
     if requested_document_ids:
+        documents_by_id = {}
+        for document_id in requested_document_ids:
+            document_rows = db.read(
+                table='document',
+                query={'id': document_id},
+                exclude_columns=exclude,
+            ) or []
+            if document_rows:
+                documents_by_id[document_id] = document_rows[0]
         documents = [
-            doc for doc in (db.read(table='document', query={}, exclude_columns=exclude) or [])
-            if str(doc.get('id') or '').strip() in requested_document_ids
+            documents_by_id[document_id]
+            for document_id in requested_document_ids
+            if document_id in documents_by_id
         ]
         if include_processing:
             documents = [
