@@ -4,7 +4,7 @@ from src.components.clients.accounts import create_account, read_accounts, read_
 
 from src.components.clients.accounts import read_account_details, get_forms, submit_documents, submit_all_agreements, update_account, get_pending_tasks, get_registration_tasks, apply_fee_template, update_account_email, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, change_account_holder_external_id, withdraw_funds, transfer_position_internally, transfer_position_externally, get_financial_ranges, get_business_and_occupation, view_active_bank_instructions, view_withdrawable_cash
 
-from src.components.clients.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts, get_account_statements, get_available_statements, get_portfolio_analyst_performance
+from src.components.clients.accounts import logout_of_brokerage_session, initialize_brokerage_session, create_sso_session, get_brokerage_accounts, get_account_statements, get_available_statements, get_portfolio_analyst_performance, get_all_watchlists, get_watchlist_information, get_market_data_snapshot, get_market_scanner_params, run_market_scanner, get_historical_market_data, get_securities_by_symbol, get_security_info, get_all_conids_from_exchange, get_contract_info, place_order, reply_to_order, cancel_order, get_open_orders
 
 from src.utils.response import format_response
 
@@ -425,6 +425,129 @@ def get_portfolio_analyst_performance_route():
         return {"error": "Missing acctIds or freq"}, 400
 
     return get_portfolio_analyst_performance(acct_ids=acct_ids, freq=freq)
+
+@bp.route('/ibkr/watchlists', methods=['GET'])
+@format_response
+def get_all_watchlists_route():
+    """Read all IBKR watchlists available in the active SSO session."""
+    return get_all_watchlists()
+
+@bp.route('/ibkr/watchlist', methods=['GET'])
+@format_response
+def get_watchlist_information_route():
+    """Read one IBKR watchlist by id from the active SSO session."""
+    watchlist_id = request.args.get('id', None)
+    if not watchlist_id:
+        return {"error": "Missing id"}, 400
+    return get_watchlist_information(watchlist_id=watchlist_id)
+
+@bp.route('/ibkr/marketdata/snapshot', methods=['GET'])
+@format_response
+def get_market_data_snapshot_route():
+    """Read IBKR market data snapshots for one or more conids."""
+    conids = request.args.get('conids', '').strip()
+    if not conids:
+        return {"error": "Missing conids"}, 400
+    return get_market_data_snapshot(conids=conids)
+
+@bp.route('/ibkr/marketdata/history', methods=['GET'])
+@format_response
+def get_historical_market_data_route():
+    """Read IBKR historical market data for one conid."""
+    conid = request.args.get('conid', '').strip()
+    period = request.args.get('period', '').strip()
+    bar = request.args.get('bar', '').strip()
+    if not conid or not period or not bar:
+        return {"error": "Missing conid, period, or bar"}, 400
+    return get_historical_market_data(conid=conid, period=period, bar=bar)
+
+@bp.route('/ibkr/scanner/params', methods=['GET'])
+@format_response
+def get_market_scanner_params_route():
+    """Read the available IBKR scanner parameter catalog."""
+    return get_market_scanner_params()
+
+@bp.route('/ibkr/scanner/run', methods=['POST'])
+@format_response
+def run_market_scanner_route():
+    """Run the IBKR market scanner for the active SSO session."""
+    payload = request.get_json(force=True) or {}
+    instrument = payload.get('instrument')
+    scan_type = payload.get('type')
+    location = payload.get('location')
+    filters = payload.get('filter', [])
+    if not instrument or not scan_type or not location:
+        return {"error": "Missing instrument, type, or location"}, 400
+    return run_market_scanner(
+        instrument=instrument,
+        scan_type=scan_type,
+        location=location,
+        filters=filters,
+    )
+
+@bp.route('/ibkr/secdef/search', methods=['POST'])
+@format_response
+def get_securities_by_symbol_route():
+    """Search IBKR securities by symbol and security type."""
+    payload = request.get_json(force=True) or {}
+    symbol = payload.get('symbol')
+    sec_type = payload.get('secType')
+    if not symbol or not sec_type:
+        return {"error": "Missing symbol or secType"}, 400
+    return get_securities_by_symbol(symbol=symbol, sec_type=sec_type)
+
+@bp.route('/ibkr/secdef/info', methods=['GET'])
+@format_response
+def get_security_info_route():
+    """Read IBKR security details by issuer id and security type."""
+    issuer_id = request.args.get('issuerId', '').strip()
+    sec_type = request.args.get('secType', '').strip()
+    if not issuer_id or not sec_type:
+        return {"error": "Missing issuerId or secType"}, 400
+    return get_security_info(issuer_id=issuer_id, sec_type=sec_type)
+
+@bp.route('/ibkr/trsrv/all-conids', methods=['GET'])
+@format_response
+def get_all_conids_from_exchange_route():
+    """Read all conids for a given exchange from IBKR."""
+    exchange = request.args.get('exchange', '').strip()
+    if not exchange:
+        return {"error": "Missing exchange"}, 400
+    return get_all_conids_from_exchange(exchange=exchange)
+
+@bp.route('/ibkr/contract/<int:conid>', methods=['GET'])
+@format_response
+def get_contract_info_route(conid: int):
+    """Read IBKR contract metadata for one conid."""
+    return get_contract_info(conid=conid)
+
+@bp.route('/ibkr/orders', methods=['GET', 'POST'])
+@format_response
+def orders_route():
+    """Read open IBKR orders or place one or more new orders."""
+    if request.method == 'GET':
+        return get_open_orders()
+
+    payload = request.get_json(force=True) or {}
+    account_id = payload.get('account_id')
+    orders = payload.get('orders', [])
+    if not account_id or not isinstance(orders, list) or len(orders) == 0:
+        return {"error": "Missing account_id or orders"}, 400
+    return place_order(account_id=account_id, orders=orders)
+
+@bp.route('/ibkr/orders/reply/<reply_id>', methods=['POST'])
+@format_response
+def reply_to_order_route(reply_id: str):
+    """Reply to an IBKR order confirmation prompt."""
+    payload = request.get_json(silent=True) or {}
+    confirmed = payload.get('confirmed', True)
+    return reply_to_order(reply_id=reply_id, confirmed=confirmed)
+
+@bp.route('/ibkr/orders/<account_id>/<order_id>', methods=['DELETE'])
+@format_response
+def cancel_order_route(account_id: str, order_id: str):
+    """Cancel an IBKR order."""
+    return cancel_order(account_id=account_id, order_id=order_id)
 
 # Enums
 @bp.route('/ibkr/forms', methods=['POST'])
