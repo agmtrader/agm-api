@@ -13,14 +13,14 @@ from io import StringIO
 
 from src.utils.connectors.drive import GoogleDrive
 from src.utils.connectors.flex_query_api import getFlexQuery
+from src.utils.connectors.ibkr_trading_api import IBKRTradingAPI
 from src.utils.exception import handle_exception
-from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 from src.components.tools.public.reporting import get_bond_report
 from src.utils.logger import logger
 
 logger.announcement('Initializing Reporting Service', type='info')
 Drive = GoogleDrive()
-ibkr_web_api = IBKRWebAPI()
+ibkr_trading_api = IBKRTradingAPI()
 
 batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
 resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
@@ -439,15 +439,15 @@ def extract_bond_snapshot(config=None):
     """
     try:
         ip = requests.get('https://api.ipify.org').content.decode('utf8')
-        ibkr_web_api.create_sso_session('agmtech212', ip)
-        ibkr_web_api.initialize_brokerage_session()
+        ibkr_trading_api.create_sso_session('agmtech212', ip)
+        ibkr_trading_api.initialize_brokerage_session()
         time.sleep(2)
 
         retry_count = 0
         conids = []
 
         while retry_count < 5:
-            watchlist_information = ibkr_web_api.get_watchlist_information('100')
+            watchlist_information = ibkr_trading_api.get_watchlist_information('100')
 
             for watchlist_item in watchlist_information['instruments']:
                 if 'assetClass' in watchlist_item.keys() and watchlist_item['assetClass'] == 'BOND':
@@ -459,11 +459,11 @@ def extract_bond_snapshot(config=None):
             retry_count += 1
             time.sleep(2)
 
-        first_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[:100]))
-        second_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[101:200]))
-        third_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[201:300]))
-        fourth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[301:400]))
-        fifth_snapshot = ibkr_web_api.get_market_data_snapshot(','.join(conids[401:500]))
+        first_snapshot = ibkr_trading_api.get_market_data_snapshot(','.join(conids[:100]))
+        second_snapshot = ibkr_trading_api.get_market_data_snapshot(','.join(conids[101:200]))
+        third_snapshot = ibkr_trading_api.get_market_data_snapshot(','.join(conids[201:300]))
+        fourth_snapshot = ibkr_trading_api.get_market_data_snapshot(','.join(conids[301:400]))
+        fifth_snapshot = ibkr_trading_api.get_market_data_snapshot(','.join(conids[401:500]))
         df = pd.DataFrame(first_snapshot + second_snapshot + third_snapshot + fourth_snapshot + fifth_snapshot)
         df.columns = df.columns.str.capitalize()
 
@@ -571,8 +571,7 @@ ETF_SNAPSHOT_TICKERS = [
 ]
 
 def _initialize_ibkr_market_data_client():
-    from src.utils.connectors.ibkr_web_api import IBKRWebAPI
-    api_client = IBKRWebAPI()
+    api_client = IBKRTradingAPI()
     ip = requests.get('https://api.ipify.org').content.decode('utf8')
     api_client.create_sso_session('agmtech212', ip)
     api_client.initialize_brokerage_session()
@@ -764,17 +763,16 @@ def _get_market_data_snapshot_in_chunks(api_client, conids: list, chunk_size: in
 
 def extract_ust_bond_snapshot(config=None):
     
-    from src.utils.connectors.ibkr_web_api import IBKRWebAPI
     from src.utils.connectors.drive import GoogleDrive
     drive = GoogleDrive()
-    ibkr_web_api = IBKRWebAPI()
+    ibkr_trading_api = IBKRTradingAPI()
     ip = requests.get('https://api.ipify.org').content.decode('utf8')
-    ibkr_web_api.create_sso_session('agmtech212', ip)
-    ibkr_web_api.initialize_brokerage_session()
+    ibkr_trading_api.create_sso_session('agmtech212', ip)
+    ibkr_trading_api.initialize_brokerage_session()
     time.sleep(2)
 
     ust_conids = _collect_watchlist_bond_conids(
-        api_client=ibkr_web_api,
+        api_client=ibkr_trading_api,
         watchlist_id='122',
         max_retries=5,
         sleep_seconds=2,
@@ -784,7 +782,7 @@ def extract_ust_bond_snapshot(config=None):
         raise Exception('No UST bond conids found in watchlist 122')
 
     snapshot = _get_market_data_snapshot_in_chunks(
-        api_client=ibkr_web_api,
+        api_client=ibkr_trading_api,
         conids=ust_conids[:350],
         chunk_size=75,
         sleep_seconds=0.25
@@ -852,20 +850,19 @@ def extract_ust_bond_snapshot(config=None):
 
 def extract_sovereign_bond_snapshot():
     
-    from src.utils.connectors.ibkr_web_api import IBKRWebAPI
     from src.utils.connectors.drive import GoogleDrive
     drive = GoogleDrive()
-    ibkr_web_api = IBKRWebAPI()
+    ibkr_trading_api = IBKRTradingAPI()
     ip = requests.get('https://api.ipify.org').content.decode('utf8')
-    ibkr_web_api.create_sso_session('agmtech212', ip)
-    ibkr_web_api.initialize_brokerage_session()
+    ibkr_trading_api.create_sso_session('agmtech212', ip)
+    ibkr_trading_api.initialize_brokerage_session()
     time.sleep(2)
 
     retry_count = 0
 
     ust_conids = []
     while retry_count < 5:
-        ust_watchlist_information = ibkr_web_api.get_watchlist_information('179')
+        ust_watchlist_information = ibkr_trading_api.get_watchlist_information('179')
 
         for watchlist_item in ust_watchlist_information['instruments']:
             if 'assetClass' in watchlist_item.keys() and watchlist_item['assetClass'] == 'BOND':
@@ -877,7 +874,7 @@ def extract_sovereign_bond_snapshot():
         retry_count += 1
         time.sleep(2)
     
-    snapshot = ibkr_web_api.get_market_data_snapshot(','.join(ust_conids[:350]))
+    snapshot = ibkr_trading_api.get_market_data_snapshot(','.join(ust_conids[:350]))
     df = pd.DataFrame(snapshot)
     df.columns = df.columns.str.capitalize()
 
