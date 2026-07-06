@@ -1188,12 +1188,70 @@ class IBKRWebAPI:
                 "Authorization": f"Bearer {self.sso_token}",
                 "Content-Type": "application/json"
             }
-            response = requests.get(url, headers=headers)
-            if response.status_code != 200:
-                raise Exception(f"Error {response.status_code}: {response.text}")
-            return response.json()
+            payload = None
+            for attempt in range(1, 4):
+                response = requests.get(url, headers=headers)
+                if response.status_code != 200:
+                    raise Exception(f"Error {response.status_code}: {response.text}")
+
+                payload = response.json()
+                has_accounts_shape = (
+                    isinstance(payload, dict)
+                    and isinstance(payload.get('accounts'), list)
+                    and payload.get('selectedAccount')
+                    and isinstance(payload.get('aliases'), dict)
+                )
+                if has_accounts_shape:
+                    break
+
+                if attempt < 3:
+                    time.sleep(0.5)
+
+            if not isinstance(payload, dict):
+                raise Exception(f"Invalid accounts payload type: {type(payload).__name__}")
+
+            if not isinstance(payload.get('accounts'), list):
+                payload['accounts'] = []
+            if not payload.get('selectedAccount') and payload['accounts']:
+                payload['selectedAccount'] = payload['accounts'][0]
+            if not isinstance(payload.get('aliases'), dict):
+                payload['aliases'] = {}
+            for account_id in payload['accounts']:
+                payload['aliases'].setdefault(account_id, account_id)
+
+            if not payload['accounts'] or not payload.get('selectedAccount'):
+                raise Exception(f"Incomplete accounts payload after retry: {payload}")
+
+            return payload
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds   
+
+    def _prime_iserver_session(self, reason: str):
+        """IBKR requires /iserver/accounts before orders/watchlists in a fresh session."""
+        return self.get_brokerage_accounts()
+
+    def _request_iserver_json(self, method: str, url: str, headers: dict, reason: str, **kwargs):
+        """
+        Run an IBKR iserver request, prime /iserver/accounts, then retry once for
+        the common stale/not-primed session responses.
+        """
+        self._prime_iserver_session(reason)
+        response = requests.request(method, url, headers=headers, **kwargs)
+
+        should_retry = (
+            response.status_code in (410, 500)
+            and (
+                response.status_code == 410
+                or "Please query /accounts first" in response.text
+            )
+        )
+        if should_retry:
+            self._prime_iserver_session(f"{reason} retry")
+            response = requests.request(method, url, headers=headers, **kwargs)
+
+        if response.status_code != 200:
+            raise Exception(f"Error {response.status_code}: {response.text}")
+        return response.json()
 
     @handle_exception
     def get_portfolio_analyst_performance(self, acct_ids: list = None, freq: str = None):
@@ -1237,12 +1295,9 @@ class IBKRWebAPI:
                 "Content-Type": "application/json"
             }
 
-            response = requests.get(url, headers=headers)
-            if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+            payload = self._request_iserver_json("GET", url, headers, "get_all_watchlists")
             logger.success("All watchlists fetched successfully")
-            return response.json()
+            return payload
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
@@ -1264,12 +1319,9 @@ class IBKRWebAPI:
                 "Authorization": f"Bearer {self.sso_token}",
                 "Content-Type": "application/json" 
             }
-            response = requests.get(url, headers=headers)
-            if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+            payload = self._request_iserver_json("GET", url, headers, f"get_watchlist_information id={watchlist_id}")
             logger.success("Watchlist information fetched successfully")
-            return response.json()
+            return payload
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
     
@@ -1697,11 +1749,9 @@ class IBKRWebAPI:
                 "Authorization": f"Bearer {self.sso_token}",
                 "Content-Type": "application/json"
             }
-            response = requests.get(url, headers=headers)
-            if response.status_code != 200:
-                raise Exception(f"Error {response.status_code}: {response.text}")
+            payload = self._request_iserver_json("GET", url, headers, "get_open_orders")
             logger.success("Open orders fetched successfully")
-            return response.json()
+            return payload
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
