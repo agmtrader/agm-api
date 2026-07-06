@@ -6,11 +6,11 @@ Drive = GoogleDrive()
 
 class DocumentManager:
     @handle_exception
-    def upload_document(self, account_id, file_name, file_length, sha1_checksum, mime_type, data, category, type, issued_date, expiry_date, name):
+    def upload_document(self, contact_id, file_name, file_length, sha1_checksum, mime_type, data, category, type, issued_date, expiry_date, name, account_id=None):
         """
-        Uploads a document to the database and links it to an account.
+        Uploads a document to the database and links it to a contact.
         Args:
-            account_id (str): UUID of the account to link the document to.
+            contact_id (str): UUID of the contact to link the document to.
             file_name (str): Name of the file.
             file_length (int): Length of the file.
             sha1_checksum (str): SHA1 checksum of the file.
@@ -32,10 +32,11 @@ class DocumentManager:
             }
         )
 
-        # Link to account_document
-        account_document_id = db.create(
-            table='account_document',
+        # Link to contact_document
+        contact_document_id = db.create(
+            table='contact_document',
             data={
+                'contact_id': contact_id,
                 'account_id': account_id,
                 'document_id': document_id,
                 'category': category,
@@ -46,4 +47,4 @@ class DocumentManager:
             }
         )
 
-        return account_document_id
+        return contact_document_id

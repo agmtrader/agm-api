@@ -4,6 +4,7 @@ from src.components.clients.contacts import (
     create_contact,
     update_contact,
     upload_contact_document,
+    link_contact_document,
     read_contact_documents,
     update_contact_document,
     delete_contact_document,
@@ -82,6 +83,24 @@ def upload_contact_document_route():
         issued_date=payload.get('issued_date'),
         expiry_date=payload.get('expiry_date'),
         comment=payload.get('comment')
+    )
+
+
+@bp.route('/documents/link', methods=['POST'])
+@format_response
+def link_contact_document_route():
+    """Attach an existing raw document row to a contact_document record."""
+    payload = request.get_json(force=True)
+    return link_contact_document(
+        document_id=payload.get('document_id'),
+        contact_id=payload.get('contact_id'),
+        account_id=payload.get('account_id'),
+        category=payload.get('category'),
+        type=payload.get('type'),
+        document_language=payload.get('document_language'),
+        issued_date=payload.get('issued_date'),
+        expiry_date=payload.get('expiry_date'),
+        comment=payload.get('comment'),
     )
 
 

@@ -4,7 +4,7 @@ from src.utils.connectors.supabase import db
 @handle_exception
 def read_documents(strip_data: bool = False, include_processing: bool = False) -> dict:
     """
-    Read all documents and their account associations.
+    Read all documents and their contact associations.
 
     Args:
         strip_data: If True, omit the heavy `data` field from the documents query
@@ -12,9 +12,9 @@ def read_documents(strip_data: bool = False, include_processing: bool = False) -
                     applications service).
 
     Returns:
-        Tuple[List[dict], List[dict]]: documents and account_documents lists.
+        Tuple[List[dict], List[dict]]: documents and contact_documents lists.
     """
-    account_documents = db.read(table='account_document', query={})
+    contact_documents = db.read(table='contact_document', query={}) or []
     exclude = ['data'] if strip_data else None
     documents = db.read(table='document', query={}, exclude_columns=exclude)
 
@@ -36,7 +36,8 @@ def read_documents(strip_data: bool = False, include_processing: bool = False) -
             for document in documents
         ]
 
-    return documents, account_documents
+    return documents, contact_documents
+
 
 @handle_exception
 def get_document_data(document_id: str = None) -> dict:

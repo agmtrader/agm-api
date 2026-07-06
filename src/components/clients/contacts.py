@@ -155,6 +155,52 @@ def upload_contact_document(
 
 
 @handle_exception
+def link_contact_document(
+    document_id: str = None,
+    contact_id: str = None,
+    account_id: Optional[str] = None,
+    category: Optional[str] = None,
+    type: Optional[str] = None,
+    document_language: Optional[str] = None,
+    issued_date: Optional[str] = None,
+    expiry_date: Optional[str] = None,
+    comment: Optional[str] = None,
+):
+    if not document_id:
+        raise Exception('document_id is required')
+    if not contact_id:
+        raise Exception('contact_id is required')
+
+    document_rows = db.read(table='document', query={'id': document_id}) or []
+    if len(document_rows) == 0:
+        raise Exception('document not found')
+
+    existing_links = db.read(
+        table=contact_document_table,
+        query={'document_id': document_id, 'contact_id': contact_id},
+    ) or []
+    if existing_links:
+        return {'id': str(existing_links[0].get('id') or ''), 'document_id': document_id, 'status': 'exists'}
+
+    link_payload = _filter_supported_columns(
+        contact_document_table,
+        {
+            'account_id': account_id,
+            'contact_id': contact_id,
+            'document_id': document_id,
+            'category': category,
+            'type': type,
+            'document_language': document_language,
+            'issued_date': issued_date,
+            'expiry_date': expiry_date,
+            'comment': comment,
+        }
+    )
+    link_id = db.create(table=contact_document_table, data=link_payload)
+    return {'id': link_id, 'document_id': document_id, 'status': 'linked'}
+
+
+@handle_exception
 def read_contact_documents(
     contact_id: str = None,
     document_ids: list[str] = None,

@@ -7,10 +7,10 @@ bp = Blueprint('documents', __name__)
 @bp.route('/read', methods=['GET'])
 @format_response
 def read_documents_route():
-    """Read all document records and account-document links without returning raw file data."""
+    """Read all document records and contact-document links without returning raw file data."""
     include_processing = request.args.get('include_processing', 'false').strip().lower() in ('1', 'true', 'yes')
-    documents, account_documents = read_documents(strip_data=True, include_processing=include_processing)
-    return {'documents': documents, 'account_documents': account_documents }
+    documents, contact_documents = read_documents(strip_data=True, include_processing=include_processing)
+    return {'documents': documents, 'contact_documents': contact_documents }
 
 @bp.route('/get_document_data', methods=['GET'])
 @format_response
