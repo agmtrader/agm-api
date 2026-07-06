@@ -28,14 +28,11 @@ def _sanitize_account(account: dict = None):
         return None
     return {key: value for key, value in account.items() if key not in SENSITIVE_ACCOUNT_FIELDS}
 
-
 def _sanitize_accounts(accounts: list = None):
     return [_sanitize_account(account) for account in accounts or []]
 
-
 def _vault_secret_name(account_id: str, field: str) -> str:
     return f'account:{account_id}:{field}'
-
 
 def _create_vault_secret(secret: str, name: str, description: str) -> str | None:
     if secret is None or secret == '':
@@ -53,7 +50,6 @@ def _create_vault_secret(secret: str, name: str, description: str) -> str | None
 
     return _create_secret(secret, name, description)
 
-
 def _read_vault_secret(secret_id: str | None) -> str | None:
     if not secret_id:
         return None
@@ -67,7 +63,6 @@ def _read_vault_secret(secret_id: str | None) -> str | None:
         return result.get('decrypted_secret') if result else None
 
     return _read_secret(str(secret_id))
-
 
 def _prepare_account_secrets(account: dict, account_id: str | None = None) -> dict:
     if account is None:
@@ -102,7 +97,6 @@ def _prepare_account_secrets(account: dict, account_id: str | None = None) -> di
 
     return prepared
 
-
 def _resolve_account_secret(account: dict, secret_id_field: str) -> str | None:
     secret = _read_vault_secret(account.get(secret_id_field))
     if secret:
@@ -114,7 +108,6 @@ def _normalize_join_key(value) -> str:
     if value is None:
         return ''
     return str(value).strip()
-
 
 def _get_cached_payload(cache_key: str, producer, force_refresh: bool = False):
     if force_refresh or _ACCOUNTS_METADATA_CACHE_TTL_SECONDS <= 0:
@@ -132,7 +125,6 @@ def _get_cached_payload(cache_key: str, producer, force_refresh: bool = False):
         'value': value
     }
     return value
-
 
 def _parse_fee_template_summary(fee_template) -> str:
     if not isinstance(fee_template, dict):
@@ -182,7 +174,6 @@ def _parse_fee_template_summary(fee_template) -> str:
         parts.append(f'Eff. {fee_effective_date}')
 
     return ' | '.join(parts) if parts else '-'
-
 
 @handle_exception
 def create_account(account: dict = None) -> dict:
@@ -454,10 +445,21 @@ def get_registration_tasks(account_id: str = None, master_account: str = None) -
     return ibkr_web_api.get_registration_tasks(account_id=account_id, master_account=master_account)
 
 @handle_exception
-def get_account_statements(account_id: str = None, start_date: str = None, end_date: str = None, master_account: str = None) -> dict:
+def get_account_statements(
+    account_id: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    master_account: str = None,
+    language: str = 'en'
+) -> dict:
     """Get account statements via IBKR API."""
-    print(account_id, start_date, end_date, master_account)
-    return ibkr_web_api.get_account_statements(account_id=account_id, start_date=start_date, end_date=end_date, master_account=master_account)
+    return ibkr_web_api.get_account_statements(
+        account_id=account_id,
+        start_date=start_date,
+        end_date=end_date,
+        master_account=master_account,
+        language=language,
+    )
 
 @handle_exception
 def get_available_statements(account_id: str = None, master_account: str = None) -> dict:

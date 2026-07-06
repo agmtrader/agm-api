@@ -355,11 +355,21 @@ def get_account_statements_route():
     start_date = payload.get('start_date', None)
     end_date = payload.get('end_date', None)
     master_account = payload.get('master_account', None)
+    language = payload.get('language', 'en')
     
     if not account_id or not start_date or not end_date or not master_account:
         return {"error": "Missing account_id, start_date, end_date, or master_account"}, 400
+
+    if language not in {'en', 'es'}:
+        return {"error": "Invalid language. Supported values: en, es"}, 400
         
-    return get_account_statements(account_id=account_id, start_date=start_date, end_date=end_date, master_account=master_account)
+    return get_account_statements(
+        account_id=account_id,
+        start_date=start_date,
+        end_date=end_date,
+        master_account=master_account,
+        language=language,
+    )
 
 @bp.route('/ibkr/statements/available', methods=['GET'])
 @format_response

@@ -974,11 +974,20 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def get_account_statements(self, account_id: str, start_date: str, end_date: str, master_account: str = None):
+    def get_account_statements(
+        self,
+        account_id: str,
+        start_date: str,
+        end_date: str,
+        master_account: str = None,
+        language: str = 'en'
+    ):
         """Get account statements via IBKR API."""
         try:
             original_creds = self._apply_credentials(master_account)
-            logger.info(f"Fetching statements for account {account_id} from {start_date} to {end_date}")
+            logger.info(
+                f"Fetching statements for account {account_id} from {start_date} to {end_date} in language {language}"
+            )
 
             url = f"{self.BASE_URL}/gw/api/v1/statements"
             
@@ -986,7 +995,8 @@ class IBKRWebAPI:
                 "accountId": account_id,
                 "startDate": start_date,
                 "endDate": end_date,
-                "mimeType": "application/pdf"
+                "mimeType": "application/pdf",
+                "language": language,
             }
 
             token = self.get_bearer_token()
