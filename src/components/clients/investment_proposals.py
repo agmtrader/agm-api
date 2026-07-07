@@ -157,6 +157,63 @@ def _resolve_current_yield_percent(row: dict) -> float:
     return 0.0
 
 
+def _get_string_field(row: dict, keys: list[str]) -> str:
+    for key in keys:
+        value = row.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ''
+
+
+def _resolve_market_asset_symbol(row: dict) -> str:
+    return _get_string_field(row, ['Symbol', 'symbol', 'Ticker', 'ticker', 'sheet_name'])
+
+
+def _resolve_market_asset_display_symbol(row: dict, fallback_symbol: str) -> str:
+    return _get_string_field(
+        row,
+        ['Financial Instrument', 'financialInstrument', 'Ticker', 'ticker', 'Symbol', 'symbol', 'sheet_name'],
+    ) or fallback_symbol
+
+
+def _resolve_equity_yield_percent(row: dict) -> float:
+    for key in ['Current Yield', 'current_yield', 'Dividend Yield', 'dividend_yield', 'Yield', 'yield', 'YTM', 'ytm']:
+        value = _to_float_or_none(row.get(key))
+        if value is not None:
+            return _normalize_yield_percent(value)
+    return 0.0
+
+
+def _find_matching_market_row(df: pd.DataFrame, symbol: str) -> dict | None:
+    normalized_symbol = str(symbol or '').strip().upper()
+    if not normalized_symbol or df.empty:
+        return None
+
+    for column in ['Symbol', 'symbol', 'Ticker', 'ticker', 'sheet_name']:
+        if column not in df.columns:
+            continue
+
+        matches = df[
+            df[column]
+                .astype(str)
+                .str.strip()
+                .str.upper()
+                == normalized_symbol
+        ]
+        if not matches.empty:
+            return matches.iloc[0].to_dict()
+
+    return None
+
+
+def _resolve_source_bucket(asset: dict) -> str:
+    source_bucket = str(asset.get('source_bucket') or asset.get('source') or asset.get('asset_class') or '').strip().upper()
+    return source_bucket
+
+
 def _build_investment_proposal_template() -> list[dict]:
     return [
         {
@@ -284,6 +341,12 @@ def _load_investment_proposal_context() -> dict:
     ust_report = get_ust_bond_report()
     ust_df = pd.DataFrame(ust_report)
 
+    stocks_report = get_stocks_report()
+    stocks_df = pd.DataFrame(stocks_report)
+
+    etfs_report = get_etfs_report()
+    etfs_df = pd.DataFrame(etfs_report)
+
     # Remove IBCID Symbol column if it exists and clean it (though not strictly used for merge anymore)
     if 'Symbol' in rtd_df.columns:
         # logger.announcement(rtd_df['Symbol'].head(10))
@@ -366,6 +429,9 @@ def _load_investment_proposal_context() -> dict:
         'bonds_df_no_duplicates': bonds_df_no_duplicates,
         'avg_yield': avg_yield,
         'rtd_df': rtd_df,
+        'ust_df': ust_df,
+        'stocks_df': stocks_df,
+        'etfs_df': etfs_df,
         'merged_universe_df': merged_universe_df,
         'merged_df': merged_df
     }
@@ -956,16 +1022,20 @@ def _normalize_saved_investment_proposal(proposal: dict) -> dict:
     }
 
 @handle_exception
-def create_investment_proposal_with_assets(assets: list[dict]):
+def create_investment_proposal_with_assets(assets: list[dict], risk_profile_id=None):
     logger.announcement('Generating investment proposal from assets...')
 
     try:
         context = _load_investment_proposal_context()
         merged_universe_df = context['merged_universe_df']
+        rtd_df = context['rtd_df']
+        ust_df = context['ust_df']
+        stocks_df = context['stocks_df']
+        etfs_df = context['etfs_df']
         investment_proposal = _build_investment_proposal_template()
 
         if not isinstance(assets, list):
-            raise Exception('assets must be a list of dicts with symbol and percentage.')
+            raise Exception('assets must be a list of dicts with symbol, percentage, and optional source_bucket.')
 
         logger.announcement(f'Creating proposal from {len(assets)} assets.')
 
@@ -999,38 +1069,92 @@ def create_investment_proposal_with_assets(assets: list[dict]):
 
             symbol = asset.get('symbol')
             percentage = asset.get('percentage')
+            source_bucket = _resolve_source_bucket(asset)
 
             if not symbol or percentage is None:
                 raise Exception('Each asset must include symbol and percentage.')
 
             normalized_symbol = str(symbol).strip()
-            universe_match = merged_universe_df[merged_universe_df['Symbol'] == normalized_symbol]
-            if universe_match.empty:
-                raise Exception(f'IBCID "{symbol}" not found in bond universe (RTD + UST).')
+            matched_row = None
+            bucket_name = ''
+            rating = ''
+            current_yield_pct = 0.0
 
-            rtd_row = universe_match.iloc[0].to_dict()
-            rating = _resolve_rating(rtd_row)
-            if not rating:
+            if source_bucket == 'UST':
+                matched_row = _find_matching_market_row(ust_df, normalized_symbol)
+                bucket_name = 'treasuries'
+                rating = 'UST'
+                if matched_row:
+                    current_yield_pct = _resolve_current_yield_percent(matched_row)
+            elif source_bucket == 'BONDS':
+                matched_row = _find_matching_market_row(rtd_df, normalized_symbol)
+                if matched_row:
+                    rating = _resolve_rating(matched_row)
+                    current_yield_pct = _resolve_current_yield_percent(matched_row)
+            elif source_bucket == 'ETFS':
+                matched_row = _find_matching_market_row(etfs_df, normalized_symbol)
+                bucket_name = 'etfs'
+                rating = 'ETF'
+                if matched_row:
+                    current_yield_pct = _resolve_equity_yield_percent(matched_row)
+            elif source_bucket == 'STOCKS':
+                matched_row = _find_matching_market_row(stocks_df, normalized_symbol)
+                bucket_name = 'etfs'
+                rating = 'ETF'
+                if matched_row:
+                    current_yield_pct = _resolve_equity_yield_percent(matched_row)
+            else:
+                matched_row = _find_matching_market_row(merged_universe_df, normalized_symbol)
+                if matched_row:
+                    rating = _resolve_rating(matched_row)
+                    current_yield_pct = _resolve_current_yield_percent(matched_row)
+                else:
+                    matched_row = _find_matching_market_row(etfs_df, normalized_symbol)
+                    if matched_row:
+                        bucket_name = 'etfs'
+                        rating = 'ETF'
+                        current_yield_pct = _resolve_equity_yield_percent(matched_row)
+                    else:
+                        matched_row = _find_matching_market_row(stocks_df, normalized_symbol)
+                        if matched_row:
+                            bucket_name = 'etfs'
+                            rating = 'ETF'
+                            current_yield_pct = _resolve_equity_yield_percent(matched_row)
+
+            if not matched_row:
                 raise Exception(
-                    f'No rating found in bond universe for IBCID "{symbol}". '
-                    f'Fields: SP="{rtd_row.get("SP", "")}", '
-                    f'S&P Equivalent="{rtd_row.get("S&P Equivalent", "")}", '
-                    f'Ratings="{rtd_row.get("Ratings", "")}", '
-                    f'Moodys="{rtd_row.get("Moodys", "")}".'
+                    f'Asset "{symbol}" not found in the expected market data feed'
+                    f'{f" ({source_bucket})" if source_bucket else ""}.'
                 )
 
-            bucket_name = _get_bucket_for_rating(rating)
+            if not rating:
+                rating = _resolve_rating(matched_row)
+
+            if not rating:
+                raise Exception(
+                    f'No rating or asset classification found for "{symbol}". '
+                    f'Fields: SP="{matched_row.get("SP", "")}", '
+                    f'S&P Equivalent="{matched_row.get("S&P Equivalent", "")}", '
+                    f'Ratings="{matched_row.get("Ratings", "")}", '
+                    f'Moodys="{matched_row.get("Moodys", "")}".'
+                )
+
+            if not bucket_name:
+                bucket_name = _get_bucket_for_rating(rating)
+            if not bucket_name and source_bucket in {'STOCKS', 'ETFS'}:
+                bucket_name = 'etfs'
+                rating = 'ETF'
             if not bucket_name:
                 raise Exception(f'Unknown rating "{rating}" for asset {symbol}.')
 
             bucket = next(b for b in investment_proposal if b['name'] == bucket_name)
-            current_yield_pct = _resolve_current_yield_percent(rtd_row)
             bucket['bonds'].append({
-                'Symbol_x': str(rtd_row.get('Financial Instrument') or symbol),
+                'Symbol_x': _resolve_market_asset_display_symbol(matched_row, normalized_symbol),
                 'Current Yield_x': current_yield_pct,
                 'S&P Equivalent_x': str(rating),
-                'ibcid': str(symbol),
+                'ibcid': normalized_symbol,
                 'percentage': float(percentage),
+                'source_bucket': source_bucket,
             })
             print(f'Bucket: {bucket_name}')
 
@@ -1045,7 +1169,7 @@ def create_investment_proposal_with_assets(assets: list[dict]):
         logger.error(f'Failed creating investment proposal: {exc}')
         raise Exception(f'Failed creating investment proposal: {exc}')
 
-    return _persist_investment_proposal(investment_proposal, None, 'custom')
+    return _persist_investment_proposal(investment_proposal, risk_profile_id, 'custom')
 
 
 @handle_exception

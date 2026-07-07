@@ -24,7 +24,8 @@ def create_with_assets_route():
     """Create an investment proposal from an explicit asset allocation payload."""
     payload = request.get_json(force=True)
     assets = payload.get('assets', None)
-    return create_investment_proposal_with_assets(assets=assets)
+    risk_profile_id = payload.get('risk_profile_id', None)
+    return create_investment_proposal_with_assets(assets=assets, risk_profile_id=risk_profile_id)
 
 
 @bp.route('/create/plan', methods=['POST'])
