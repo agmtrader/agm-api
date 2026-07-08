@@ -49,3 +49,11 @@ def get_document_data(document_id: str = None) -> dict:
         The data of the document
     """
     return db.read(table='document', query={'id': document_id})
+
+
+@handle_exception
+def delete_document(document_id: str = None) -> dict:
+    if not document_id:
+        raise Exception('document_id is required')
+    db.delete(table='document', query={'id': document_id})
+    return {'status': 'success', 'document_id': document_id}

@@ -283,12 +283,10 @@ class IBKRTradingAPI(IBKRWebAPI):
         try:
             original_creds = self._apply_credentials("I6413690")
             url = f"{self.BASE_URL}/v1/api/iserver/scanner/params"
-            response = requests.get(url, headers=self._require_sso_headers())
-            if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+            headers = self._require_sso_headers()
+            payload = self._request_iserver_json("GET", url, headers, "get_market_scanner_params")
             logger.success("Market scanner params fetched successfully")
-            return response.json()
+            return payload
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
@@ -309,12 +307,16 @@ class IBKRTradingAPI(IBKRWebAPI):
                 "location": location,
                 "filter": filters or [],
             }
-            response = requests.post(url, headers=self._require_sso_headers(), data=json.dumps(payload))
-            if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+            headers = self._require_sso_headers()
+            response_payload = self._request_iserver_json(
+                "POST",
+                url,
+                headers,
+                f"run_market_scanner instrument={instrument} type={scan_type} location={location}",
+                data=json.dumps(payload),
+            )
             logger.success("Market scanner run successfully")
-            return response.json()
+            return response_payload
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
