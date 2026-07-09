@@ -156,18 +156,112 @@ class IBKRTradingAPI(IBKRWebAPI):
         return response.json()
 
     @handle_exception
-    def get_portfolio_analyst_performance(self, acct_ids: list = None, freq: str = None) -> dict:
+    def get_portfolio_analyst_performance(
+        self,
+        acct_ids: list | None = None,
+        period: str | None = None,
+        freq: str | None = None,
+    ) -> dict:
         try:
             original_creds = self._apply_credentials("I6413690")
             url = f"{self.BASE_URL}/v1/api/pa/performance"
+            resolved_period = period or freq
             payload = {
                 "acctIds": acct_ids or [],
-                "freq": freq,
+                "period": resolved_period,
             }
             response = requests.post(url, headers=self._require_sso_headers(), data=json.dumps(payload))
             if response.status_code != 200:
                 raise Exception(f"Error {response.status_code}: {response.text}")
             return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def get_portfolio_analyst_allocation(
+        self,
+        acct_ids: list | None = None,
+        allocation_type: str = "ALL",
+        currency: str = "USD",
+        date: str | None = None,
+        model: str | None = None,
+    ) -> dict:
+        try:
+            original_creds = self._apply_credentials("I6413690")
+            url = f"{self.BASE_URL}/v1/api/pa/allocation"
+            payload = {
+                "acctIds": acct_ids or [],
+                "type": allocation_type,
+                "currency": currency,
+            }
+            if date:
+                payload["date"] = date
+            if model:
+                payload["model"] = model
+
+            response = requests.post(url, headers=self._require_sso_headers(), data=json.dumps(payload))
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def get_portfolio_analyst_transactions(
+        self,
+        acct_ids: list | None = None,
+        conids: list | None = None,
+        currency: str = "USD",
+        days: int = 90,
+    ) -> dict:
+        try:
+            original_creds = self._apply_credentials("I6413690")
+            url = f"{self.BASE_URL}/v1/api/pa/transactions"
+            payload = {
+                "acctIds": acct_ids or [],
+                "currency": currency,
+                "days": days,
+            }
+            if conids:
+                payload["conids"] = conids
+
+            response = requests.post(url, headers=self._require_sso_headers(), data=json.dumps(payload))
+            if response.status_code != 200:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def get_portfolio_accounts(self) -> dict:
+        try:
+            original_creds = self._apply_credentials("I6413690")
+            url = f"{self.BASE_URL}/v1/api/portfolio/accounts"
+            headers = self._require_sso_headers()
+            payload = self._request_iserver_json("GET", url, headers, "get_portfolio_accounts")
+            logger.success("Portfolio accounts fetched successfully")
+            return payload
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def get_portfolio_positions(self, account_id: str, model: str | None = None, direction: str = "a") -> dict:
+        try:
+            original_creds = self._apply_credentials("I6413690")
+            params = [f"direction={direction}"]
+            if model:
+                params.append(f"model={model}")
+            query = "&".join(params)
+            url = f"{self.BASE_URL}/v1/api/portfolio2/{account_id}/positions?{query}"
+            headers = self._require_sso_headers()
+            payload = self._request_iserver_json(
+                "GET",
+                url,
+                headers,
+                f"get_portfolio_positions account_id={account_id}",
+            )
+            logger.success(f"Portfolio positions fetched successfully for {account_id}")
+            return payload
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
@@ -461,7 +555,11 @@ for _method_name in [
     "initialize_brokerage_session",
     "logout_of_brokerage_session",
     "get_brokerage_accounts",
+    "get_portfolio_accounts",
+    "get_portfolio_positions",
+    "get_portfolio_analyst_allocation",
     "get_portfolio_analyst_performance",
+    "get_portfolio_analyst_transactions",
     "get_all_watchlists",
     "get_watchlist_information",
     "get_market_data_snapshot",
