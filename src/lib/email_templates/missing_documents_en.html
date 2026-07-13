@@ -11,10 +11,21 @@
         .logo img { max-width: 100%; height: auto; }
         h1 { color: #1A365D; font-size: 22px; margin-bottom: 20px; text-align: center; }
         .section { margin-bottom: 20px; }
-        .doc-card { border: 1px solid #E2E8F0; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
         .doc-title { font-weight: 600; margin-bottom: 8px; }
+        .accepted-type-title { margin: 18px 0 8px; font-weight: 600; }
         ul { margin: 0; padding-left: 18px; }
-        li { margin-bottom: 4px; }
+        li { margin-bottom: 8px; }
+        strong { color: #1A365D; }
+        .button {
+            display: inline-block;
+            margin-top: 12px;
+            padding: 12px 18px;
+            border-radius: 8px;
+            background-color: #1A365D;
+            color: #FFFFFF !important;
+            text-decoration: none;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -23,29 +34,50 @@
         <h1>{{ subject }}</h1>
 
         <div class="section">
-            <p>Dear {{ content.client_name or 'Client' }},</p>
-            <p>We noticed that we are missing certain documents required for compliance for your account to stay open. Please provide us with the following:</p>
+            <p>Dear {{ content.client_name or 'client' }},</p>
+            <p>We hope you are doing very well.</p>
+            <p>As part of our compliance and information update process, we noticed that the following documents are expired or still missing from your file. It is urgent that you please send them to this same email address: <strong>info@agmtechnology.com</strong> so we can keep your client profile up to date. These are the documents required:</p>
+            {% if content.upload_link %}
+            <p><a href="{{ content.upload_link }}" class="button" target="_blank" rel="noopener noreferrer">Upload documents</a></p>
+            {% endif %}
         </div>
 
         {% if content.missing_documents and content.missing_documents|length > 0 %}
-            {% for missing in content.missing_documents %}
-                <div class="doc-card">
-                    <div class="doc-title">{{ missing.name }}</div>
+        <div class="section">
+            <ul>
+                {% for missing in content.missing_documents %}
+                <li>{{ missing.name }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="section">
+            <p>Please send the requested documents as soon as possible to: <strong>info@agmtechnology.com</strong></p>
+            <p class="accepted-type-title">Accepted document types:</p>
+            <ul>
+                {% for missing in content.missing_documents %}
+                <li>
+                    <span class="doc-title">{{ missing.name }}:</span>
                     {% if missing.accepted_types and missing.accepted_types|length > 0 %}
-                        <p>Accepted document types:</p>
-                        <ul>
-                            {% for doc_type in missing.accepted_types %}
-                                <li>{{ doc_type }}</li>
-                            {% endfor %}
-                        </ul>
+                    <ul>
+                        {% for doc_type in missing.accepted_types %}
+                        <li>{{ doc_type }}</li>
+                        {% endfor %}
+                    </ul>
                     {% endif %}
-                </div>
-            {% endfor %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
         {% endif %}
 
         <div class="section">
-            <p>Please reply to this email if you have any questions.</p>
-            <p>Best regards,<br>AGM Customer Service</p>
+            <p>If you have already sent any of these documents recently, please ignore this message for those items. If you have any questions about what is required, you can reply to this email. It is very important that you send these documents as soon as possible to avoid the account being disabled or restricted by the custodian. Thank you very much.</p>
+            {% if content.upload_link %}
+            <p>You can also upload the documents directly using the button below:</p>
+            <p><a href="{{ content.upload_link }}" class="button" target="_blank" rel="noopener noreferrer">Upload documents</a></p>
+            {% endif %}
+            <p>Kind regards,<br>AGM Team</p>
         </div>
     </div>
 </body>

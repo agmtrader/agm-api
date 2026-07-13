@@ -132,23 +132,21 @@ class Gmail(GmailConnector):
 
     @handle_exception
     def send_missing_documents_email(self, content, client_email, missing_type="multiple", lang="en", cc=""):
-        subject_map = {
-            "es": {
-                "poi": "Documento pendiente: Prueba de Identidad",
-                "poa": "Documento pendiente: Prueba de Domicilio",
-                "sow": "Documento pendiente: Fuente de Fondos",
-                "multiple": "Documentos pendientes para su cuenta",
-            },
-            "en": {
-                "poi": "Missing Document: Proof of Identity",
-                "poa": "Missing Document: Proof of Address",
-                "sow": "Missing Document: Source of Wealth",
-                "multiple": "Missing Documents for Your Account",
-            },
-        }
         normalized_lang = "es" if lang == "es" else "en"
         normalized_missing_type = missing_type if missing_type in {"poi", "poa", "sow", "multiple"} else "multiple"
-        subject = subject_map[normalized_lang][normalized_missing_type]
+        is_company_contact = bool((content or {}).get("is_company_contact"))
+        if normalized_lang == "es":
+            subject = (
+                "Documentos pendientes para su cuenta corporativa"
+                if is_company_contact
+                else "Documentos pendientes para su cuenta personal"
+            )
+        else:
+            subject = (
+                "Pending Documents for Your Corporate Account"
+                if is_company_contact
+                else "Pending Documents for Your Personal Account"
+            )
         email_template = f"missing_documents_{normalized_lang}"
 
         return self.send_email(

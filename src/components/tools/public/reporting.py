@@ -1,5 +1,8 @@
 from datetime import datetime, date, timedelta
 from src.utils.logger import logger
+import csv
+import io
+import threading
 import pandas as pd
 import pandas as pd
 import re
@@ -14,6 +17,8 @@ from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 logger.announcement('Initializing Reporting Service', type='info')
 Drive = GoogleDrive()
 ibkr_web_api = IBKRWebAPI()
+_ending_balances_cache = {'key': None, 'rows': None}
+_ending_balances_cache_lock = threading.Lock()
 
 batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
 resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
@@ -992,17 +997,93 @@ def get_management_commissions():
 @handle_exception
 def get_ending_balances_from_statements():
     """
-    Get the ending balances from statements report.
+    Build ending-balance rows from the monthly master activity statements.
     
     :return: Response object with ending balances from statements report or error message
     """
-    ending_balances_root_folder_id = '1VPEFxk4kRMWTYgj7NbJ3Ytpn2t5AGKpa'
-    files = Drive.get_files_in_folder(ending_balances_root_folder_id)
-    most_recent_file = Drive.get_most_recent_file(files)
-    ending_balances = Drive.download_file(file_id=most_recent_file['id'], parse=True)
-    ending_balances = _extract_named_sheet_rows(ending_balances, 'Ending Balances')
+    activity_statements_folder_id = '1qJhG-9F_YteWY-hCP1EaIhbJQ1DW71_h'
+    files = Drive.get_files_in_folder(activity_statements_folder_id) or []
+    statement_files = []
+
+    for file_info in files:
+        match = re.fullmatch(r'I6413690_(\d{4})(\d{2})\.csv', file_info.get('name', ''), re.IGNORECASE)
+        if match:
+            statement_files.append((match.group(1), match.group(2), file_info))
+
+    if not statement_files:
+        raise ServiceError('No monthly master activity statement CSV files found', status_code=404)
+
+    statement_files.sort(key=lambda item: (item[0], item[1]))
+    cache_key = tuple(
+        (file_info['id'], file_info.get('modifiedTime'))
+        for _, _, file_info in statement_files
+    )
+
+    with _ending_balances_cache_lock:
+        if _ending_balances_cache['key'] == cache_key:
+            return _ending_balances_cache['rows']
+
+        ending_balances = []
+        for year, month, file_info in statement_files:
+            try:
+                statement_bytes = Drive.download_file(file_id=file_info['id'], parse=False)
+                ending_balances.extend(_extract_change_in_nav_rows(statement_bytes, year, month))
+            except ServiceError:
+                raise
+            except Exception as exc:
+                raise ServiceError(
+                    f'Unable to parse activity statement "{file_info["name"]}": {exc}',
+                    status_code=500,
+                ) from exc
+
+        ending_balances = _stringify_dict_keys(ending_balances)
+        _ending_balances_cache['key'] = cache_key
+        _ending_balances_cache['rows'] = ending_balances
+
     logger.info(f'Ending balances from statements report loaded with {len(ending_balances)} rows')
-    return _stringify_dict_keys(ending_balances)
+    return ending_balances
+
+
+def _extract_change_in_nav_rows(statement_bytes, year, month):
+    """Normalize an IBKR activity statement's Change in NAV section."""
+    try:
+        statement_text = statement_bytes.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        statement_text = statement_bytes.decode('latin1')
+
+    end_of_month = pd.Timestamp(int(year), int(month), 1) + pd.offsets.MonthEnd(0)
+    rows = []
+
+    for row in csv.reader(io.StringIO(statement_text)):
+        if len(row) < 4 or row[0].strip() != 'Change in NAV' or row[1].strip() != 'Data':
+            continue
+
+        description = row[2].strip()
+        raw_amount = row[3].strip()
+        if not description or not raw_amount:
+            continue
+
+        try:
+            amount = float(raw_amount.replace(',', ''))
+        except ValueError as exc:
+            raise ServiceError(
+                f'Invalid Change in NAV amount for {description} in {year}-{month}: {raw_amount}',
+                status_code=500,
+            ) from exc
+
+        rows.append({
+            'Date': end_of_month,
+            'EOM': end_of_month,
+            'Description': description,
+            'Amount': amount,
+            'Account': 'I6413690',
+        })
+
+    if not rows:
+        raise ServiceError(f'Change in NAV data not found in activity statement for {year}-{month}', status_code=500)
+
+    return rows
+
 
 def _extract_named_sheet_rows(rows, expected_sheet_name):
     """

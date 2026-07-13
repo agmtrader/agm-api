@@ -11,10 +11,21 @@
         .logo img { max-width: 100%; height: auto; }
         h1 { color: #1A365D; font-size: 22px; margin-bottom: 20px; text-align: center; }
         .section { margin-bottom: 20px; }
-        .doc-card { border: 1px solid #E2E8F0; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
         .doc-title { font-weight: 600; margin-bottom: 8px; }
+        .accepted-type-title { margin: 18px 0 8px; font-weight: 600; }
         ul { margin: 0; padding-left: 18px; }
-        li { margin-bottom: 4px; }
+        li { margin-bottom: 8px; }
+        strong { color: #1A365D; }
+        .button {
+            display: inline-block;
+            margin-top: 12px;
+            padding: 12px 18px;
+            border-radius: 8px;
+            background-color: #1A365D;
+            color: #FFFFFF !important;
+            text-decoration: none;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -23,29 +34,50 @@
         <h1>{{ subject }}</h1>
 
         <div class="section">
-            <p>Estimado/a {{ content.client_name or 'Cliente' }},</p>
-            <p>Hemos notado que nos faltan ciertos documentos requeridos por cumplimiento para que su cuenta permanezca abierta. Por favor envíenos lo siguiente:</p>
+            <p>Estimado(a) {{ content.client_name or 'cliente' }},</p>
+            <p>Esperamos se encuentre muy bien.</p>
+            <p>Como parte de nuestro proceso de cumplimiento y actualización de información, notamos que los siguientes documentos están vencidos o nos faltan de incorporar en su expediente y es urgente que por favor nos los envíe a este mismo correo: <strong>info@agmtechnology.com</strong> para mantener su perfil de cliente al día, estos son:</p>
+            {% if content.upload_link %}
+            <p><a href="{{ content.upload_link }}" class="button" target="_blank" rel="noopener noreferrer">Cargar documentos</a></p>
+            {% endif %}
         </div>
 
         {% if content.missing_documents and content.missing_documents|length > 0 %}
-            {% for missing in content.missing_documents %}
-                <div class="doc-card">
-                    <div class="doc-title">{{ missing.name }}</div>
+        <div class="section">
+            <ul>
+                {% for missing in content.missing_documents %}
+                <li>{{ missing.name }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="section">
+            <p>Por favor envíe los documentos solicitados a la brevedad posible a: <strong>info@agmtechnology.com</strong></p>
+            <p class="accepted-type-title">Tipos de documentos aceptados:</p>
+            <ul>
+                {% for missing in content.missing_documents %}
+                <li>
+                    <span class="doc-title">{{ missing.name }}:</span>
                     {% if missing.accepted_types and missing.accepted_types|length > 0 %}
-                        <p>Tipos de documentos aceptados:</p>
-                        <ul>
-                            {% for doc_type in missing.accepted_types %}
-                                <li>{{ doc_type }}</li>
-                            {% endfor %}
-                        </ul>
+                    <ul>
+                        {% for doc_type in missing.accepted_types %}
+                        <li>{{ doc_type }}</li>
+                        {% endfor %}
+                    </ul>
                     {% endif %}
-                </div>
-            {% endfor %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
         {% endif %}
 
         <div class="section">
-            <p>Responda este correo si tiene cualquier consulta.</p>
-            <p>Saludos,<br>AGM Customer Service</p>
+            <p>Si ya envió recientemente estos documento(s), por favor ignore este mensaje respecto de esos puntos. Si tiene alguna duda sobre lo requerido, puede responder a este correo. Es sumamente importante que nos haga llegar estos documentos a la mayor brevedad posible para evitar que la cuenta quede inhabilitada o restringida por el custodio, muchas gracias.</p>
+            {% if content.upload_link %}
+            <p>También puede cargar los documentos directamente usando el siguiente botón:</p>
+            <p><a href="{{ content.upload_link }}" class="button" target="_blank" rel="noopener noreferrer">Cargar documentos</a></p>
+            {% endif %}
+            <p>Saludos cordiales,<br>Equipo AGM</p>
         </div>
     </div>
 </body>

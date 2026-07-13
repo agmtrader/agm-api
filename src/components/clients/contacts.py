@@ -106,7 +106,7 @@ def update_contact(query: dict = None, contact: dict = None):
 
 @handle_exception
 def upload_contact_document(
-    account_id: str = None,
+    account_id: Optional[str] = None,
     contact_id: str = None,
     file_name: str = None,
     file_length: int = None,
@@ -122,8 +122,6 @@ def upload_contact_document(
 ):
     if not contact_id:
         raise Exception('contact_id is required')
-    if not account_id:
-        raise Exception('account_id is required')
 
     document_id = db.create(
         table='document',
@@ -138,7 +136,9 @@ def upload_contact_document(
 
     link_id = db.create(
         table=contact_document_table,
-        data={
+        data=_filter_supported_columns(
+            contact_document_table,
+            {
             'account_id': account_id,
             'contact_id': contact_id,
             'document_id': document_id,
@@ -148,7 +148,8 @@ def upload_contact_document(
             'issued_date': issued_date,
             'expiry_date': expiry_date,
             'comment': comment
-        }
+            }
+        )
     )
     processing_result = process_document_text_extraction(document_id=document_id, source_language=document_language)
     return {'id': link_id, 'document_id': document_id, 'document_processing': processing_result}
