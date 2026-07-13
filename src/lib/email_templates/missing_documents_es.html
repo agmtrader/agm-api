@@ -36,23 +36,26 @@
         <div class="section">
             <p>Estimado(a) {{ content.client_name or 'cliente' }},</p>
             <p>Esperamos se encuentre muy bien.</p>
-            <p>Como parte de nuestro proceso de cumplimiento y actualización de información, notamos que los siguientes documentos están vencidos o nos faltan de incorporar en su expediente y es urgente que por favor nos los envíe a este mismo correo: <strong>info@agmtechnology.com</strong> para mantener su perfil de cliente al día, estos son:</p>
+            <p>Como parte de nuestro proceso de cumplimiento y actualización de información, notamos que los siguientes documentos están vencidos o nos faltan de incorporar en su expediente. Para mantener su perfil de cliente al día, por favor cárguelos de forma segura en nuestro sitio web usando el siguiente botón:</p>
             {% if content.upload_link %}
-            <p><a href="{{ content.upload_link }}" class="button" target="_blank" rel="noopener noreferrer">Cargar documentos</a></p>
+            <p><a href="{{ content.upload_link }}" class="button" target="_blank" rel="noopener noreferrer">Cargar documentos de forma segura</a></p>
             {% endif %}
+        </div>
+
+        <div class="section">
+            <p>Si tiene algún inconveniente con la carga en el sitio web, también puede enviarlos a la brevedad posible a: <strong>info@agmtechnology.com</strong></p>
         </div>
 
         {% if content.missing_documents and content.missing_documents|length > 0 %}
         <div class="section">
+            <p>Los documentos requeridos son los siguientes:</p>
             <ul>
                 {% for missing in content.missing_documents %}
                 <li>{{ missing.name }}</li>
                 {% endfor %}
             </ul>
         </div>
-
         <div class="section">
-            <p>Por favor envíe los documentos solicitados a la brevedad posible a: <strong>info@agmtechnology.com</strong></p>
             <p class="accepted-type-title">Tipos de documentos aceptados:</p>
             <ul>
                 {% for missing in content.missing_documents %}
@@ -73,10 +76,6 @@
 
         <div class="section">
             <p>Si ya envió recientemente estos documento(s), por favor ignore este mensaje respecto de esos puntos. Si tiene alguna duda sobre lo requerido, puede responder a este correo. Es sumamente importante que nos haga llegar estos documentos a la mayor brevedad posible para evitar que la cuenta quede inhabilitada o restringida por el custodio, muchas gracias.</p>
-            {% if content.upload_link %}
-            <p>También puede cargar los documentos directamente usando el siguiente botón:</p>
-            <p><a href="{{ content.upload_link }}" class="button" target="_blank" rel="noopener noreferrer">Cargar documentos</a></p>
-            {% endif %}
             <p>Saludos cordiales,<br>Equipo AGM</p>
         </div>
     </div>
