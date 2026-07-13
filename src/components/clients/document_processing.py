@@ -31,6 +31,8 @@ OCR_LANGUAGE_MAP = {
 DEFAULT_OCR_DEVICE = 'auto'
 OCR_ROTATIONS = (0, 90, 180, 270)
 OCR_MIN_QUALITY_SCORE = 80.0
+OCR_RENDER_DPI = 300
+OCR_MAX_RENDER_DIMENSION = 3500
 
 
 def _normalize_language(document_language: Optional[str]) -> Optional[str]:
@@ -105,9 +107,7 @@ def _resolve_easyocr_device() -> str:
         return 'cpu'
 
     if configured_device == 'mps':
-        if torch.backends.mps.is_available():
-            return 'mps'
-        logger.warning('EASYOCR_DEVICE=mps was requested but MPS is unavailable. Falling back to CPU.')
+        logger.warning('EasyOCR MPS is disabled because Metal failures can abort the process. Falling back to CPU.')
         return 'cpu'
 
     if configured_device != DEFAULT_OCR_DEVICE:
@@ -115,9 +115,6 @@ def _resolve_easyocr_device() -> str:
 
     if torch.cuda.is_available():
         return 'cuda'
-
-    if torch.backends.mps.is_available():
-        return 'mps'
 
     return 'cpu'
 
@@ -180,8 +177,7 @@ def _extract_best_ocr_text_from_image(reader, image: Image.Image) -> tuple[str, 
 def _extract_pdf_text_with_ocr(file_bytes: bytes, source_language: Optional[str]) -> str:
     reader_languages = _get_easyocr_languages(source_language)
     ocr_device = _resolve_easyocr_device()
-    dpi = 300
-    scale = dpi / 72
+    default_scale = OCR_RENDER_DPI / 72
 
     try:
         pdf = pypdfium2.PdfDocument(BytesIO(file_bytes))
@@ -193,6 +189,18 @@ def _extract_pdf_text_with_ocr(file_bytes: bytes, source_language: Optional[str]
     try:
         for page_index in range(len(pdf)):
             page = pdf[page_index]
+            largest_page_dimension = max(float(page.get_width()), float(page.get_height()))
+            dimension_limited_scale = (
+                OCR_MAX_RENDER_DIMENSION / largest_page_dimension
+                if largest_page_dimension > 0
+                else default_scale
+            )
+            scale = min(default_scale, dimension_limited_scale)
+            if scale < default_scale:
+                logger.info(
+                    f'OCR page {page_index + 1}: limiting render scale to {scale:.3f} '
+                    f'for page size={page.get_width():.0f}x{page.get_height():.0f}'
+                )
             bitmap = page.render(scale=scale)
             image = bitmap.to_pil()
             try:
