@@ -11,7 +11,6 @@ from src.components.tools.public.reporting import (
     get_un_sanctions_list,
     get_ibkr_details,
 )
-from src.components.clients.document_processing import process_document_text_extraction
 
 logger.announcement('Initializing Contacts Service', type='info')
 logger.announcement('Initialized Contacts Service', type='success')
@@ -151,8 +150,7 @@ def upload_contact_document(
             }
         )
     )
-    processing_result = process_document_text_extraction(document_id=document_id, source_language=document_language)
-    return {'id': link_id, 'document_id': document_id, 'document_processing': processing_result}
+    return {'id': link_id, 'document_id': document_id}
 
 
 @handle_exception
