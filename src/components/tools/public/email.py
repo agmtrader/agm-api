@@ -135,6 +135,7 @@ class Gmail(GmailConnector):
         normalized_lang = "es" if lang == "es" else "en"
         normalized_missing_type = missing_type if missing_type in {"poi", "poa", "sow", "multiple"} else "multiple"
         is_company_contact = bool((content or {}).get("is_company_contact"))
+        is_important = bool((content or {}).get("important"))
         company_name = str((content or {}).get("company_name") or "").strip()
         if is_company_contact and not company_name:
             raise ServiceError(
@@ -153,6 +154,8 @@ class Gmail(GmailConnector):
                 if is_company_contact
                 else "Pending Documents for Your Personal Account"
             )
+        if is_important:
+            subject = f"{'IMPORTANTE' if normalized_lang == 'es' else 'IMPORTANT'}: {subject}"
         email_template = f"missing_documents_{normalized_lang}"
 
         return self.send_email(
