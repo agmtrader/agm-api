@@ -1,9 +1,8 @@
 from flask import Blueprint, request
-from src.components.tools.public.email import Gmail
+from src.components.tools.public.email import Email
 from src.utils.response import format_response
 
 bp = Blueprint('email', __name__)
-Email = Gmail()
 
 @bp.route('/send_email/trade_ticket', methods=['POST'])
 @format_response

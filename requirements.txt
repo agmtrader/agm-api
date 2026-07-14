@@ -1,6 +1,7 @@
 # Core Python Dependencies
 certifi==2024.7.4
 numpy==2.0.2
+opencv-python-headless==5.0.0.93
 pandas==2.2.3
 python-dotenv==1.0.1
 pytz==2024.1
@@ -59,6 +60,9 @@ langchain_google_genai==3.0.0
 
 # PDF Generation
 reportlab==4.1.0
-pypdf==5.9.0
 pypdfium2==5.11.0
 easyocr==1.7.2
+pymupdf==1.28.0
+transformers==4.57.6
+sentencepiece==0.2.1
+sacremoses==0.1.1

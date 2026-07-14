@@ -452,10 +452,10 @@ class GoogleDrive:
 
     try:
         request = self.service.files().get_media(fileId=file_id)
-
-        file_info = self.get_file_info_by_id(file_id)
-        
-        mime_type = file_info['mimeType']
+        mime_type = None
+        if parse:
+            file_info = self.get_file_info_by_id(file_id)
+            mime_type = file_info['mimeType']
 
         downloaded_file = io.BytesIO()
         downloader = MediaIoBaseDownload(downloaded_file, request)

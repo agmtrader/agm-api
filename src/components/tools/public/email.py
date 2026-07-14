@@ -183,3 +183,6 @@ class Gmail(GmailConnector):
             bcc="",
             cc="",
         )
+
+
+Email = Gmail()

@@ -176,6 +176,23 @@ class Supabase:
             user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=True, unique=False)
             comment = Column(Text, nullable=True)
 
+        class DocumentReviewEmail(self.Base):
+            __tablename__ = 'document_review_email'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            recipient_email = Column(Text, nullable=False)
+            recipient_source = Column(Text, nullable=False)
+            missing_document_keys = Column(JSONB(none_as_null=True), nullable=False, default=list)
+            language = Column(Text, nullable=False)
+            status = Column(Text, nullable=False, default='pending')
+            provider = Column(Text, nullable=False, default='gmail')
+            provider_message_id = Column(Text, nullable=True)
+            sent_at = Column(Text, nullable=True)
+            error_message = Column(Text, nullable=True)
+
         class FeeTemplateRequest(self.Base):
             __tablename__ = 'fee_template_request'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -247,6 +264,7 @@ class Supabase:
         self.ContactDocument = ContactDocument
         self.Document = Document
         self.DocumentProcessing = DocumentProcessing
+        self.DocumentReviewEmail = DocumentReviewEmail
         self.DocumentReviewResponsible = DocumentReviewResponsible
         self.FeeTemplateRequest = FeeTemplateRequest
         self.FlaggedDeposit = FlaggedDeposit

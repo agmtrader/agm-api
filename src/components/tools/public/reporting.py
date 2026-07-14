@@ -1,5 +1,6 @@
 from datetime import datetime, date, timedelta
 from src.utils.logger import logger
+import csv
 import io
 import threading
 import pandas as pd
@@ -17,7 +18,16 @@ logger.announcement('Initializing Reporting Service', type='info')
 Drive = GoogleDrive()
 ibkr_web_api = IBKRWebAPI()
 _ending_balances_cache = {'key': None, 'rows': None}
+_activity_statement_file_cache = {}
 _ending_balances_cache_lock = threading.Lock()
+
+activity_statement_folders = {
+    'I6413690': '1qJhG-9F_YteWY-hCP1EaIhbJQ1DW71_h',
+    'F10740574': '1hhcJWVJFJwo6cKWcTBgMMExL-kdKDN9s',
+    'U6413691': '1v-WwlyMJ-U59F0eBL58CDJPNrorxRw1p',
+    'F2074691': '1Vt9TqUlNxn2l43AW7mM296EcpghoBlbj',
+    'I285407': '1CHFgaLx5sa4rja9QX25vwglMKMRL20b9',
+}
 
 batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
 resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
@@ -996,26 +1006,72 @@ def get_management_commissions():
 @handle_exception
 def get_ending_balances_from_statements():
     """
-    Get the multi-account ending balances generated from activity statements.
+    Build ending balances directly from monthly activity statement CSV files.
     
     :return: Response object with ending balances from statements report or error message
     """
-    ending_balances_root_folder_id = '1VPEFxk4kRMWTYgj7NbJ3Ytpn2t5AGKpa'
-    files = Drive.get_files_in_folder(ending_balances_root_folder_id) or []
-    if not files:
-        raise ServiceError('Ending balances report not found', status_code=404)
+    statement_files = []
+    seen_account_months = set()
+    months_by_account = {account: set() for account in activity_statement_folders}
 
-    most_recent_file = Drive.get_most_recent_file(files)
-    cache_key = (most_recent_file['id'], most_recent_file.get('modifiedTime'))
+    for account, folder_id in activity_statement_folders.items():
+        files = Drive.get_files_in_folder(folder_id) or []
+        filename_pattern = re.compile(rf'{re.escape(account)}_(\d{{4}})(\d{{2}})\.csv', re.IGNORECASE)
+
+        for file_info in files:
+            match = filename_pattern.fullmatch(file_info.get('name', ''))
+            if not match:
+                continue
+
+            account_month = (account, match.group(1), match.group(2))
+            if account_month in seen_account_months:
+                raise ServiceError(
+                    f'Multiple activity statement CSV files found for {account} {match.group(1)}-{match.group(2)}',
+                    status_code=500,
+                )
+
+            seen_account_months.add(account_month)
+            months_by_account[account].add((match.group(1), match.group(2)))
+            statement_files.append((*account_month, file_info))
+
+    missing_accounts = [account for account, months in months_by_account.items() if not months]
+    if missing_accounts:
+        raise ServiceError(
+            f'No monthly activity statement CSV files found for: {", ".join(missing_accounts)}',
+            status_code=404,
+        )
+
+    statement_files.sort(key=lambda item: (item[1], item[2], item[0]))
+    cache_key = tuple(
+        (account, year, month, file_info['id'], file_info.get('modifiedTime'))
+        for account, year, month, file_info in statement_files
+    )
 
     with _ending_balances_cache_lock:
         if _ending_balances_cache['key'] == cache_key:
             return _ending_balances_cache['rows']
 
-        report_bytes = Drive.download_file(file_id=most_recent_file['id'], parse=False)
-        ending_balances = _extract_ending_balances_sheet(report_bytes)
+        ending_balances = []
+        current_file_cache = {}
+        for account, year, month, file_info in statement_files:
+            file_cache_key = (
+                account,
+                year,
+                month,
+                file_info['id'],
+                file_info.get('modifiedTime'),
+            )
+            statement_rows = _activity_statement_file_cache.get(file_cache_key)
+            if statement_rows is None:
+                statement_bytes = Drive.download_file(file_id=file_info['id'], parse=False)
+                statement_rows = _extract_change_in_nav_rows(statement_bytes, account, year, month)
+
+            current_file_cache[file_cache_key] = statement_rows
+            ending_balances.extend(statement_rows)
 
         ending_balances = _stringify_dict_keys(ending_balances)
+        _activity_statement_file_cache.clear()
+        _activity_statement_file_cache.update(current_file_cache)
         _ending_balances_cache['key'] = cache_key
         _ending_balances_cache['rows'] = ending_balances
 
@@ -1023,29 +1079,58 @@ def get_ending_balances_from_statements():
     return ending_balances
 
 
-def _extract_ending_balances_sheet(report_bytes):
-    """Read the headerless Ending Balances worksheet into the API row contract."""
-    sheets = pd.read_excel(io.BytesIO(report_bytes), sheet_name=None, header=None)
-    sheet_name = next((name for name in sheets if name.strip().lower() == 'ending balances'), None)
-    if sheet_name is None:
-        raise ServiceError('Sheet "Ending Balances" not found in latest report', status_code=404)
+def _extract_change_in_nav_rows(statement_bytes, expected_account, year, month):
+    """Normalize one account's Change in NAV section from an IBKR statement."""
+    try:
+        statement_text = statement_bytes.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        statement_text = statement_bytes.decode('latin1')
 
-    ending_balances = sheets[sheet_name]
-    if ending_balances.shape[1] < 5:
-        raise ServiceError('Unexpected Ending Balances worksheet format', status_code=500)
+    current_account = None
+    end_of_month = pd.Timestamp(int(year), int(month), 1) + pd.offsets.MonthEnd(0)
+    ending_balances = []
 
-    ending_balances = ending_balances.iloc[:, :5].copy()
-    ending_balances.columns = ['Date', 'Description', 'Amount', 'Account', 'EOM']
-    ending_balances = ending_balances.dropna(how='all')
-    ending_balances = ending_balances[
-        ~(
-            ending_balances['Date'].astype(str).str.strip().str.lower().eq('date')
-            & ending_balances['Description'].astype(str).str.strip().str.lower().eq('description')
+    for row in csv.reader(io.StringIO(statement_text)):
+        if len(row) >= 4 and row[0].strip() == 'Account Information' and row[1].strip() == 'Data':
+            if row[2].strip() == 'Account':
+                account_parts = row[3].strip().split()
+                current_account = account_parts[0] if account_parts else None
+            continue
+
+        if current_account != expected_account:
+            continue
+        if len(row) < 4 or row[0].strip() != 'Change in NAV' or row[1].strip() != 'Data':
+            continue
+
+        description = row[2].strip()
+        raw_amount = row[3].strip()
+        if not description or not raw_amount:
+            continue
+
+        try:
+            amount = float(raw_amount.replace(',', ''))
+        except ValueError as exc:
+            raise ServiceError(
+                f'Invalid Change in NAV amount for {expected_account} {year}-{month} '
+                f'{description}: {raw_amount}',
+                status_code=500,
+            ) from exc
+
+        ending_balances.append({
+            'Date': end_of_month,
+            'Description': description,
+            'Amount': amount,
+            'Account': expected_account,
+            'EOM': end_of_month,
+        })
+
+    if not ending_balances:
+        raise ServiceError(
+            f'Change in NAV data not found for {expected_account} {year}-{month}',
+            status_code=500,
         )
-    ]
 
-    ending_balances = ending_balances.astype(object).where(pd.notna(ending_balances), '')
-    return ending_balances.to_dict(orient='records')
+    return ending_balances
 
 
 def _extract_named_sheet_rows(rows, expected_sheet_name):
