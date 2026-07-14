@@ -1,5 +1,5 @@
 from src.utils.connectors.gmail import GmailConnector
-from src.utils.exception import handle_exception
+from src.utils.exception import ServiceError, handle_exception
 
 class Gmail(GmailConnector):
     """High-level email service containing business-specific helper methods.
@@ -135,6 +135,12 @@ class Gmail(GmailConnector):
         normalized_lang = "es" if lang == "es" else "en"
         normalized_missing_type = missing_type if missing_type in {"poi", "poa", "sow", "multiple"} else "multiple"
         is_company_contact = bool((content or {}).get("is_company_contact"))
+        company_name = str((content or {}).get("company_name") or "").strip()
+        if is_company_contact and not company_name:
+            raise ServiceError(
+                "company_name is required for company missing-documents emails",
+                status_code=400,
+            )
         if normalized_lang == "es":
             subject = (
                 "Documentos pendientes para su cuenta corporativa"
@@ -152,6 +158,7 @@ class Gmail(GmailConnector):
         return self.send_email(
             {
                 **(content or {}),
+                "company_name": company_name,
                 "missing_type": normalized_missing_type,
             },
             client_email,

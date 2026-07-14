@@ -36,14 +36,20 @@
         <div class="section">
             <p>Dear {{ content.client_name or 'client' }},</p>
             <p>We hope you are doing very well.</p>
+            {% if content.is_company_contact %}
+            <p>As part of our compliance and information update process, we noticed that the following documents from your company <strong>{{ content.company_name | e }}</strong> are expired or still missing from your file. To keep your client profile up to date, please upload them securely through our website using the following button:</p>
+            {% else %}
             <p>As part of our compliance and information update process, we noticed that the following documents are expired or still missing from your file. To keep your client profile up to date, please upload them securely through our website using the following button:</p>
+            {% endif %}
             {% if content.upload_link %}
             <p><a href="{{ content.upload_link }}" class="button" target="_blank" rel="noopener noreferrer">Upload documents securely</a></p>
             {% endif %}
         </div>
 
         <div class="section">
-            <p>If you have any issue using the website upload, you may also send the requested documents as soon as possible to: <strong>info@agmtechnology.com</strong></p>
+            <p>If you have any issue with the website upload, you may also send them as soon as possible to either of the following:</p>
+            <p>Email: <strong>info@agmtechnology.com</strong><br>
+            WhatsApp: <a href="https://wa.me/17862511496" target="_blank" rel="noopener noreferrer"><strong>+1 786 251 1496</strong></a>.</p>
         </div>
 
         {% if content.missing_documents and content.missing_documents|length > 0 %}
@@ -77,8 +83,12 @@
 
         <div class="section">
             <p>If you have already sent any of these documents recently, please ignore this message for those items. If you have any questions about what is required, you can reply to this email. It is very important that you send these documents as soon as possible to avoid the account being disabled or restricted by the custodian. Thank you very much.</p>
+            {% if content.upload_link %}
+            <p><a href="{{ content.upload_link }}" class="button" target="_blank" rel="noopener noreferrer">Upload documents securely</a></p>
+            {% endif %}
             <p>Kind regards,<br>AGM Team</p>
         </div>
+
     </div>
 </body>
 </html>

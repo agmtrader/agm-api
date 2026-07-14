@@ -36,14 +36,20 @@
         <div class="section">
             <p>Estimado(a) {{ content.client_name or 'cliente' }},</p>
             <p>Esperamos se encuentre muy bien.</p>
+            {% if content.is_company_contact %}
+            <p>Como parte de nuestro proceso de cumplimiento y actualización de información, notamos que los siguientes documentos de su sociedad <strong>{{ content.company_name | e }}</strong> están vencidos o aún faltan de incorporar en su expediente. Para mantener su perfil de cliente al día, por favor cárguelos de forma segura en nuestro sitio web usando el siguiente botón:</p>
+            {% else %}
             <p>Como parte de nuestro proceso de cumplimiento y actualización de información, notamos que los siguientes documentos están vencidos o nos faltan de incorporar en su expediente. Para mantener su perfil de cliente al día, por favor cárguelos de forma segura en nuestro sitio web usando el siguiente botón:</p>
+            {% endif %}
             {% if content.upload_link %}
             <p><a href="{{ content.upload_link }}" class="button" target="_blank" rel="noopener noreferrer">Cargar documentos de forma segura</a></p>
             {% endif %}
         </div>
 
         <div class="section">
-            <p>Si tiene algún inconveniente con la carga en el sitio web, también puede enviarlos a la brevedad posible a: <strong>info@agmtechnology.com</strong></p>
+            <p>Si tiene algún inconveniente con la carga en el sitio web, también puede enviarlos a la brevedad posible a cualquiera de estos:</p>
+            <p>Correo: <strong>info@agmtechnology.com</strong><br>
+            Whatsapp: <a href="https://wa.me/17862511496" target="_blank" rel="noopener noreferrer"><strong>+1 786 251 1496</strong></a>.</p>
         </div>
 
         {% if content.missing_documents and content.missing_documents|length > 0 %}
@@ -76,8 +82,12 @@
 
         <div class="section">
             <p>Si ya envió recientemente estos documento(s), por favor ignore este mensaje respecto de esos puntos. Si tiene alguna duda sobre lo requerido, puede responder a este correo. Es sumamente importante que nos haga llegar estos documentos a la mayor brevedad posible para evitar que la cuenta quede inhabilitada o restringida por el custodio, muchas gracias.</p>
+            {% if content.upload_link %}
+            <p><a href="{{ content.upload_link }}" class="button" target="_blank" rel="noopener noreferrer">Cargar documentos de forma segura</a></p>
+            {% endif %}
             <p>Saludos cordiales,<br>Equipo AGM</p>
         </div>
+
     </div>
 </body>
 </html>
