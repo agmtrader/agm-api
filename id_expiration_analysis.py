@@ -25,7 +25,7 @@ from src.components.clients.document_processing import (
 from src.utils.connectors.supabase import db
 
 CATEGORY = "Proof of Identity"
-TARGET_COUNT = 25
+TARGET_COUNT = 100
 PREVIEW_LENGTH = 300
 DETAIL_CSV_PATH = "contact_document_ocr_extractions.csv"
 SUMMARY_CSV_PATH = "contact_document_ocr_summary.csv"
