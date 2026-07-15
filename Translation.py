@@ -1,45 +1,37 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
+import os
 import re
 import unicodedata
 from collections import Counter
-from io import BytesIO
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Iterable, Protocol, Sequence
 
-import easyocr
-import numpy as np
-import pypdfium2
 import pymupdf
 import torch
-from easyocr.utils import reformat_input
-from PIL import Image
-from pypdf import PdfReader
+from dotenv import load_dotenv
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
-CATEGORY = "Proof of Identity"
-TEXT_EXTRACTION_PROCESS_TYPE = "text_extraction"
-TARGET_COUNT = 50
+load_dotenv(Path(__file__).resolve().with_name(".env"), override=False)
+
+from src.components.clients.document_processing import extract_document_ocr
+
 PREVIEW_LENGTH = 300
-DETAIL_CSV_PATH = "contact_document_ocr_extractions.csv"
-SUMMARY_CSV_PATH = "contact_document_ocr_summary.csv"
-OUTPUT_DIRECTORY = Path("translated_contact_documents")
 DEFAULT_MODEL = "Helsinki-NLP/opus-mt-es-en"
+TRANSLATION_MODEL_CACHE_DIRECTORY = Path(
+    os.getenv(
+        "TRANSLATION_MODEL_CACHE_DIRECTORY",
+        Path(__file__).resolve().parent / ".cache" / "translation" / "models",
+    )
+).expanduser()
 DEFAULT_MAX_INPUT_TOKENS = 400
 DEFAULT_BATCH_SIZE = 8
 DEFAULT_MIN_OCR_CONFIDENCE = 0.50
-ENGLISH_LANGUAGE_NAMES = {"en", "eng", "english", "inglés", "ingles"}
-LOCAL_OCR_DPI = 200
-LOCAL_OCR_MODEL_DIRECTORY = Path("/private/tmp/easyocr_models")
-LOCAL_OCR_CACHE_DIRECTORY = Path("/private/tmp/agm_ocr_cache")
-POSITIONED_OCR_CACHE_VERSION = "v2"
-OCR_TEXT_REPLACEMENTS = {
+TRANSLATION_SOURCE_TEXT_REPLACEMENTS = {
     "YNOTARIOS": "Y NOTARIOS",
     "ACUERDO DE CONCILIACION": "ACUERDO DE CONCILIACIÓN",
     "aqosto": "agosto",
@@ -80,6 +72,7 @@ class OCRRegion:
     source_text: str
     confidence: float | None = None
     page_height: float | None = None
+    render_scale: float | None = None
     translated_text: str = ""
     skip_reason: str | None = None
     glossary_match: str | None = None
@@ -158,8 +151,14 @@ class MarianTransformersEngine:
     """Spanish-to-English MarianMT inference loaded once per script run."""
 
     def __init__(self, model_name: str, device: str, max_input_tokens: int):
-        self._tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self._model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+        self._tokenizer = AutoTokenizer.from_pretrained(
+            model_name,
+            cache_dir=str(TRANSLATION_MODEL_CACHE_DIRECTORY),
+        )
+        self._model = AutoModelForSeq2SeqLM.from_pretrained(
+            model_name,
+            cache_dir=str(TRANSLATION_MODEL_CACHE_DIRECTORY),
+        )
         self._model.to(device)
         self._model.eval()
         self._device = device
@@ -260,12 +259,12 @@ def normalize_translation_text(text: str) -> str:
     return re.sub(r"\s+", " ", str(text or "")).strip()
 
 
-def clean_ocr_text(text: str) -> str:
+def clean_translation_source_text(text: str) -> str:
     """Repair recurring scan artifacts before sending text to translation."""
 
     cleaned = str(text or "")
     cleaned = re.sub(r"_+", " ", cleaned)
-    for incorrect, replacement in OCR_TEXT_REPLACEMENTS.items():
+    for incorrect, replacement in TRANSLATION_SOURCE_TEXT_REPLACEMENTS.items():
         cleaned = cleaned.replace(incorrect, replacement)
     return normalize_translation_text(cleaned)
 
@@ -659,169 +658,14 @@ def translate_blocks(
     return len(chunks)
 
 
-def is_english_source(source_language: object) -> bool:
-    normalized = str(source_language or "").strip().lower()
-    return normalized in ENGLISH_LANGUAGE_NAMES
-
-
-def score_ocr_text(text: str) -> float:
-    """Apply the same basic OCR quality heuristic as the production flow."""
-
-    normalized = str(text or "").strip()
-    if not normalized:
-        return 0.0
-    letters = len(re.findall(r"[A-Za-zÀ-ÿ]", normalized))
-    digits = len(re.findall(r"\d", normalized))
-    weird_chars = len(re.findall(r"[^\w\sÀ-ÿ:;,\.\-\/()]", normalized))
-    longer_words = re.findall(r"\b[A-Za-zÀ-ÿ]{3,}\b", normalized)
-    isolated_digit_tokens = len(re.findall(r"\b\d\b", normalized))
-    score = letters + (len(longer_words) * 8.0)
-    score -= weird_chars * 6.0
-    score -= isolated_digit_tokens * 2.0
-    if digits > letters:
-        score -= (digits - letters) * 0.5
-    return score
-
-
 def polygon_bounds(polygon: Sequence[Sequence[float]]) -> tuple[float, float, float, float]:
     xs = [point[0] for point in polygon]
     ys = [point[1] for point in polygon]
     return min(xs), min(ys), max(xs), max(ys)
 
 
-def paragraph_confidence(
-    paragraph_polygon: Sequence[Sequence[float]],
-    word_regions: Sequence[Sequence[object]],
-) -> float | None:
-    """Average word confidence for the words that fall inside a paragraph."""
-
-    left, top, right, bottom = polygon_bounds(paragraph_polygon)
-    matching_confidences = []
-    for word_polygon, _, confidence in word_regions:
-        word_left, word_top, word_right, word_bottom = polygon_bounds(word_polygon)
-        center_x = (word_left + word_right) / 2
-        center_y = (word_top + word_bottom) / 2
-        if left <= center_x <= right and top <= center_y <= bottom:
-            matching_confidences.append(float(confidence))
-    if not matching_confidences:
-        return None
-    return sum(matching_confidences) / len(matching_confidences)
-
-
-def extract_local_pdf_blocks(
-    input_path: Path,
-    ocr_device: str,
-) -> tuple[list[DocumentBlock], str]:
-    """Extract a local PDF directly, falling back to EasyOCR when needed."""
-
-    if not input_path.exists():
-        raise FileNotFoundError(f"Input PDF does not exist: {input_path}")
-    if input_path.suffix.lower() != ".pdf":
-        raise ValueError("Local input must use the .pdf extension.")
-
-    file_bytes = input_path.read_bytes()
-    direct_reader = PdfReader(BytesIO(file_bytes))
-    direct_pages = [str(page.extract_text() or "").strip() for page in direct_reader.pages]
-    if direct_pages and all(direct_pages):
-        return (
-            [
-                DocumentBlock(page_number=index, source_text=normalize_translation_text(text))
-                for index, text in enumerate(direct_pages, start=1)
-            ],
-            "local_direct_parser",
-        )
-
-    print("direct_text: unavailable; falling back to EasyOCR", flush=True)
-    print(f"ocr_device: {ocr_device}", flush=True)
-    print(f"ocr_dpi: {LOCAL_OCR_DPI}", flush=True)
-    pdf = pypdfium2.PdfDocument(BytesIO(file_bytes))
-    scale = LOCAL_OCR_DPI / 72
-    cache_key = hashlib.sha256(file_bytes).hexdigest()[:20]
-    cache_path = LOCAL_OCR_CACHE_DIRECTORY / f"{cache_key}_{LOCAL_OCR_DPI}dpi.json"
-    cached_pages: dict[str, str] = {}
-    if cache_path.exists():
-        cached_pages = json.loads(cache_path.read_text(encoding="utf-8"))
-        print(f"ocr_cached_pages: {len(cached_pages)}", flush=True)
-
-    missing_page_numbers = [
-        page_number
-        for page_number in range(1, len(pdf) + 1)
-        if str(page_number) not in cached_pages
-    ]
-    reader = None
-    if missing_page_numbers:
-        reader = easyocr.Reader(
-            ["es", "en"],
-            gpu=ocr_device,
-            model_storage_directory=str(LOCAL_OCR_MODEL_DIRECTORY),
-            user_network_directory=str(LOCAL_OCR_MODEL_DIRECTORY / "user_network"),
-        )
-
-    blocks = []
-
-    try:
-        for page_index in range(len(pdf)):
-            page_number = page_index + 1
-            cached_text = cached_pages.get(str(page_number))
-            if cached_text is not None:
-                if cached_text:
-                    blocks.append(
-                        DocumentBlock(
-                            page_number=page_number,
-                            source_text=normalize_translation_text(cached_text),
-                        )
-                    )
-                continue
-
-            print(f"ocr_page: {page_number}/{len(pdf)}", flush=True)
-            page = pdf[page_index]
-            bitmap = page.render(scale=scale)
-            image: Image.Image = bitmap.to_pil()
-            try:
-                page_result = reader.readtext(
-                    np.array(image),
-                    detail=0,
-                    paragraph=True,
-                )
-            finally:
-                image.close()
-                page.close()
-
-            page_text = "\n".join(
-                str(chunk).strip() for chunk in page_result if str(chunk).strip()
-            ).strip()
-            page_score = score_ocr_text(page_text)
-            print(
-                f"ocr_page_result: page={page_number} chars={len(page_text)} "
-                f"score={page_score:.1f}",
-                flush=True,
-            )
-            cached_pages[str(page_number)] = page_text
-            LOCAL_OCR_CACHE_DIRECTORY.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(
-                json.dumps(cached_pages, ensure_ascii=False),
-                encoding="utf-8",
-            )
-            if page_text:
-                blocks.append(
-                    DocumentBlock(
-                        page_number=page_number,
-                        source_text=normalize_translation_text(page_text),
-                    )
-                )
-    finally:
-        pdf.close()
-
-    if not blocks:
-        raise TranslationError("PDF OCR completed but produced no text.")
-    if score_ocr_text(" ".join(block.source_text for block in blocks)) < 80:
-        raise TranslationError("PDF OCR produced low-quality text.")
-    return blocks, "local_easyocr"
-
-
 def extract_local_pdf_regions(
     input_path: Path,
-    ocr_device: str,
 ) -> tuple[list[OCRRegion], str]:
     """OCR local pages as positioned paragraphs for layout-preserving export."""
 
@@ -830,125 +674,40 @@ def extract_local_pdf_regions(
     if input_path.suffix.lower() != ".pdf":
         raise ValueError("Local input must use the .pdf extension.")
 
-    file_bytes = input_path.read_bytes()
-    cache_key = hashlib.sha256(file_bytes).hexdigest()[:20]
-    cache_path = (
-        LOCAL_OCR_CACHE_DIRECTORY
-        / f"{cache_key}_{LOCAL_OCR_DPI}dpi_regions_{POSITIONED_OCR_CACHE_VERSION}.json"
-    )
-    cached_pages: dict[str, list[dict]] = {}
-    if cache_path.exists():
-        cached_pages = json.loads(cache_path.read_text(encoding="utf-8"))
-        print(f"ocr_region_cached_pages: {len(cached_pages)}", flush=True)
-
-    pdf = pypdfium2.PdfDocument(BytesIO(file_bytes))
-    missing_page_numbers = [
-        page_number
-        for page_number in range(1, len(pdf) + 1)
-        if str(page_number) not in cached_pages
-    ]
-    reader = None
-    if missing_page_numbers:
-        print("direct_text: unavailable; falling back to positioned EasyOCR", flush=True)
-        print(f"ocr_device: {ocr_device}", flush=True)
-        print(f"ocr_dpi: {LOCAL_OCR_DPI}", flush=True)
-        reader = easyocr.Reader(
-            ["es", "en"],
-            gpu=ocr_device,
-            model_storage_directory=str(LOCAL_OCR_MODEL_DIRECTORY),
-            user_network_directory=str(LOCAL_OCR_MODEL_DIRECTORY / "user_network"),
-            verbose=False,
+    print("ocr_engine: shared document OCR provider", flush=True)
+    try:
+        ocr_result = extract_document_ocr(
+            input_path.read_bytes(),
+            source_language="es",
+            rotations=(0,),
         )
+    except ValueError as exc:
+        raise TranslationError(str(exc)) from exc
 
     regions: list[OCRRegion] = []
-    scale = LOCAL_OCR_DPI / 72
-    try:
-        for page_index in range(len(pdf)):
-            page_number = page_index + 1
-            page_regions = cached_pages.get(str(page_number))
-            if page_regions is None:
-                print(f"ocr_positioned_page: {page_number}/{len(pdf)}", flush=True)
-                page = pdf[page_index]
-                bitmap = page.render(scale=scale)
-                image: Image.Image = bitmap.to_pil()
-                page_height = image.height
-                try:
-                    image_array = np.array(image)
-                    image_bgr, image_gray = reformat_input(image_array)
-                    horizontal_lists, free_lists = reader.detect(
-                        image_bgr,
-                        reformat=False,
+    for page in ocr_result.pages:
+        for region in page.regions:
+            source_text = clean_translation_source_text(region.text)
+            if source_text:
+                regions.append(
+                    OCRRegion(
+                        page_number=page.page_number,
+                        polygon=region.polygon,
+                        source_text=source_text,
+                        confidence=region.confidence,
+                        page_height=page.height,
+                        render_scale=page.render_scale,
                     )
-                    horizontal_list = horizontal_lists[0]
-                    free_list = free_lists[0]
-                    paragraph_regions = reader.recognize(
-                        image_gray,
-                        horizontal_list,
-                        free_list,
-                        detail=1,
-                        paragraph=True,
-                        reformat=False,
-                    )
-                    word_regions = reader.recognize(
-                        image_gray,
-                        horizontal_list,
-                        free_list,
-                        detail=1,
-                        paragraph=False,
-                        reformat=False,
-                    )
-                finally:
-                    image.close()
-                    page.close()
-
-                page_regions = [
-                    {
-                        "polygon": polygon,
-                        "text": str(text).strip(),
-                        "confidence": paragraph_confidence(polygon, word_regions),
-                        "page_height": page_height,
-                    }
-                    for polygon, text, *_ in paragraph_regions
-                    if str(text).strip()
-                ]
-                cached_pages[str(page_number)] = page_regions
-                LOCAL_OCR_CACHE_DIRECTORY.mkdir(parents=True, exist_ok=True)
-                cache_path.write_text(
-                    json.dumps(cached_pages, ensure_ascii=False),
-                    encoding="utf-8",
                 )
-                print(
-                    f"ocr_positioned_page_result: page={page_number} "
-                    f"regions={len(page_regions)}",
-                    flush=True,
-                )
-
-            for region in page_regions:
-                source_text = clean_ocr_text(region["text"])
-                if source_text:
-                    regions.append(
-                        OCRRegion(
-                            page_number=page_number,
-                            polygon=region["polygon"],
-                            source_text=source_text,
-                            confidence=(
-                                float(region["confidence"])
-                                if region.get("confidence") is not None
-                                else None
-                            ),
-                            page_height=(
-                                float(region["page_height"])
-                                if region.get("page_height") is not None
-                                else None
-                            ),
-                        )
-                    )
-    finally:
-        pdf.close()
+        print(
+            f"ocr_positioned_page_result: page={page.page_number} "
+            f"regions={len(page.regions)}",
+            flush=True,
+        )
 
     if not regions:
         raise TranslationError("PDF OCR completed but produced no positioned text.")
-    return regions, "local_easyocr_positioned"
+    return regions, ocr_result.provider
 
 
 def translate_regions(
@@ -1023,7 +782,6 @@ def export_positioned_translation_pdf(
 ) -> None:
     """Overlay fitted English translations on the original scanned pages."""
 
-    scale = LOCAL_OCR_DPI / 72
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists():
         output_path.unlink()
@@ -1035,21 +793,31 @@ def export_positioned_translation_pdf(
 
     for page_index, source_page in enumerate(source_document):
         page_number = page_index + 1
+        page_regions = regions_by_page.get(page_number, [])
+        page_render_scale = next(
+            (
+                region.render_scale
+                for region in page_regions
+                if region.render_scale is not None
+            ),
+            1.0,
+        )
         page = document.new_page(
             width=source_page.rect.width,
             height=source_page.rect.height,
         )
         background = source_page.get_pixmap(
-            matrix=pymupdf.Matrix(scale, scale),
+            matrix=pymupdf.Matrix(page_render_scale, page_render_scale),
             alpha=False,
         )
         page.insert_image(page.rect, pixmap=background)
 
-        for region in regions_by_page.get(page_number, []):
+        for region in page_regions:
             if not region.translated_text:
                 continue
-            xs = [point[0] / scale for point in region.polygon]
-            ys = [point[1] / scale for point in region.polygon]
+            region_scale = region.render_scale or page_render_scale
+            xs = [point[0] / region_scale for point in region.polygon]
+            ys = [point[1] / region_scale for point in region.polygon]
             rect = pymupdf.Rect(
                 max(0, min(xs) - 1),
                 max(0, min(ys) - 1),
@@ -1099,7 +867,7 @@ def run_local_pdf_translation(args: argparse.Namespace) -> None:
         raise ValueError("Local output must use the .pdf extension.")
 
     device = select_device(args.device)
-    regions, provider = extract_local_pdf_regions(args.input_pdf, device)
+    regions, provider = extract_local_pdf_regions(args.input_pdf)
     source_pages = len({region.page_number for region in regions})
     total_characters = sum(len(region.source_text) for region in regions)
 

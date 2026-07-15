@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from src.components.clients.advisors import read_advisors, create_advisor
+from src.components.clients.advisors import create_advisor, link_advisor_contact, read_advisors
 from src.utils.response import format_response
 
 bp = Blueprint('advisors', __name__)
@@ -27,3 +27,14 @@ def advisors_route():
     if contact_id:
         query['contact_id'] = contact_id
     return read_advisors(query=query)
+
+
+@bp.route('/contact', methods=['POST'])
+@format_response
+def link_advisor_contact_route():
+    """Link an advisor to a contact selected by an operator."""
+    payload = request.get_json(force=True)
+    return link_advisor_contact(
+        advisor_id=payload.get('advisor_id'),
+        contact_id=payload.get('contact_id'),
+    )
