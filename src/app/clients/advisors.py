@@ -1,5 +1,10 @@
 from flask import Blueprint, request
-from src.components.clients.advisors import create_advisor, link_advisor_contact, read_advisors
+from src.components.clients.advisors import (
+    create_advisor,
+    create_and_link_advisor_contact,
+    link_advisor_contact,
+    read_advisors,
+)
 from src.utils.response import format_response
 
 bp = Blueprint('advisors', __name__)
@@ -37,4 +42,15 @@ def link_advisor_contact_route():
     return link_advisor_contact(
         advisor_id=payload.get('advisor_id'),
         contact_id=payload.get('contact_id'),
+    )
+
+
+@bp.route('/contact/create', methods=['POST'])
+@format_response
+def create_and_link_advisor_contact_route():
+    """Create a contact and link it to an advisor atomically."""
+    payload = request.get_json(force=True)
+    return create_and_link_advisor_contact(
+        advisor_id=payload.get('advisor_id'),
+        contact=payload.get('contact'),
     )
