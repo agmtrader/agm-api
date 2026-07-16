@@ -10,7 +10,13 @@ src/db/*
 logs/*
 keys/
 dev/
+!dev/
+dev/*
+!dev/contact_document_category_analysis.py
+contact_document_category_analysis/
 *.csv
+!id_expiry_update_evidence/
+!id_expiry_update_evidence/*.csv
 tmp/
 
 sandbox.py
