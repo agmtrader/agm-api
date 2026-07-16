@@ -1,6 +1,13 @@
 import pandas as pd
 import json
-from src.components.tools.public.reporting import get_open_positions_report, get_proposals_equity_report, get_bond_report, get_ust_bond_report
+from src.components.tools.public.reporting import (
+    get_bond_report,
+    get_etfs_report,
+    get_open_positions_report,
+    get_proposals_equity_report,
+    get_stocks_report,
+    get_ust_bond_report,
+)
 from src.components.clients.risk_profiles import risk_archetypes, get_risk_archetype_for_score
 from src.utils.connectors.supabase import db
 from src.utils.exception import handle_exception
