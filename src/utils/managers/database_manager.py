@@ -364,6 +364,14 @@ class DatabaseManager:
 
             if query is None:
                 raise Exception("Query must be provided.")
+
+            # The document.data column contains base64 file bodies. An unfiltered
+            # read can exhaust the API instance before the database timeout fires.
+            if table == 'document' and not query and 'data' not in (exclude_columns or []):
+                raise Exception(
+                    "Unfiltered reads of document.data are prohibited; provide a query "
+                    "or exclude the data column."
+                )
             
             tbl = Table(table, self.metadata, autoload_with=self.engine)
             sql_query = session.query(tbl)
@@ -379,7 +387,11 @@ class DatabaseManager:
             if query:
                 for key, value in query.items():
                     if hasattr(tbl.c, key):
-                        sql_query = sql_query.filter(getattr(tbl.c, key) == value)
+                        column = getattr(tbl.c, key)
+                        if isinstance(value, (list, tuple, set, frozenset)):
+                            sql_query = sql_query.filter(column.in_(list(value)))
+                        else:
+                            sql_query = sql_query.filter(column == value)
                 
             compiled_query = sql_query.statement.compile(
                 compile_kwargs={"literal_binds": True},

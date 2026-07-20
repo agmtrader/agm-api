@@ -1,4 +1,4 @@
-from src.utils.exception import handle_exception
+from src.utils.exception import ServiceError, handle_exception
 from src.utils.connectors.supabase import db
 from src.utils.logger import logger
 from typing import Optional
@@ -207,14 +207,22 @@ def read_contact_documents(
     include_documents: bool = True,
     include_processing: bool = False,
 ):
-    query = {'contact_id': contact_id} if contact_id else {}
+    requested_document_ids = {
+        str(document_id).strip()
+        for document_id in (document_ids or [])
+        if str(document_id).strip()
+    }
+    if include_data and not requested_document_ids:
+        raise ServiceError(
+            'At least one document_id is required when include_data=true',
+            status_code=400,
+        )
+    query = {}
+    if contact_id:
+        query['contact_id'] = contact_id
+    if requested_document_ids:
+        query['document_id'] = sorted(requested_document_ids)
     links = db.read(table=contact_document_table, query=query) or []
-    if document_ids:
-        requested_document_ids = {str(document_id) for document_id in document_ids if document_id}
-        links = [
-            link for link in links
-            if str(link.get('document_id') or '') in requested_document_ids
-        ]
     if not include_documents:
         documents = []
         if include_processing and links:
@@ -236,7 +244,7 @@ def read_contact_documents(
             ]
         return {'documents': documents, 'contact_documents': links}
 
-    requested_document_ids = {
+    linked_document_ids = {
         str(link.get('document_id') or '').strip()
         for link in links
         if str(link.get('document_id') or '').strip()
@@ -254,20 +262,20 @@ def read_contact_documents(
             for processing in processing_rows
             if str(processing.get('document_id') or '').strip()
         }
-    if requested_document_ids:
+    if linked_document_ids:
         document_rows = db.read(
             table='document',
-            query={},
+            query={'id': sorted(linked_document_ids)},
             exclude_columns=exclude,
         ) or []
         documents_by_id = {
             str(document.get('id') or '').strip(): document
             for document in document_rows
-            if str(document.get('id') or '').strip() in requested_document_ids
+            if str(document.get('id') or '').strip() in linked_document_ids
         }
         documents = [
             documents_by_id[document_id]
-            for document_id in requested_document_ids
+            for document_id in linked_document_ids
             if document_id in documents_by_id
         ]
         if include_processing:

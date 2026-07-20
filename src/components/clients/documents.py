@@ -1,4 +1,4 @@
-from src.utils.exception import handle_exception
+from src.utils.exception import ServiceError, handle_exception
 from src.utils.connectors.supabase import db
 
 @handle_exception
@@ -48,6 +48,8 @@ def get_document_data(document_id: str = None) -> dict:
     Returns:
         The data of the document
     """
+    if not document_id:
+        raise ServiceError('document_id is required', status_code=400)
     return db.read(table='document', query={'id': document_id})
 
 
