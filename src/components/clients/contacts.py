@@ -255,15 +255,16 @@ def read_contact_documents(
             if str(processing.get('document_id') or '').strip()
         }
     if requested_document_ids:
-        documents_by_id = {}
-        for document_id in requested_document_ids:
-            document_rows = db.read(
-                table='document',
-                query={'id': document_id},
-                exclude_columns=exclude,
-            ) or []
-            if document_rows:
-                documents_by_id[document_id] = document_rows[0]
+        document_rows = db.read(
+            table='document',
+            query={},
+            exclude_columns=exclude,
+        ) or []
+        documents_by_id = {
+            str(document.get('id') or '').strip(): document
+            for document in document_rows
+            if str(document.get('id') or '').strip() in requested_document_ids
+        }
         documents = [
             documents_by_id[document_id]
             for document_id in requested_document_ids
@@ -948,6 +949,5 @@ def create_contact_screening_from_contact_id(contact_id: str = None, created: Op
 
 @handle_exception
 def read_contact_screenings(contact_id: str = None):
-    if not contact_id:
-        raise Exception('contact_id is required')
-    return db.read(table=contact_screening_table, query={'contact_id': contact_id}) or []
+    query = {'contact_id': contact_id} if contact_id else {}
+    return db.read(table=contact_screening_table, query=query) or []
