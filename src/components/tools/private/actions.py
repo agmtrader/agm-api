@@ -187,10 +187,10 @@ def send_compliance_manual_update_email():
     email = Gmail()
     message = email.send_compliance_manual_update_email(
         content={},
-        recipient_email="aa@agmtechnology.com",
+        recipient_email="aa@agmtechnology.com,cr@agmtechnology.com,hc@agmtechnology.com,as@agmtechnology.com",
     )
     return {
         "status": "sent",
-        "recipient": "aa@agmtechnology.com",
+        "recipient": "aa@agmtechnology.com,cr@agmtechnology.com,hc@agmtechnology.com,as@agmtechnology.com",
         "message": message,
     }
