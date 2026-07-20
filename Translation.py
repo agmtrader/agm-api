@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import argparse
 import html
+import math
 import os
 import re
-import unicodedata
+import shutil
 from collections import Counter
 from dataclasses import dataclass
-from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Iterable, Protocol, Sequence
 from urllib.parse import quote
@@ -23,7 +23,11 @@ from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 load_dotenv(Path(__file__).resolve().with_name(".env"), override=False)
 
-from src.components.clients.document_processing import extract_document_ocr
+from src.components.clients.document_processing import (
+    DocumentOCRPage,
+    DocumentOCRRegion,
+    extract_document_ocr,
+)
 
 PREVIEW_LENGTH = 300
 DEFAULT_MODEL = "Helsinki-NLP/opus-mt-es-en"
@@ -41,80 +45,8 @@ DEFAULT_GOOGLE_MAX_INPUT_CHARACTERS = 3_000
 GOOGLE_TRANSLATE_REQUEST_CHARACTER_LIMIT = 30_000
 GOOGLE_TRANSLATE_REQUEST_ITEM_LIMIT = 1_024
 GOOGLE_CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
-TRANSLATION_SOURCE_TEXT_REPLACEMENTS = {
-    "YNOTARIOS": "Y NOTARIOS",
-    "ACUERDO DE CONCILIACION": "ACUERDO DE CONCILIACIÓN",
-    "aqosto": "agosto",
-    "deL": "del",
-    "SQLIS": "SOLÍS",
-    "ROCIQ": "ROCÍO",
-    "Ias": "las",
-    "Ivombre": "Nombre",
-    "1º Apelido": "1º Apellido",
-    "28 Apellido": "2º Apellido",
-}
-TRANSLATION_OUTPUT_REPLACEMENTS = (
-    (r"\bSERVIDUMBRE\s+TRASLADADA\b", "TRANSFERRED EASEMENT"),
-)
-FIXED_REGION_TRANSLATIONS = {
-    "E&V": "E&V",
-    "ABOGADOS Y NOTARIOS": "LAWYERS AND NOTARIES",
-    "E&V ABOGADOS Y NOTARIOS": "E&V LAWYERS AND NOTARIES",
-    "ACUERDO DE CONCILIACIÓN:": "CONCILIATION AGREEMENT:",
-    "CONCILIADOR": "CONCILIATOR",
-    "IMPRIMIR": "PRINT",
-    "REGRESAR": "BACK",
-    "COMPRAR": "BUY",
-    "IMPRIMIR REGRESAR": "PRINT    BACK",
-    "IMPRIMIR REGRESAR COMPRAR": "PRINT    BACK    BUY",
-    "SERVIDUMBRE TRASLADADA": "TRANSFERRED EASEMENT",
-    "N.MOTOR:": "ENGINE NO.:",
-    "ESTE CIVIL": "CIVIL",
-    "ESE CIVIL": "CIVIL",
-    "GISTRO": "REGISTRY",
-    "HIJO/A DE:": "CHILD OF:",
-    "HIJO/A DE": "CHILD OF:",
-    "EL DÍA:": "DATE:",
-}
-STRUCTURED_FIELD_TRANSLATIONS = (
-    (r"\bTOMO\b", "VOLUME"),
-    (r"\bASIENTO\b", "ENTRY"),
-    (r"\bSECUENCIA\b", "SEQUENCE"),
-    (r"\bFECHA\b", "DATE"),
-    (r"\bFOLIO\b", "FOLIO"),
-    (r"\bCITAS\b", "REFERENCES"),
-)
-SPANISH_MONTH_ABBREVIATIONS = {
-    "ENE": "JAN",
-    "FEB": "FEB",
-    "MAR": "MAR",
-    "ABR": "APR",
-    "MAY": "MAY",
-    "JUN": "JUN",
-    "JUL": "JUL",
-    "AGO": "AUG",
-    "SEP": "SEP",
-    "OCT": "OCT",
-    "NOV": "NOV",
-    "DIC": "DEC",
-}
-OFFICIAL_SEAL_MARKERS = (
-    "TRIBUNAL SUPREMO DE ELECCIONES",
-    "REGISTRO CIVIL",
-    "DIRECCION DE CERTIFICACIONES DIGITALES",
-    "DIRECCIÓN DE CERTIFICACIONES DIGITALES",
-    "CERTIFICACIONES DIGITALES",
-)
-ISSUER_BRANDING_MARKERS: tuple[str, ...] = ()
-OFFICIAL_BRANDING_FRAGMENTS = {
-    "TRIBUNAL SUPREMO DE ELECCIONES",
-    "SISTEMA",
-    "DE CERTIFICACIONES",
-    "DIGITALES",
-    "SISTEMA DE CERTIFICACIONES DIGITALES",
-    "CDI",
-    "ISE",
-}
+PRESERVED_GLOSSARY_PATTERN = re.compile(r"\b(?:Lcda|Lcdo)\.?", re.IGNORECASE)
+PASSPORT_DOCUMENT_TYPES = {"passport", "pasaporte"}
 
 
 @dataclass(slots=True)
@@ -143,22 +75,13 @@ class OCRRegion:
     page_width: float | None = None
     page_height: float | None = None
     render_scale: float | None = None
+    page_rotation: int = 0
     region_kind: str = "paragraph"
     translated_text: str = ""
     skip_reason: str | None = None
-    glossary_match: str | None = None
-    glossary_translation: str | None = None
-    glossary_allows_structured_region: bool = False
-
-
-@dataclass(frozen=True, slots=True)
-class GlossaryEntry:
-    """A verified Spanish label and its approved English rendering."""
-
-    source_text: str
-    translated_text: str
-    aliases: tuple[str, ...] = ()
-    allow_structured_region: bool = False
+    pdf_rect_override: tuple[float, float, float, float] | None = None
+    background_color_override: tuple[float, float, float] | None = None
+    text_alignment: int = 0
 
 
 @dataclass(slots=True)
@@ -167,73 +90,17 @@ class RenderQualityReport:
 
     translated_regions: int = 0
     preserved_invalid_coordinates: int = 0
-    preserved_protected_overlap: int = 0
     preserved_oversized_region: int = 0
     preserved_does_not_fit: int = 0
-    protected_regions: int = 0
 
 
-# Initial Costa Rican civil/registry glossary. Entries are deliberately short,
-# high-confidence labels: they may repair uncertain OCR without guessing at a
-# whole paragraph or a table cell that has not been structurally extracted.
-DOCUMENT_GLOSSARY = (
-    GlossaryEntry(
-        "CERTIFICA",
-        "CERTIFIES:",
-        ("CERIFICA", "CERIIACA", "CERIIFICA", "CERlFICA"),
-        True,
-    ),
-    GlossaryEntry(
-        "CÉDULA DE IDENTIDAD",
-        "IDENTITY CARD",
-        ("CEDULA DE IDENTIDAD", "CEDULA DE IDEN TIDAD"),
-    ),
-    GlossaryEntry(
-        "CONTRATO PRENDARIO",
-        "CHATTEL MORTGAGE CONTRACT",
-        ("CONTRATO PRENDARIO",),
-    ),
-    GlossaryEntry(
-        "NO POSEE ANOTACIÓN(ES)",
-        "NO ANNOTATIONS",
-        ("NO POSCE ANOTACIÓN(ES)", "NO POSCE ANOTACION(ES)"),
-    ),
-    GlossaryEntry(
-        "NO POSEE LEVANTAMIENTO(S)",
-        "NO RELEASES RECORDED",
-        (
-            "NO POSEE LEVANIAMIENTO(S)",
-            "NO POSCE LEVANIAMIENTO(S)",
-            "NO POSCE LEVANTAMIENTO(S)",
-        ),
-    ),
-    GlossaryEntry("TOMO", "VOLUME", allow_structured_region=True),
-    GlossaryEntry("FOLIO", "FOLIO", allow_structured_region=True),
-    GlossaryEntry("ASIENTO", "ENTRY", allow_structured_region=True),
-    GlossaryEntry("CITA", "REFERENCE", allow_structured_region=True),
-    GlossaryEntry("FECHA", "DATE", allow_structured_region=True),
-    GlossaryEntry("TIPO", "TYPE", allow_structured_region=True),
-    GlossaryEntry("SECUENCIA", "SEQUENCE", allow_structured_region=True),
-    GlossaryEntry(
-        "CITAS DE INSCRIPCIÓN",
-        "REG. REFERENCES",
-        ("CITAS DE INSCRIPCION", "CITAS DE INSCRIP"),
-        True,
-    ),
-    GlossaryEntry(
-        "SI POSEE GRAVAMEN(ES)",
-        "HAS ENCUMBRANCE(S)",
-        ("SI POSEE GRAVAMENES",),
-        True,
-    ),
-    GlossaryEntry("GRAVAMEN(ES)", "ENCUMBRANCE(S)", allow_structured_region=True),
-    GlossaryEntry(
-        "DENUNCIA DE TRÁNSITO",
-        "TRAFFIC COMPLAINT",
-        ("DENUNCIA DE TRANSITO",),
-        True,
-    ),
-)
+@dataclass(slots=True)
+class VisualRegionClassification:
+    """A page region that must retain its original visual presentation."""
+
+    role: str
+    rect: pymupdf.Rect
+    source: str
 
 
 class TranslationError(RuntimeError):
@@ -418,12 +285,61 @@ def preview_text(value: str) -> str:
 
 
 def postprocess_translation(text: str) -> str:
-    """Replace known Spanish phrases that the translation model preserved."""
+    """Normalize a model response without applying document-specific wording."""
 
-    output = str(text or "")
-    for pattern, replacement in TRANSLATION_OUTPUT_REPLACEMENTS:
-        output = re.sub(pattern, replacement, output, flags=re.IGNORECASE)
-    return output
+    return preserve_translation_layout(text)
+
+
+def normalized_document_type(value: str | None) -> str:
+    return re.sub(r"[^a-z]+", " ", str(value or "").lower()).strip()
+
+
+def is_passport_document(
+    input_path: Path,
+    document_type: str | None = None,
+) -> bool:
+    """Classify passports without invoking OCR.
+
+    Explicit upstream metadata has priority. If it is absent, the filename and
+    native PDF metadata provide a conservative fallback. Image content is never
+    inspected because that would violate the pre-OCR bypass requirement.
+    """
+
+    if document_type is not None:
+        normalized_type = normalized_document_type(document_type)
+        return any(
+            re.search(rf"\b{re.escape(value)}\b", normalized_type)
+            for value in PASSPORT_DOCUMENT_TYPES
+        )
+
+    normalized_name = normalized_document_type(input_path.stem)
+    if any(
+        re.search(rf"\b{re.escape(value)}\b", normalized_name)
+        for value in PASSPORT_DOCUMENT_TYPES
+    ):
+        return True
+    try:
+        with pymupdf.open(input_path) as document:
+            metadata = document.metadata or {}
+        native_metadata = normalized_document_type(
+            " ".join(
+                str(metadata.get(key) or "")
+                for key in ("title", "subject", "keywords")
+            )
+        )
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return any(
+        re.search(rf"\b{re.escape(value)}\b", native_metadata)
+        for value in PASSPORT_DOCUMENT_TYPES
+    )
+
+
+def copy_passport_without_translation(input_path: Path, output_path: Path) -> None:
+    """Copy a passport unchanged, before OCR or translation clients are built."""
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(input_path, output_path)
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -436,6 +352,13 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument("input_pdf", type=Path, help="Source Spanish PDF")
     parser.add_argument("output_pdf", type=Path, help="Translated English PDF")
+    parser.add_argument(
+        "--document-type",
+        help=(
+            "Upstream document classification. Use 'passport' to bypass OCR "
+            "and copy the PDF unchanged."
+        ),
+    )
     parser.add_argument(
         "--debug-overlay-pdf",
         type=Path,
@@ -537,197 +460,13 @@ def preserve_translation_layout(text: str) -> str:
 
 
 def clean_translation_source_text(text: str) -> str:
-    """Repair recurring scan artifacts before sending text to translation."""
+    """Apply only document-neutral whitespace cleanup to OCR text."""
 
-    cleaned = str(text or "")
-    cleaned = re.sub(r"_+", " ", cleaned)
-    for incorrect, replacement in TRANSLATION_SOURCE_TEXT_REPLACEMENTS.items():
-        cleaned = cleaned.replace(incorrect, replacement)
-    return normalize_translation_text(cleaned)
-
-
-def translate_structured_form_labels(text: str) -> str:
-    """Translate form labels while preserving identifiers and values verbatim."""
-
-    source = preserve_translation_layout(text)
-    normalized = normalize_translation_text(source).upper()
-    label_count = sum(
-        bool(re.search(rf"\b{label}\b", normalized))
-        for label in ("TOMO", "ASIENTO", "SECUENCIA", "FECHA", "FOLIO", "CITAS")
-    )
-    reference_row = bool(re.search(r"\bCITAS?\b\s*:\s*\d", normalized))
-    if label_count < 2 and not reference_row:
-        return ""
-
-    translated = source
-    for pattern, replacement in STRUCTURED_FIELD_TRANSLATIONS:
-        translated = re.sub(pattern, replacement, translated, flags=re.IGNORECASE)
-    return translated if translated != source else ""
-
-
-def translate_issued_ui_region(text: str) -> str:
-    """Translate a merged issuance line and its nearby web-control labels."""
-
-    normalized = normalize_translation_text(text)
-    match = re.search(
-        r"\bEMITIDO(?:\s+EL|:)?\s+(.+?)\s+A\s+LAS\s+([0-9:]+)\s+HORAS\b",
-        normalized,
-        flags=re.IGNORECASE,
-    )
-    if not match:
-        return ""
-    controls = [
-        translation
-        for source, translation in (
-            ("IMPRIMIR", "PRINT"),
-            ("REGRESAR", "BACK"),
-            ("COMPRAR", "BUY"),
-        )
-        if re.search(rf"\b{source}\b", normalized, flags=re.IGNORECASE)
+    lines = [
+        normalize_translation_text(line)
+        for line in preserve_translation_layout(text).splitlines()
     ]
-    issued_line = f"ISSUED: {match.group(1).strip()} {match.group(2)}"
-    return issued_line + (f"\n{'   '.join(controls)}" if controls else "")
-
-
-def translate_machine_value(text: str) -> str:
-    """Translate language-bearing date values without altering identifiers."""
-
-    translated = re.sub(
-        r"\bFECHA\s+DE\s+NACIMIENTO\s*:\s*(\d{2})\s*(\d{2})\s+(\d{4})\b",
-        lambda match: (
-            f"DATE OF BIRTH: {match.group(1)}/{match.group(2)}/{match.group(3)}"
-        ),
-        text,
-        flags=re.IGNORECASE,
-    )
-    translated = re.sub(
-        r"\bVENCIMIENTO\s*:\s*(\d{2})\s*(\d{2})\s+(\d{4})\b",
-        lambda match: (
-            f"EXPIRATION DATE: {match.group(1)}/{match.group(2)}/{match.group(3)}"
-        ),
-        translated,
-        flags=re.IGNORECASE,
-    )
-    translated = re.sub(
-        r"\bFECHA\s+DE\s+INSCRIPCI[ÓO]N\b",
-        "REGISTRATION DATE",
-        translated,
-        flags=re.IGNORECASE,
-    )
-    translated = re.sub(
-        r"\b(\d{1,2})-([A-Za-z]{3})-(\d{4})\b",
-        lambda match: (
-            f"{match.group(1)}-"
-            f"{SPANISH_MONTH_ABBREVIATIONS.get(match.group(2).upper(), match.group(2))}-"
-            f"{match.group(3)}"
-        ),
-        translated,
-    )
-    return translated if translated != text else ""
-
-
-def glossary_key(text: str) -> str:
-    """Compare OCR safely despite accents, spaces, and punctuation artifacts."""
-
-    decomposed = unicodedata.normalize("NFKD", str(text or ""))
-    without_accents = "".join(
-        character for character in decomposed if not unicodedata.combining(character)
-    )
-    return re.sub(r"[^A-Z0-9]", "", without_accents.upper())
-
-
-def glossary_candidates(entry: GlossaryEntry) -> tuple[str, ...]:
-    return (entry.source_text, *entry.aliases)
-
-
-def is_uncertain_ocr(region: OCRRegion, minimum_confidence: float) -> bool:
-    return (
-        region.confidence is None
-        or region.confidence < minimum_confidence
-        or low_text_quality(region.source_text)
-    )
-
-
-def match_glossary(
-    region: OCRRegion,
-    minimum_confidence: float,
-) -> tuple[GlossaryEntry, str] | None:
-    """Return a verified glossary match for a short, uncertain OCR label."""
-
-    source_key = glossary_key(region.source_text)
-    if not source_key or len(region.source_text) > 80:
-        return None
-
-    for entry in DOCUMENT_GLOSSARY:
-        if source_key in {glossary_key(candidate) for candidate in glossary_candidates(entry)}:
-            return entry, "exact"
-
-    if not is_uncertain_ocr(region, minimum_confidence):
-        return None
-
-    best_match: tuple[float, GlossaryEntry] | None = None
-    for entry in DOCUMENT_GLOSSARY:
-        for candidate in glossary_candidates(entry):
-            candidate_key = glossary_key(candidate)
-            if len(candidate_key) < 6 or abs(len(source_key) - len(candidate_key)) > 3:
-                continue
-            similarity = SequenceMatcher(None, source_key, candidate_key).ratio()
-            if best_match is None or similarity > best_match[0]:
-                best_match = similarity, entry
-
-    if best_match and best_match[0] >= 0.80:
-        return best_match[1], "fuzzy"
-    return None
-
-
-def apply_glossary_context(
-    regions: Sequence[OCRRegion],
-    minimum_confidence: float,
-) -> None:
-    """Attach verified English labels before deciding whether OCR may be overlaid."""
-
-    for region in regions:
-        match = match_glossary(region, minimum_confidence)
-        if match is None:
-            continue
-        entry, match_type = match
-        region.glossary_match = f"{match_type}:{entry.source_text}"
-        region.glossary_translation = entry.translated_text
-        region.glossary_allows_structured_region = entry.allow_structured_region
-
-
-def is_signature_initials(region: OCRRegion) -> bool:
-    """Preserve footer initials and signature-like marks on scanned IDs."""
-
-    compact = re.sub(r"[^A-Za-z]", "", str(region.source_text or ""))
-    if region.page_height is None or region.page_height <= 0:
-        return False
-    if region.page_width is None or region.page_width <= 0:
-        return False
-    left, top, right, bottom = polygon_bounds(region.polygon)
-    if (
-        1 <= len(compact) <= 5
-        and bottom >= region.page_height * 0.88
-        and uppercase_ratio(compact) >= 0.70
-    ):
-        return True
-
-    # Handwritten/card signature marks are sometimes recognized as a few
-    # title-case words inside an unusually tall box. Translating that OCR
-    # guess creates a conspicuous white rectangle over the identity card.
-    words = re.findall(r"[A-Za-zÀ-ÿ]+", region.source_text)
-    relative_width = max(0.0, right - left) / region.page_width
-    relative_height = max(0.0, bottom - top) / region.page_height
-    center_y = (top + bottom) / 2 / region.page_height
-    return (
-        2 <= len(words) <= 4
-        and len(compact) <= 24
-        and not re.search(r"\d|[:./]", region.source_text)
-        and uppercase_ratio(region.source_text) < 0.60
-        and relative_width >= 0.18
-        and relative_height >= 0.035
-        and 0.32 <= center_y <= 0.58
-    )
+    return "\n".join(line for line in lines if line)
 
 
 def is_sparse_oversized_ocr_artifact(region: OCRRegion) -> bool:
@@ -752,21 +491,11 @@ def is_non_latin_ocr_artifact(text: str) -> bool:
     )
 
 
-def uppercase_ratio(text: str) -> float:
-    letters = [character for character in str(text or "") if character.isalpha()]
-    if not letters:
-        return 0.0
-    return sum(character.isupper() for character in letters) / len(letters)
-
-
 def is_security_or_machine_text(text: str) -> bool:
     """Keep pure machine values untouched without hiding translatable labels.
 
-    Short form fields such as ``MATRICULA: 86412-F-000`` and
-    ``Peso Remolque: 0`` used to be classified as machine text because they
-    contain few words and several digits.  That preserved the identifier, but
-    it also left the Spanish label visible.  A region with a meaningful label
-    is safe to send to translation; URLs and code-only values are not.
+    A region with a meaningful word label is safe to send to translation.
+    URLs, timestamps, numeric-only values, and code-like identifiers are not.
     """
 
     normalized = normalize_translation_text(text).lower()
@@ -795,116 +524,24 @@ def is_security_or_machine_text(text: str) -> bool:
     return not alphabetic_words or label_length < 5
 
 
-def is_issuer_branding(region: OCRRegion) -> bool:
-    """Preserve known issuer branding without hiding ordinary margin labels."""
-
-    normalized = normalize_translation_text(region.source_text).upper()
-    if is_official_seal(region):
-        return True
-    if (
-        normalized in OFFICIAL_BRANDING_FRAGMENTS
-        and region.polygon
-        and region.page_height
-        and region.page_height > 0
-    ):
-        _, top, _, bottom = polygon_bounds(region.polygon)
-        center_y = (top + bottom) / 2
-        if 0.30 <= center_y / region.page_height <= 0.55:
-            return True
-    return any(marker in normalized for marker in ISSUER_BRANDING_MARKERS)
-
-
-def is_official_seal(region: OCRRegion) -> bool:
-    """Preserve text embedded in artwork, not ordinary government headings."""
-
-    normalized = normalize_translation_text(region.source_text).upper()
-    if region.polygon and region.page_height and region.page_height > 0:
-        _, top, _, bottom = polygon_bounds(region.polygon)
-        center_y = (top + bottom) / 2 / region.page_height
-        exact_seal_fragment = normalized in {
-            "REGISTRO",
-            "GISTRO",
-            "CIVIL",
-            "REPUBLICA DE COSTA RICA",
-            "REPÚBLICA DE COSTA RICA",
-        }
-        if exact_seal_fragment and 0.64 <= center_y <= 0.80:
-            return True
-        if (
-            normalized in {"REPUBLICA DE COSTA RICA", "REPÚBLICA DE COSTA RICA"}
-            and 0.25 <= center_y <= 0.40
-        ):
-            return True
-
-    # Civil-registry seal fragments are returned as independent OCR lines.
-    # Their lower-page geometry distinguishes them from normal headings and
-    # avoids painting white boxes over the watermark.
-    if region.region_kind == "line":
-        return False
-
-    contains_seal_marker = any(
-        marker in normalized for marker in OFFICIAL_SEAL_MARKERS
-    ) or (
-        "REPUBLICA DE COSTA RICA" in normalized
-        or "REPÚBLICA DE COSTA RICA" in normalized
-    )
-    if not contains_seal_marker:
-        return False
-
-    # A normal heading is a tight, one-line OCR box.  Seal/certification
-    # artwork is typically returned as a taller composite box.  The previous
-    # marker-only check incorrectly protected headings such as REPUBLICA DE
-    # COSTA RICA and left them untranslated on every registry page.
-    if not region.polygon or not region.page_height or region.page_height <= 0:
-        return True
-    _, top, _, bottom = polygon_bounds(region.polygon)
-    relative_height = max(0.0, bottom - top) / region.page_height
-    return (
-        relative_height >= 0.018
-        and len(normalized) <= 120
-        and uppercase_ratio(normalized) >= 0.65
-    )
-
-
 def is_dense_structured_record(text: str) -> bool:
-    """Detect tables/forms that must wait for cell-level translation.
+    """Detect form/table-like text using punctuation and value density."""
 
-    Positioned paragraph OCR merges several cells into one region. Translating
-    such a merged record destroys its visual structure, so this first phase
-    preserves it until the table extractor can provide individual cells.
-    """
-
-    normalized = normalize_translation_text(text).upper()
-    label_count = sum(
-        label in normalized
-        for label in (
-            "TOMO",
-            "ASIENTO",
-            "SECUENCIA",
-            "FECHA",
-            "FOLIO",
-            "CITA",
-            "IDENTIFICACIÓN",
-            "IDENTIFICACION",
-            "CÉDULA",
-            "CEDULA",
-            "NÚMERO",
-            "NUMERO",
-        )
+    normalized = normalize_translation_text(text)
+    if not normalized:
+        return False
+    words = re.findall(r"[A-Za-zÀ-ÿ]+", normalized)
+    digit_groups = re.findall(r"\d+[\d./:-]*", normalized)
+    label_delimiters = len(re.findall(r"\S\s*[:=]", normalized))
+    separators = len(re.findall(r"(?:\s{2,}|\||\t)", str(text or "")))
+    lines = [line for line in str(text or "").splitlines() if line.strip()]
+    value_density = len(digit_groups) / max(1, len(words) + len(digit_groups))
+    return (
+        label_delimiters >= 2
+        or separators >= 2
+        or (len(lines) >= 3 and value_density >= 0.25)
+        or (len(normalized) >= 140 and value_density >= 0.38)
     )
-    digit_groups = len(re.findall(r"\d+[\d./-]*", normalized))
-    dense_uppercase_form = (
-        len(normalized) >= 180
-        and uppercase_ratio(normalized) >= 0.65
-        and (label_count >= 3 or digit_groups >= 7)
-    )
-    # Long legal prose often mentions an identity card, a law number, and a
-    # date. That is narrative text, not a table, even though it contains the
-    # same labels as a form. Keep it translatable unless the record is compact.
-    compact_table_record = (
-        len(normalized) <= 420 and label_count >= 2 and digit_groups >= 3
-    )
-    return dense_uppercase_form or compact_table_record
 
 
 def is_compact_data_row_geometry(
@@ -922,10 +559,6 @@ def is_compact_data_row_geometry(
         and width / height >= 8
         and len(re.findall(r"[A-Za-zÀ-ÿ]+", text)) >= 6
     )
-
-
-def is_compact_data_row(region: OCRRegion) -> bool:
-    return is_compact_data_row_geometry(region.source_text, region.polygon)
 
 
 def low_text_quality(text: str) -> bool:
@@ -946,67 +579,44 @@ def low_text_quality(text: str) -> bool:
 def region_skip_reason(region: OCRRegion, minimum_confidence: float) -> str | None:
     """Return why the source scan should be retained instead of translated."""
 
-    # Temporarily disabled: Google Document AI currently returns 0.0 for the
-    # positioned paragraph regions, which would preserve every OCR result.
-    # Keep this gate for restoration once the provider exposes paragraph-level
-    # confidence values.
-    # if region.confidence is not None and region.confidence < minimum_confidence:
-    #     return "low_ocr_confidence"
+    # Some providers use 0.0 when paragraph confidence is unavailable. Those
+    # values are normalized to None during extraction; real low scores remain
+    # useful, document-neutral evidence that an overlay would be unsafe.
+    if region.confidence is not None and region.confidence < minimum_confidence:
+        return "low_ocr_confidence"
     if is_non_latin_ocr_artifact(region.source_text):
         return "non_latin_ocr_artifact"
     if is_sparse_oversized_ocr_artifact(region):
         return "corrupted_ocr_text"
-    if is_signature_initials(region):
-        return "signature_or_initials"
-    if (
-        is_security_or_machine_text(region.source_text)
-        and not translate_structured_form_labels(region.source_text)
-    ):
+    if is_security_or_machine_text(region.source_text):
         return "security_or_machine_text"
-    if is_official_seal(region):
-        return "official_seal"
-    if is_issuer_branding(region):
-        return "issuer_branding"
-    # Structured paragraphs are split into OCR lines before reaching this
-    # function.  A remaining paragraph is protected only as a last resort;
-    # line regions are safe to translate independently without flattening a
-    # table into one text block.
-    if region.region_kind != "line" and is_dense_structured_record(region.source_text):
-        return "structured_record_pending_cell_ocr"
-    if region.region_kind != "line" and is_compact_data_row(region):
-        return "structured_record_pending_cell_ocr"
     if low_text_quality(region.source_text):
         return "corrupted_ocr_text"
     return None
 
 
-def preserve_structured_table_neighborhoods(regions: Sequence[OCRRegion]) -> None:
-    """Preserve every OCR region in a detected table, not merely its seed row."""
+def preserve_digital_signature_metadata(regions: Sequence[OCRRegion]) -> None:
+    """Keep digital-signature stamps intact instead of translating over them."""
 
-    structured_by_page: dict[int, list[tuple[float, float]]] = {}
-    for region in regions:
-        if region.skip_reason != "structured_record_pending_cell_ocr":
+    marker_pattern = re.compile(
+        r"\b(?:digitally signed by|firmado digitalmente por|firma digital)\b",
+        re.IGNORECASE,
+    )
+    for marker in regions:
+        if not marker_pattern.search(marker.source_text):
             continue
-        _, top, _, bottom = polygon_bounds(region.polygon)
-        structured_by_page.setdefault(region.page_number, []).append((top, bottom))
-
-    for page_number, spans in structured_by_page.items():
-        merged_spans: list[list[float]] = []
-        for top, bottom in sorted(spans):
-            if merged_spans and top <= merged_spans[-1][1] + 140:
-                merged_spans[-1][1] = max(merged_spans[-1][1], bottom)
-            else:
-                merged_spans.append([top, bottom])
-        for region in regions:
-            if (
-                region.page_number != page_number
-                or region.skip_reason
-                or region.translated_text
-            ):
+        left, top, right, bottom = polygon_bounds(marker.polygon)
+        horizontal_margin = max(8.0, (marker.page_width or 0) * 0.05)
+        vertical_margin = max(8.0, (marker.page_height or 0) * 0.04)
+        for candidate in regions:
+            if candidate.page_number != marker.page_number:
                 continue
-            _, top, _, bottom = polygon_bounds(region.polygon)
-            if any(top <= span_bottom + 35 and bottom >= span_top - 35 for span_top, span_bottom in merged_spans):
-                region.skip_reason = "structured_table_neighborhood"
+            center_x, center_y = region_center(candidate)
+            if (
+                left - horizontal_margin <= center_x <= right + horizontal_margin
+                and top - vertical_margin <= center_y <= bottom + vertical_margin
+            ):
+                candidate.skip_reason = "digital_signature_metadata"
 
 
 def extracted_text_to_blocks(output_text: str) -> list[DocumentBlock]:
@@ -1155,6 +765,71 @@ def batched(
         yield list(items[start : start + batch_size])
 
 
+def translate_with_preserved_glossary(
+    engine: TranslationEngine,
+    texts: Sequence[str],
+) -> list[str]:
+    """Translate text fragments while keeping configured titles byte-for-byte."""
+
+    if not any(PRESERVED_GLOSSARY_PATTERN.search(text) for text in texts):
+        return engine.translate_batch(texts)
+
+    plans: list[list[tuple[str, str | int, str, str]]] = []
+    translatable_fragments: list[str] = []
+    for text in texts:
+        plan: list[tuple[str, str | int, str, str]] = []
+        cursor = 0
+        for match in PRESERVED_GLOSSARY_PATTERN.finditer(text):
+            pieces = ((text[cursor : match.start()], False), (match.group(0), True))
+            for piece, preserved in pieces:
+                if not piece:
+                    continue
+                if preserved or not piece.strip():
+                    plan.append(("fixed", piece, "", ""))
+                    continue
+                leading = piece[: len(piece) - len(piece.lstrip())]
+                trailing = piece[len(piece.rstrip()) :]
+                core = piece.strip()
+                fragment_index = len(translatable_fragments)
+                translatable_fragments.append(core)
+                plan.append(("translated", fragment_index, leading, trailing))
+            cursor = match.end()
+        remainder = text[cursor:]
+        if remainder:
+            if remainder.strip():
+                leading = remainder[: len(remainder) - len(remainder.lstrip())]
+                trailing = remainder[len(remainder.rstrip()) :]
+                fragment_index = len(translatable_fragments)
+                translatable_fragments.append(remainder.strip())
+                plan.append(("translated", fragment_index, leading, trailing))
+            else:
+                plan.append(("fixed", remainder, "", ""))
+        plans.append(plan)
+
+    translated_fragments = (
+        engine.translate_batch(translatable_fragments)
+        if translatable_fragments
+        else []
+    )
+    if len(translated_fragments) != len(translatable_fragments):
+        raise TranslationError(
+            "The model returned a different number of glossary fragments than inputs."
+        )
+
+    results: list[str] = []
+    for plan in plans:
+        output: list[str] = []
+        for kind, value, leading, trailing in plan:
+            if kind == "fixed":
+                output.append(str(value))
+            else:
+                output.append(
+                    leading + translated_fragments[int(value)] + trailing
+                )
+        results.append("".join(output))
+    return results
+
+
 def translate_blocks(
     blocks: list[DocumentBlock],
     engine: TranslationEngine,
@@ -1165,7 +840,8 @@ def translate_blocks(
     total_batches = (len(chunks) + batch_size - 1) // batch_size
 
     for batch_index, chunk_batch in enumerate(batched(chunks, batch_size), start=1):
-        translations = engine.translate_batch(
+        translations = translate_with_preserved_glossary(
+            engine,
             [chunk.source_text for chunk in chunk_batch]
         )
         if len(translations) != len(chunk_batch):
@@ -1198,10 +874,55 @@ def translate_blocks(
     return len(chunks)
 
 
-def polygon_bounds(polygon: Sequence[Sequence[float]]) -> tuple[float, float, float, float]:
+def polygon_bounds(
+    polygon: Sequence[Sequence[float]],
+) -> tuple[float, float, float, float]:
     xs = [point[0] for point in polygon]
     ys = [point[1] for point in polygon]
     return min(xs), min(ys), max(xs), max(ys)
+
+
+def polygon_reading_rotation(
+    polygon: Sequence[Sequence[float]],
+) -> int:
+    """Return the cardinal reading rotation encoded by an OCR polygon."""
+
+    if len(polygon) < 2:
+        return 0
+    delta_x = polygon[1][0] - polygon[0][0]
+    delta_y = polygon[1][1] - polygon[0][1]
+    if abs(delta_x) + abs(delta_y) < 1e-6:
+        return 0
+    angle = math.degrees(math.atan2(delta_y, delta_x)) % 360
+    cardinal = int(round(angle / 90.0) * 90) % 360
+    angular_error = abs((angle - cardinal + 180) % 360 - 180)
+    return cardinal if angular_error <= 20 else 0
+
+
+def effective_page_rotation(page) -> int:
+    """Recover OCR normalization rotation when the provider reports zero.
+
+    Document AI sometimes rotates a photographed ID for OCR but leaves the
+    page rotation field at zero. Paragraph polygon vertex order still records
+    that normalization. A strong page-level vote lets every line use the same
+    coordinate transform, including line polygons that were made axis-aligned.
+    """
+
+    reported_rotation = int(page.rotation or 0) % 360
+    if reported_rotation:
+        return reported_rotation
+    paragraph_rotations = [
+        polygon_reading_rotation(region.polygon)
+        for region in page.regions or []
+        if len(region.polygon) >= 2
+    ]
+    if not paragraph_rotations:
+        return 0
+    votes = Counter(paragraph_rotations)
+    reading_rotation, count = votes.most_common(1)[0]
+    if reading_rotation == 0 or count / len(paragraph_rotations) < 0.70:
+        return 0
+    return (360 - reading_rotation) % 360
 
 
 def region_center(region) -> tuple[float, float]:
@@ -1231,32 +952,118 @@ def line_belongs_to_region(line, region) -> bool:
     return left - 4 <= center_x <= right + 4 and top - 4 <= center_y <= bottom + 4
 
 
-def is_web_control_composite(text: str) -> bool:
-    """Detect a merged issuance/status paragraph with embedded web controls."""
+def lines_have_parallel_columns(lines, page_width: float) -> bool:
+    """Return whether OCR lines occupy separate columns on the same row."""
 
-    normalized = normalize_translation_text(text).upper()
-    return "EMITIDO" in normalized and any(
-        control in normalized for control in ("IMPRIMIR", "REGRESAR", "COMPRAR")
-    )
+    if page_width <= 0:
+        return False
+    bounds = [polygon_bounds(line.polygon) for line in lines]
+    for index, first in enumerate(bounds):
+        first_height = max(1.0, first[3] - first[1])
+        for second in bounds[index + 1 :]:
+            second_height = max(1.0, second[3] - second[1])
+            vertical_overlap = max(
+                0.0,
+                min(first[3], second[3]) - max(first[1], second[1]),
+            )
+            horizontal_gap = max(first[0], second[0]) - min(first[2], second[2])
+            if (
+                vertical_overlap / min(first_height, second_height) >= 0.45
+                and horizontal_gap >= page_width * 0.01
+            ):
+                return True
+    return False
+
+
+def is_prose_paragraph(paragraph, contained_lines, page_width: float) -> bool:
+    """Identify narrative text that benefits from paragraph-level translation."""
+
+    text = normalize_translation_text(paragraph.text)
+    words = re.findall(r"[A-Za-zÀ-ÿ]+", text)
+    digit_groups = re.findall(r"\d+[\d./:-]*", text)
+    if len(words) < 16 or len(contained_lines) < 2:
+        return False
+    if lines_have_parallel_columns(contained_lines, page_width):
+        return False
+    if len(digit_groups) / max(1, len(words) + len(digit_groups)) > 0.20:
+        return False
+    if len(re.findall(r"\S\s*[:=]", text)) >= 2:
+        return False
+    average_line_characters = sum(
+        len(normalize_translation_text(line.text)) for line in contained_lines
+    ) / len(contained_lines)
+    return average_line_characters >= 22
+
+
+def split_line_into_table_cells(line, words) -> list[DocumentOCRRegion]:
+    """Split an OCR line when large horizontal gaps reveal separate cells."""
+
+    line_left, line_top, line_right, line_bottom = polygon_bounds(line.polygon)
+    line_height = max(1.0, line_bottom - line_top)
+    line_width = max(1.0, line_right - line_left)
+    if line_width / line_height < 7:
+        return []
+
+    contained_words = []
+    for word in words or []:
+        left, top, right, bottom = polygon_bounds(word.polygon)
+        vertical_overlap = max(0.0, min(line_bottom, bottom) - max(line_top, top))
+        word_height = max(1.0, bottom - top)
+        center_x, _ = region_center(word)
+        if (
+            vertical_overlap / min(line_height, word_height) >= 0.55
+            and line_left - 3 <= center_x <= line_right + 3
+        ):
+            contained_words.append(word)
+    contained_words.sort(key=lambda word: polygon_bounds(word.polygon)[0])
+    if len(contained_words) < 2:
+        return []
+
+    word_heights = [
+        max(1.0, polygon_bounds(word.polygon)[3] - polygon_bounds(word.polygon)[1])
+        for word in contained_words
+    ]
+    median_height = sorted(word_heights)[len(word_heights) // 2]
+    if line_height > median_height * 2.2:
+        return []
+    gap_threshold = max(9.0, median_height * 0.85)
+    groups: list[list[object]] = [[contained_words[0]]]
+    for word in contained_words[1:]:
+        previous_right = polygon_bounds(groups[-1][-1].polygon)[2]
+        current_left = polygon_bounds(word.polygon)[0]
+        if current_left - previous_right >= gap_threshold:
+            groups.append([word])
+        else:
+            groups[-1].append(word)
+    if len(groups) < 2:
+        return []
+
+    table_cells: list[DocumentOCRRegion] = []
+    for group in groups:
+        bounds = [polygon_bounds(word.polygon) for word in group]
+        left = min(value[0] for value in bounds)
+        top = min(value[1] for value in bounds)
+        right = max(value[2] for value in bounds)
+        bottom = max(value[3] for value in bounds)
+        text = " ".join(normalize_translation_text(word.text) for word in group)
+        confidences = [
+            word.confidence for word in group if word.confidence is not None
+        ]
+        table_cells.append(
+            DocumentOCRRegion(
+                polygon=[[left, top], [right, top], [right, bottom], [left, bottom]],
+                text=text,
+                confidence=(min(confidences) if confidences else line.confidence),
+            )
+        )
+    return table_cells
 
 
 def layout_regions_for_page(page) -> list[tuple[object, str]]:
-    """Prefer paragraphs, but split composite form/table regions into lines."""
+    """Choose OCR paragraphs or lines from geometry, independent of document type."""
 
     selected: list[tuple[object, str]] = []
     selected_keys: set[tuple[str, tuple[float, float, float, float]]] = set()
-    page_text = normalize_translation_text(page.source_text).upper()
-    is_civil_registry_form = (
-        "CERTIFICA" in page_text
-        and (
-            "REGISTRO DE NACIMIENTOS" in page_text
-            or "REGISTRO DENACIMIENTOS" in page_text
-        )
-    )
-    is_identity_card_form = (
-        ("CÉDULA DE IDENTIDAD" in page_text or "CEDULA DE IDENTIDAD" in page_text)
-        and ("NÚMERO DE CÉDULA" in page_text or "NUMERO DE CEDULA" in page_text)
-    )
 
     def append_region(region, region_kind: str) -> None:
         bounds = tuple(round(value, 2) for value in polygon_bounds(region.polygon))
@@ -1266,43 +1073,53 @@ def layout_regions_for_page(page) -> list[tuple[object, str]]:
         selected_keys.add(key)
         selected.append((region, region_kind))
 
-    for paragraph in page.regions:
-        _, top, _, bottom = polygon_bounds(paragraph.polygon)
-        relative_top = top / page.height if page.height else 0
-        relative_bottom = bottom / page.height if page.height else 0
-        # Government certificates and identity cards place multiple values in
-        # narrow rows. Paragraph OCR often merges adjacent rows, causing a
-        # translated date, person name, and nationality to be painted into one
-        # box. Use the provider's line geometry in the form body while keeping
-        # narrative paragraphs intact for translation quality.
-        multiline_form_body = "\n" in paragraph.text and (
-            (
-                is_civil_registry_form
-                and relative_top >= 0.50
-                and relative_bottom <= 0.80
-            )
-            or (
-                is_identity_card_form
-                and relative_top >= 0.45
-                and relative_bottom <= 0.80
-            )
-        )
+    def append_line(line) -> None:
+        table_cells = split_line_into_table_cells(line, page.words)
+        if table_cells:
+            for cell in table_cells:
+                append_region(cell, "table_cell")
+        else:
+            append_region(line, "line")
+
+    paragraphs = list(page.regions or [])
+    if not paragraphs:
+        for line in page.lines or []:
+            append_line(line)
+        return selected
+
+    for paragraph in paragraphs:
+        paragraph_cells = split_line_into_table_cells(paragraph, page.words)
+        if paragraph_cells:
+            for cell in paragraph_cells:
+                append_region(cell, "table_cell")
+            continue
+        contained_lines = [
+            line for line in page.lines if line_belongs_to_region(line, paragraph)
+        ]
         should_split_into_lines = (
-            is_web_control_composite(paragraph.text)
-            or is_oversized_ocr_region(paragraph, page.width, page.height)
+            is_oversized_ocr_region(paragraph, page.width, page.height)
             or is_dense_structured_record(paragraph.text)
             or is_compact_data_row_geometry(paragraph.text, paragraph.polygon)
-            or multiline_form_body
+            or (
+                len(contained_lines) >= 2
+                and not is_prose_paragraph(
+                    paragraph,
+                    contained_lines,
+                    page.width,
+                )
+            )
         )
-        if should_split_into_lines:
-            contained_lines = [
-                line for line in page.lines if line_belongs_to_region(line, paragraph)
-            ]
-            if contained_lines:
-                for line in contained_lines:
-                    append_region(line, "line")
-                continue
+        if should_split_into_lines and contained_lines:
+            for line in contained_lines:
+                append_line(line)
+            continue
         append_region(paragraph, "paragraph")
+
+    for line in page.lines or []:
+        if not any(
+            line_belongs_to_region(line, paragraph) for paragraph in paragraphs
+        ):
+            append_line(line)
     return selected
 
 
@@ -1316,57 +1133,46 @@ def extract_local_pdf_regions(
     if input_path.suffix.lower() != ".pdf":
         raise ValueError("Local input must use the .pdf extension.")
 
+    source_language = "es"
+    document_bytes = input_path.read_bytes()
     print("ocr_engine: shared document OCR provider", flush=True)
     try:
         ocr_result = extract_document_ocr(
-            input_path.read_bytes(),
-            source_language="es",
-            rotations=(0,),
+            document_bytes,
+            source_language=source_language,
         )
     except ValueError as exc:
         raise TranslationError(str(exc)) from exc
 
     regions: list[OCRRegion] = []
     for page in ocr_result.pages:
-        page_regions = layout_regions_for_page(page)
-        normalized_page_text = normalize_translation_text(page.source_text).upper()
-        is_civil_registry_form = (
-            "CERTIFICA" in normalized_page_text
-            and (
-                "REGISTRO DE NACIMIENTOS" in normalized_page_text
-                or "REGISTRO DENACIMIENTOS" in normalized_page_text
+        page_rotation = effective_page_rotation(page)
+        if page_rotation != int(page.rotation or 0) % 360:
+            print(
+                f"ocr_page_rotation_inferred: page={page.page_number} "
+                f"rotation={page_rotation}",
+                flush=True,
             )
-        )
+        page_regions = layout_regions_for_page(page)
         for region, region_kind in page_regions:
             source_text = clean_translation_source_text(region.text)
             if source_text:
                 polygon = [list(point) for point in region.polygon]
-                # One certificate scan loses ``DÍA`` behind a vertical OCR
-                # artifact and returns only ``EL``. Reconstruct the known form
-                # label and extend its narrow box up to (but not into) the
-                # adjacent date value.
-                if (
-                    is_civil_registry_form
-                    and source_text.upper() == "EL"
-                ):
-                    left, top, right, _ = polygon_bounds(polygon)
-                    relative_top = top / page.height if page.height else 0
-                    if 0.60 <= relative_top <= 0.70:
-                        source_text = "EL DÍA:"
-                        expanded_right = min(page.width, max(right, left + 100))
-                        polygon = [
-                            [expanded_right if x >= right - 1 else x, y]
-                            for x, y in polygon
-                        ]
                 regions.append(
                     OCRRegion(
                         page_number=page.page_number,
                         polygon=polygon,
                         source_text=source_text,
-                        confidence=region.confidence,
+                        confidence=(
+                            region.confidence
+                            if region.confidence is not None
+                            and region.confidence > 0
+                            else None
+                        ),
                         page_width=page.width,
                         page_height=page.height,
                         render_scale=page.render_scale,
+                        page_rotation=page_rotation,
                         region_kind=region_kind,
                     )
                 )
@@ -1391,71 +1197,11 @@ def translate_regions(
 ) -> int:
     """Translate OCR regions while preserving their page-coordinate mapping."""
 
-    apply_glossary_context(regions, minimum_ocr_confidence)
     for region in regions:
-        region.skip_reason = region_skip_reason(region, minimum_ocr_confidence)
-        fixed_translation = FIXED_REGION_TRANSLATIONS.get(region.source_text.upper())
-        machine_value_translation = translate_machine_value(region.source_text)
-        issued_ui_translation = translate_issued_ui_region(region.source_text)
-        # Never paint a translation over logos, security artwork, signatures,
-        # or unsegmented tables, even if a glossary contains matching words.
-        if machine_value_translation:
-            region.translated_text = (
-                translate_structured_form_labels(machine_value_translation)
-                or machine_value_translation
-            )
-            region.skip_reason = None
-        elif issued_ui_translation and not region.skip_reason:
-            region.translated_text = issued_ui_translation
-        elif fixed_translation and not region.skip_reason:
-            region.translated_text = fixed_translation
-        elif region.source_text.startswith("#Acuerdo "):
-            region.translated_text = region.source_text.replace(
-                "#Acuerdo", "#Agreement", 1
-            )
-        elif region.skip_reason not in {
-            "official_seal",
-            "issuer_branding",
-            "security_or_machine_text",
-            "signature_or_initials",
-        }:
-            structured_translation = translate_structured_form_labels(
-                region.source_text
-            )
-            if structured_translation:
-                region.translated_text = postprocess_translation(
-                    structured_translation
-                )
-                if region.skip_reason in {
-                    "structured_record_pending_cell_ocr",
-                    "structured_table_neighborhood",
-                }:
-                    region.skip_reason = None
-
-    preserve_structured_table_neighborhoods(regions)
-    for region in regions:
-        if not region.glossary_translation:
-            continue
-        # A glossary can safely translate known labels inside a table, but it
-        # never overwrites logos, seals, security artwork, or signatures.
-        if region.skip_reason in {
-            "official_seal",
-            "issuer_branding",
-            "security_or_machine_text",
-            "signature_or_initials",
-        }:
-            continue
-        if (
-            region.skip_reason
-            in {
-                "structured_record_pending_cell_ocr",
-                "structured_table_neighborhood",
-            }
-            and not region.glossary_allows_structured_region
-        ):
-            continue
-        region.translated_text = region.glossary_translation
-        region.skip_reason = None
+        safety_reason = region_skip_reason(region, minimum_ocr_confidence)
+        if safety_reason:
+            region.skip_reason = safety_reason
+    preserve_digital_signature_metadata(regions)
 
     translatable_regions = [
         region
@@ -1483,31 +1229,45 @@ def translate_regions(
     return chunk_count
 
 
-PROTECTED_RENDER_REASONS = {
-    "official_seal",
-    "issuer_branding",
-    "security_or_machine_text",
-    "signature_or_initials",
-    "structured_record_pending_cell_ocr",
-    "structured_table_neighborhood",
-}
-
-
 def calibrated_pdf_rect(
     region: OCRRegion,
     source_page,
 ) -> pymupdf.Rect | None:
     """Map provider-native OCR coordinates to the actual PDF page rectangle."""
 
+    if region.pdf_rect_override is not None:
+        rect = pymupdf.Rect(region.pdf_rect_override) & source_page.rect
+        return rect if rect.width >= 4 and rect.height >= 3 else None
     if not region.page_width or not region.page_height:
         return None
     if region.page_width <= 0 or region.page_height <= 0 or not region.polygon:
         return None
 
-    x_scale = source_page.rect.width / region.page_width
-    y_scale = source_page.rect.height / region.page_height
-    xs = [source_page.rect.x0 + point[0] * x_scale for point in region.polygon]
-    ys = [source_page.rect.y0 + point[1] * y_scale for point in region.polygon]
+    def source_normalized_point(point: Sequence[float]) -> tuple[float, float]:
+        x = point[0] / region.page_width
+        y = point[1] / region.page_height
+        rotation = region.page_rotation % 360
+        if rotation == 0:
+            return x, y
+        if rotation == 90:
+            return 1 - y, x
+        if rotation == 180:
+            return 1 - x, 1 - y
+        if rotation == 270:
+            return y, 1 - x
+        raise ValueError(f"Unsupported OCR page rotation: {region.page_rotation}")
+
+    normalized_points = [
+        source_normalized_point(point) for point in region.polygon
+    ]
+    xs = [
+        source_page.rect.x0 + point[0] * source_page.rect.width
+        for point in normalized_points
+    ]
+    ys = [
+        source_page.rect.y0 + point[1] * source_page.rect.height
+        for point in normalized_points
+    ]
     raw_rect = pymupdf.Rect(min(xs), min(ys), max(xs), max(ys))
     tolerance = 2.0
     if (
@@ -1520,44 +1280,355 @@ def calibrated_pdf_rect(
     rect = raw_rect & source_page.rect
     if rect.width < 4 or rect.height < 3:
         return None
-    return pymupdf.Rect(rect.x0 - 0.5, rect.y0 - 0.5, rect.x1 + 0.5, rect.y1 + 0.5)
+    expansion = 1.0 if region.region_kind == "table_cell" else 0.5
+    expanded = pymupdf.Rect(
+        rect.x0 - expansion,
+        rect.y0 - expansion,
+        rect.x1 + expansion,
+        rect.y1 + expansion,
+    )
+    return expanded & source_page.rect
 
 
-def overlap_ratio(first: pymupdf.Rect, second: pymupdf.Rect) -> float:
-    intersection = first & second
-    if intersection.is_empty or intersection.width <= 0 or intersection.height <= 0:
-        return 0.0
-    smallest_area = min(first.width * first.height, second.width * second.height)
-    if smallest_area <= 0:
-        return 0.0
-    return (intersection.width * intersection.height) / smallest_area
+def looks_like_document_information(text: str) -> bool:
+    """Return whether visual preservation would hide meaningful document data."""
+
+    normalized = normalize_translation_text(text).lower()
+    words = re.findall(r"[a-zà-ÿ]+", normalized)
+    if any(character.isdigit() for character in normalized):
+        return True
+    if ":" in normalized or len(words) >= 12 or len(normalized) >= 100:
+        return True
+    information_terms = {
+        "account",
+        "address",
+        "amount",
+        "certification",
+        "certificación",
+        "date",
+        "domicilio",
+        "fecha",
+        "identidad",
+        "identity",
+        "ingresos",
+        "name",
+        "nombre",
+        "número",
+        "numero",
+        "statement",
+    }
+    return bool(information_terms.intersection(words))
+
+
+def embedded_logo_rectangles(page) -> list[pymupdf.Rect]:
+    """Find small embedded visual assets without treating a page scan as a logo."""
+
+    page_area = max(1.0, page.rect.width * page.rect.height)
+    logo_rectangles: list[pymupdf.Rect] = []
+    seen: set[tuple[float, float, float, float]] = set()
+    for image in page.get_images(full=True):
+        xref = int(image[0])
+        try:
+            rectangles = page.get_image_rects(xref)
+        except (RuntimeError, ValueError):
+            continue
+        for rectangle in rectangles:
+            rect = pymupdf.Rect(rectangle) & page.rect
+            area_ratio = rect.width * rect.height / page_area
+            near_header_or_margin = (
+                rect.y0 <= page.rect.y0 + page.rect.height * 0.30
+                or rect.x0 <= page.rect.x0 + page.rect.width * 0.12
+                or rect.x1 >= page.rect.x1 - page.rect.width * 0.12
+            )
+            if not (0.0002 <= area_ratio <= 0.12 and near_header_or_margin):
+                continue
+            key = tuple(round(value, 2) for value in rect)
+            if key not in seen:
+                seen.add(key)
+                logo_rectangles.append(rect)
+    return logo_rectangles
+
+
+def joined_cell_text(
+    members: Sequence[tuple[OCRRegion, pymupdf.Rect]],
+) -> str:
+    """Reconstruct one filled table cell while retaining its row structure."""
+
+    ordered = sorted(members, key=lambda item: (item[1].y0, item[1].x0))
+    lines: list[list[tuple[OCRRegion, pymupdf.Rect]]] = []
+    for member in ordered:
+        center_y = (member[1].y0 + member[1].y1) / 2
+        if not lines:
+            lines.append([member])
+            continue
+        previous_centers = [
+            (item[1].y0 + item[1].y1) / 2 for item in lines[-1]
+        ]
+        previous_height = max(item[1].height for item in lines[-1])
+        if abs(center_y - sum(previous_centers) / len(previous_centers)) <= max(
+            1.5, previous_height * 0.55
+        ):
+            lines[-1].append(member)
+        else:
+            lines.append([member])
+    return "\n".join(
+        " ".join(
+            item[0].source_text
+            for item in sorted(line, key=lambda member: member[1].x0)
+        )
+        for line in lines
+    )
+
+
+def consolidate_filled_table_cells(
+    input_path: Path,
+    regions: Sequence[OCRRegion],
+) -> tuple[list[OCRRegion], int]:
+    """Merge OCR fragments into native filled cells for clean table rendering."""
+
+    indexed_regions = list(enumerate(regions))
+    assignments: dict[int, tuple[pymupdf.Rect, tuple[float, float, float]]] = {}
+    with pymupdf.open(input_path) as document:
+        for page_index, page in enumerate(document):
+            page_regions = [
+                (index, region, calibrated_pdf_rect(region, page))
+                for index, region in indexed_regions
+                if region.page_number == page_index + 1
+            ]
+            page_area = max(1.0, page.rect.width * page.rect.height)
+            filled_cells: list[
+                tuple[pymupdf.Rect, tuple[float, float, float]]
+            ] = []
+            for drawing in page.get_drawings():
+                fill = drawing.get("fill")
+                if fill is None:
+                    continue
+                rect = pymupdf.Rect(drawing["rect"]) & page.rect
+                area_ratio = rect.width * rect.height / page_area
+                if (
+                    rect.width >= 10
+                    and 5 <= rect.height <= page.rect.height * 0.08
+                    and area_ratio <= 0.08
+                ):
+                    filled_cells.append(
+                        (rect, tuple(float(channel) for channel in fill[:3]))
+                    )
+            for index, _region, region_rect in page_regions:
+                if region_rect is None:
+                    continue
+                center = pymupdf.Point(
+                    (region_rect.x0 + region_rect.x1) / 2,
+                    (region_rect.y0 + region_rect.y1) / 2,
+                )
+                candidates = [
+                    cell for cell in filled_cells if center in cell[0]
+                ]
+                if candidates:
+                    assignments[index] = min(
+                        candidates,
+                        key=lambda cell: cell[0].width * cell[0].height,
+                    )
+
+    groups: dict[
+        tuple[int, tuple[float, float, float, float]],
+        list[tuple[int, OCRRegion, pymupdf.Rect]],
+    ] = {}
+    for index, (cell_rect, _fill) in assignments.items():
+        region = regions[index]
+        with pymupdf.open(input_path) as document:
+            region_rect = calibrated_pdf_rect(
+                region,
+                document[region.page_number - 1],
+            )
+        if region_rect is None:
+            continue
+        key = (
+            region.page_number,
+            tuple(round(value, 3) for value in cell_rect),
+        )
+        groups.setdefault(key, []).append((index, region, region_rect))
+
+    replacements: dict[int, OCRRegion] = {}
+    removed_indices: set[int] = set()
+    for members in groups.values():
+        member_indices = [item[0] for item in members]
+        first = min(members, key=lambda item: item[0])[1]
+        cell_rect, fill = assignments[min(member_indices)]
+        union = pymupdf.Rect(members[0][2])
+        for _index, _region, member_rect in members[1:]:
+            union |= member_rect
+        alignment = (
+            1
+            if abs(
+                (union.x0 + union.x1) / 2
+                - (cell_rect.x0 + cell_rect.x1) / 2
+            )
+            <= cell_rect.width * 0.18
+            else 0
+        )
+        inset = min(0.8, cell_rect.height * 0.08)
+        merged = OCRRegion(
+            page_number=first.page_number,
+            polygon=[list(point) for point in first.polygon],
+            source_text=joined_cell_text(
+                [(region, rect) for _index, region, rect in members]
+            ),
+            confidence=min(
+                (
+                    region.confidence
+                    for _index, region, _rect in members
+                    if region.confidence is not None
+                ),
+                default=None,
+            ),
+            page_width=first.page_width,
+            page_height=first.page_height,
+            render_scale=first.render_scale,
+            page_rotation=first.page_rotation,
+            region_kind="table_header",
+            pdf_rect_override=(
+                cell_rect.x0 + inset,
+                cell_rect.y0 + inset,
+                cell_rect.x1 - inset,
+                cell_rect.y1 - inset,
+            ),
+            background_color_override=fill,
+            text_alignment=alignment,
+        )
+        replacement_index = min(member_indices)
+        replacements[replacement_index] = merged
+        removed_indices.update(member_indices)
+
+    consolidated: list[OCRRegion] = []
+    for index, region in indexed_regions:
+        if index in replacements:
+            consolidated.append(replacements[index])
+        elif index not in removed_indices:
+            consolidated.append(region)
+    return consolidated, len(groups)
+
+
+def classify_preserved_visual_regions(
+    input_path: Path,
+    regions: Sequence[OCRRegion],
+) -> tuple[list[VisualRegionClassification], Counter]:
+    """Protect header/logo visuals while allowing document information through.
+
+    Protected regions are never redrawn, so the original PDF image and scaling
+    remain byte-for-byte visually intact in those coordinates.
+    """
+
+    classifications: list[VisualRegionClassification] = []
+    counts: Counter = Counter()
+    regions_by_page: dict[int, list[OCRRegion]] = {}
+    for region in regions:
+        regions_by_page.setdefault(region.page_number, []).append(region)
+
+    with pymupdf.open(input_path) as document:
+        for page_index, page in enumerate(document):
+            logo_rectangles = embedded_logo_rectangles(page)
+            counts["logo_images_detected"] += len(logo_rectangles)
+            for region in regions_by_page.get(page_index + 1, []):
+                rect = calibrated_pdf_rect(region, page)
+                if rect is None or looks_like_document_information(
+                    region.source_text
+                ):
+                    continue
+                reason: str | None = None
+                region_area = max(1.0, rect.width * rect.height)
+                for logo_rect in logo_rectangles:
+                    intersection = rect & logo_rect
+                    if intersection.width * intersection.height / region_area >= 0.25:
+                        reason = "logo_visual"
+                        break
+                if reason is None:
+                    top_limit = page.rect.y0 + page.rect.height * 0.16
+                    word_count = len(re.findall(r"[A-Za-zÀ-ÿ]+", region.source_text))
+                    if (
+                        rect.y0 <= top_limit
+                        and word_count <= 10
+                        and len(normalize_translation_text(region.source_text)) <= 80
+                    ):
+                        reason = "header_visual"
+                if reason is None:
+                    continue
+                if not region.skip_reason:
+                    region.skip_reason = reason
+                classifications.append(
+                    VisualRegionClassification(
+                        role=reason.removesuffix("_visual"),
+                        rect=pymupdf.Rect(rect),
+                        source=region.source_text,
+                    )
+                )
+                counts[f"preserved_{reason}"] += 1
+    return classifications, counts
+
+
+def partition_overlapping_line_rects(
+    prepared_regions: Sequence[tuple[OCRRegion, pymupdf.Rect]],
+) -> list[tuple[OCRRegion, pymupdf.Rect]]:
+    """Trim overlapping horizontal OCR rows at their shared midpoint."""
+
+    adjusted = [
+        (region, pymupdf.Rect(rect)) for region, rect in prepared_regions
+    ]
+    horizontal_lines = [
+        index
+        for index, (region, _rect) in enumerate(adjusted)
+        if region.region_kind == "line" and region.page_rotation % 180 == 0
+    ]
+    horizontal_lines.sort(key=lambda index: adjusted[index][1].y0)
+    for position, first_index in enumerate(horizontal_lines):
+        first_region, first_rect = adjusted[first_index]
+        for second_index in horizontal_lines[position + 1 :]:
+            second_region, second_rect = adjusted[second_index]
+            if second_rect.y0 >= first_rect.y1:
+                break
+            horizontal_overlap = max(
+                0.0,
+                min(first_rect.x1, second_rect.x1)
+                - max(first_rect.x0, second_rect.x0),
+            )
+            if horizontal_overlap / max(
+                1.0, min(first_rect.width, second_rect.width)
+            ) < 0.55:
+                continue
+            if first_rect.y0 > second_rect.y0:
+                continue
+            boundary = (first_rect.y1 + second_rect.y0) / 2
+            if boundary - first_rect.y0 >= 3:
+                first_rect.y1 = boundary - 0.15
+            if second_rect.y1 - boundary >= 3:
+                second_rect.y0 = boundary + 0.15
+            adjusted[first_index] = (first_region, first_rect)
+            adjusted[second_index] = (second_region, second_rect)
+    return adjusted
 
 
 def source_line_count(region: OCRRegion) -> int:
     return max(1, len([line for line in region.source_text.splitlines() if line.strip()]))
 
 
-def fit_translation_shape(page, region: OCRRegion, rect: pymupdf.Rect):
+def fit_translation_shape(
+    page,
+    region: OCRRegion,
+    rect: pymupdf.Rect,
+    text_color: tuple[float, float, float],
+):
     """Return a fitted text shape, preserving the source when it cannot fit."""
 
     line_count = source_line_count(region)
-    source_line_height = rect.height / max(1, line_count)
-    maximum_font_size = 9 if region.region_kind == "line" else 10
-    is_tiny_ui_control = normalize_translation_text(region.source_text).upper() in {
-        "IMPRIMIR",
-        "REGRESAR",
-        "COMPRAR",
-    }
-    # OCR boxes are frequently only three to five PDF points high.  A hard
-    # five-point minimum made PyMuPDF reject otherwise valid short labels and
-    # silently left their Spanish scan visible.  Half-point steps retain the
-    # largest readable size that actually fits the source geometry.
-    minimum_font_size = 3.0 if region.region_kind == "line" else 3.5
-    if is_tiny_ui_control:
-        minimum_font_size = 3.0
+    text_rotation = (360 - region.page_rotation) % 360
+    layout_height = rect.width if text_rotation in {90, 270} else rect.height
+    source_line_height = layout_height / max(1, line_count)
+    maximum_font_size = min(18.0, max(6.0, source_line_height * 0.85))
+    minimum_font_size = (
+        2.5 if region.region_kind in {"line", "table_cell"} else 3.0
+    )
     starting_font_size = min(
         maximum_font_size,
-        max(minimum_font_size, source_line_height * 0.60),
+        max(minimum_font_size, source_line_height * 0.78),
     )
     step_count = int((starting_font_size - minimum_font_size) / 0.5)
     font_sizes = [starting_font_size - step * 0.5 for step in range(step_count + 1)]
@@ -1571,18 +1642,60 @@ def fit_translation_shape(page, region: OCRRegion, rect: pymupdf.Rect):
             fontname="helv",
             fontsize=font_size,
             lineheight=1.02,
-            color=(0, 0, 0),
+            color=text_color,
+            rotate=text_rotation,
+            align=region.text_alignment,
         )
         if remaining >= 0:
             return shape
     return None
 
 
-def build_page_background(page, source_page) -> None:
-    """Render the source scan at the PDF's native page size."""
+def sampled_region_colors(
+    source_page,
+    source_pixmap,
+    rect: pymupdf.Rect,
+) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    """Estimate a region's background and choose readable translated text."""
 
-    background = source_page.get_pixmap(alpha=False)
-    page.insert_image(page.rect, pixmap=background)
+    offset = 1.5
+    sample_points = (
+        (rect.x0 - offset, rect.y0 - offset),
+        (rect.x1 + offset, rect.y0 - offset),
+        (rect.x0 - offset, rect.y1 + offset),
+        (rect.x1 + offset, rect.y1 + offset),
+        ((rect.x0 + rect.x1) / 2, rect.y0 - offset),
+        ((rect.x0 + rect.x1) / 2, rect.y1 + offset),
+        (rect.x0 - offset, (rect.y0 + rect.y1) / 2),
+        (rect.x1 + offset, (rect.y0 + rect.y1) / 2),
+    )
+    samples: list[tuple[int, int, int]] = []
+    for x, y in sample_points:
+        normalized_x = (x - source_page.rect.x0) / max(1.0, source_page.rect.width)
+        normalized_y = (y - source_page.rect.y0) / max(1.0, source_page.rect.height)
+        pixel_x = min(
+            source_pixmap.width - 1,
+            max(0, round(normalized_x * (source_pixmap.width - 1))),
+        )
+        pixel_y = min(
+            source_pixmap.height - 1,
+            max(0, round(normalized_y * (source_pixmap.height - 1))),
+        )
+        pixel = source_pixmap.pixel(pixel_x, pixel_y)
+        samples.append((int(pixel[0]), int(pixel[1]), int(pixel[2])))
+
+    median_rgb = tuple(
+        sorted(sample[channel] for sample in samples)[len(samples) // 2]
+        for channel in range(3)
+    )
+    background = tuple(channel / 255 for channel in median_rgb)
+    luminance = (
+        0.2126 * background[0]
+        + 0.7152 * background[1]
+        + 0.0722 * background[2]
+    )
+    text_color = (1.0, 1.0, 1.0) if luminance < 0.42 else (0.0, 0.0, 0.0)
+    return background, text_color
 
 
 def export_coordinate_debug_pdf(
@@ -1592,26 +1705,29 @@ def export_coordinate_debug_pdf(
 ) -> None:
     """Write a visual calibration artifact before any text is translated."""
 
+    if input_path.resolve() == output_path.resolve():
+        raise ValueError("Debug overlay PDF must not overwrite the input PDF.")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists():
         output_path.unlink()
-    source_document = pymupdf.open(input_path)
-    document = pymupdf.open()
+    document = pymupdf.open(input_path)
     regions_by_page: dict[int, list[OCRRegion]] = {}
     for region in regions:
         regions_by_page.setdefault(region.page_number, []).append(region)
 
-    for page_index, source_page in enumerate(source_document):
-        page = document.new_page(
-            width=source_page.rect.width,
-            height=source_page.rect.height,
-        )
-        build_page_background(page, source_page)
-        for index, region in enumerate(regions_by_page.get(page_index + 1, []), start=1):
-            rect = calibrated_pdf_rect(region, source_page)
+    for page_index, page in enumerate(document):
+        for index, region in enumerate(
+            regions_by_page.get(page_index + 1, []),
+            start=1,
+        ):
+            rect = calibrated_pdf_rect(region, page)
             if rect is None:
                 continue
-            color = (0, 0.45, 0.95) if region.region_kind == "paragraph" else (0, 0.65, 0.15)
+            color = (
+                (0, 0.45, 0.95)
+                if region.region_kind == "paragraph"
+                else (0, 0.65, 0.15)
+            )
             page.draw_rect(rect, color=color, width=0.6, overlay=True)
             page.insert_text(
                 (rect.x0, max(7, rect.y0 + 7)),
@@ -1622,7 +1738,6 @@ def export_coordinate_debug_pdf(
             )
     document.save(output_path, garbage=4, deflate=True)
     document.close()
-    source_document.close()
 
 
 def export_positioned_translation_pdf(
@@ -1632,42 +1747,34 @@ def export_positioned_translation_pdf(
 ) -> RenderQualityReport:
     """Overlay fitted English translations on calibrated source text regions."""
 
+    if input_path.resolve() == output_path.resolve():
+        raise ValueError("Translated PDF must not overwrite the input PDF.")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists():
         output_path.unlink()
-    source_document = pymupdf.open(input_path)
-    document = pymupdf.open()
+    document = pymupdf.open(input_path)
     regions_by_page: dict[int, list[OCRRegion]] = {}
     for region in regions:
         regions_by_page.setdefault(region.page_number, []).append(region)
     report = RenderQualityReport()
 
-    for page_index, source_page in enumerate(source_document):
+    for page_index, page in enumerate(document):
         page_number = page_index + 1
         page_regions = regions_by_page.get(page_number, [])
-        page = document.new_page(
-            width=source_page.rect.width,
-            height=source_page.rect.height,
-        )
-        build_page_background(page, source_page)
-        protected_rects = []
-        for region in page_regions:
-            if region.skip_reason not in PROTECTED_RENDER_REASONS:
-                continue
-            rect = calibrated_pdf_rect(region, source_page)
-            if rect is not None:
-                protected_rects.append(rect)
-        report.protected_regions += len(protected_rects)
-
+        source_pixmap = page.get_pixmap(alpha=False)
+        prepared_regions: list[tuple[OCRRegion, pymupdf.Rect]] = []
         for region in page_regions:
             if not region.translated_text:
                 continue
-            rect = calibrated_pdf_rect(region, source_page)
+            rect = calibrated_pdf_rect(region, page)
             if rect is None:
                 region.skip_reason = "invalid_render_coordinates"
                 region.translated_text = ""
                 report.preserved_invalid_coordinates += 1
                 continue
+            prepared_regions.append((region, rect))
+
+        for region, rect in partition_overlapping_line_rects(prepared_regions):
             if region.region_kind == "paragraph" and (
                 rect.width * rect.height > page.rect.width * page.rect.height * 0.30
             ):
@@ -1675,33 +1782,53 @@ def export_positioned_translation_pdf(
                 region.translated_text = ""
                 report.preserved_oversized_region += 1
                 continue
-            if any(overlap_ratio(rect, protected_rect) >= 0.22 for protected_rect in protected_rects):
-                region.skip_reason = "protected_zone_overlap"
-                region.translated_text = ""
-                report.preserved_protected_overlap += 1
-                continue
-            fitted_shape = fit_translation_shape(page, region, rect)
+            background_color, text_color = sampled_region_colors(
+                page,
+                source_pixmap,
+                rect,
+            )
+            fitted_shape = fit_translation_shape(page, region, rect, text_color)
             if fitted_shape is None:
                 region.skip_reason = "translation_does_not_fit"
                 region.translated_text = ""
                 report.preserved_does_not_fit += 1
                 continue
-            page.draw_rect(rect, color=None, fill=(1, 1, 1), overlay=True)
+            page.draw_rect(rect, color=None, fill=background_color, overlay=True)
             fitted_shape.commit(overlay=True)
             report.translated_regions += 1
 
     document.save(output_path, garbage=4, deflate=True)
     document.close()
-    source_document.close()
     return report
 
 
 def run_local_pdf_translation(args: argparse.Namespace) -> None:
     if args.output_pdf.suffix.lower() != ".pdf":
         raise ValueError("Local output must use the .pdf extension.")
+    if args.input_pdf.resolve() == args.output_pdf.resolve():
+        raise ValueError("Input and output PDF paths must be different.")
+    if is_passport_document(
+        args.input_pdf,
+        getattr(args, "document_type", None),
+    ):
+        copy_passport_without_translation(args.input_pdf, args.output_pdf)
+        with pymupdf.open(args.input_pdf) as source_document:
+            source_pages = source_document.page_count
+        print("\n=== passport bypass summary ===")
+        print("document_type: passport")
+        print("ocr_executed: false")
+        print("translation_executed: false")
+        print(f"source_pages: {source_pages}")
+        print(f"preserved_pdf: {args.output_pdf}")
+        return
 
     regions, provider = extract_local_pdf_regions(args.input_pdf)
-    source_pages = len({region.page_number for region in regions})
+    visual_classifications, visual_counts = classify_preserved_visual_regions(
+        args.input_pdf,
+        regions,
+    )
+    with pymupdf.open(args.input_pdf) as source_document:
+        source_pages = source_document.page_count
     total_characters = sum(len(region.source_text) for region in regions)
 
     print("\n=== local extraction summary ===")
@@ -1709,7 +1836,14 @@ def run_local_pdf_translation(args: argparse.Namespace) -> None:
     print(f"source_pages: {source_pages}")
     print(f"ocr_regions: {len(regions)}")
     print(f"output_chars: {total_characters}")
-    confidence_values = [region.confidence for region in regions if region.confidence is not None]
+    print(f"visual_regions_classified: {len(visual_classifications)}")
+    for classification, count in sorted(visual_counts.items()):
+        print(f"{classification}: {count}")
+    confidence_values = [
+        region.confidence
+        for region in regions
+        if region.confidence is not None
+    ]
     if confidence_values:
         print(
             "ocr_confidence: "
@@ -1769,31 +1903,25 @@ def run_local_pdf_translation(args: argparse.Namespace) -> None:
     skipped_regions = Counter(
         region.skip_reason for region in regions if region.skip_reason
     )
-    glossary_matches = Counter(
-        region.glossary_match for region in regions if region.glossary_match
-    )
-
     print("\n=== local translation summary ===")
     print(f"source_pages: {source_pages}")
     print(f"translation_chunks: {chunk_count}")
-    print(f"translated_regions: {sum(bool(region.translated_text) for region in regions)}")
-    print(f"preserved_source_regions: {len(regions) - sum(bool(region.translated_text) for region in regions)}")
-    print(f"glossary_context_matches: {sum(glossary_matches.values())}")
-    for match, count in sorted(glossary_matches.items()):
-        print(f"glossary_{match}: {count}")
+    translated_region_count = sum(
+        bool(region.translated_text) for region in regions
+    )
+    print(f"translated_regions: {translated_region_count}")
+    print(f"preserved_source_regions: {len(regions) - translated_region_count}")
     for reason, count in sorted(skipped_regions.items()):
         print(f"preserved_{reason}: {count}")
     preserved_samples = sorted(
         [
-        region
-        for region in regions
-        if region.skip_reason
-        and region.skip_reason not in {"signature_or_initials"}
+            region
+            for region in regions
+            if region.skip_reason
         ],
         key=lambda region: (
             region.skip_reason not in {
                 "invalid_render_coordinates",
-                "protected_zone_overlap",
                 "oversized_render_region",
                 "translation_does_not_fit",
             },
@@ -1813,14 +1941,9 @@ def run_local_pdf_translation(args: argparse.Namespace) -> None:
             )
     print("\n=== render quality summary ===")
     print(f"rendered_translations: {render_report.translated_regions}")
-    print(f"protected_render_regions: {render_report.protected_regions}")
     print(
         "preserved_invalid_render_coordinates: "
         f"{render_report.preserved_invalid_coordinates}"
-    )
-    print(
-        "preserved_protected_zone_overlap: "
-        f"{render_report.preserved_protected_overlap}"
     )
     print(
         "preserved_oversized_render_region: "
@@ -1840,7 +1963,11 @@ def main() -> None:
         raise ValueError("batch_size must be at least 1.")
     if args.max_input_tokens < 32:
         raise ValueError("max_input_tokens must be at least 32.")
-    if not 1 <= args.google_max_input_characters <= GOOGLE_TRANSLATE_REQUEST_CHARACTER_LIMIT:
+    if not (
+        1
+        <= args.google_max_input_characters
+        <= GOOGLE_TRANSLATE_REQUEST_CHARACTER_LIMIT
+    ):
         raise ValueError(
             "google_max_input_characters must be between 1 and "
             f"{GOOGLE_TRANSLATE_REQUEST_CHARACTER_LIMIT}."
