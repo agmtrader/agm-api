@@ -6,7 +6,7 @@ from datetime import datetime
 from functools import wraps
 from flask import jsonify
 from src.utils.logger import logger
-from src.utils.exception import handle_exception
+from src.utils.exception import ServiceError, handle_exception
 import re
 import os
 from sqlalchemy import inspect
@@ -203,6 +203,13 @@ class DatabaseManager:
                     session.rollback()
                     last_exception = e
 
+                    # Explicit application errors are deliberate and actionable.
+                    # Preserve their message/status instead of retrying or wrapping
+                    # them as a generic database failure.
+                    if isinstance(e, ServiceError):
+                        logger.error(f'Database safety error in {func.__name__}: {e}')
+                        raise
+
                     # Detect connection/operational errors by inspecting the exception hierarchy
                     # and message. This is intentionally broad because different drivers/platforms
                     # surface these errors differently.
@@ -368,9 +375,10 @@ class DatabaseManager:
             # The document.data column contains base64 file bodies. An unfiltered
             # read can exhaust the API instance before the database timeout fires.
             if table == 'document' and not query and 'data' not in (exclude_columns or []):
-                raise Exception(
-                    "Unfiltered reads of document.data are prohibited; provide a query "
-                    "or exclude the data column."
+                raise ServiceError(
+                    "Blocked unsafe database read: document.data cannot be read without "
+                    "a filter. Provide a document id query or exclude the data column.",
+                    status_code=500,
                 )
             
             tbl = Table(table, self.metadata, autoload_with=self.engine)

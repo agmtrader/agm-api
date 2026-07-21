@@ -30,6 +30,14 @@
 - Keep debug output focused:
   - First 5-10 rows for payload shape
   - Final summary counts for decision making
+- Put new operational scripts at the `agm-api` repository root unless the user
+  explicitly requests another location.
+- For one-off operational scripts, do not add CLI parameters or argument
+  parsing unless the user explicitly requests them. Use the agreed fixed input
+  files at the repository root.
+- Do not create test files or temporary output artifacts for these scripts.
+  Validate against the actual root CSV inputs and keep output in the repository
+  root when an output file is required.
 - When matching holder data:
   - Do not mix IBKR account numbers (`U...`) with internal account UUIDs.
   - Map IDs explicitly before matching `account_document` or `account_screening`.

@@ -24,8 +24,10 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v1
 
-      - name: Invoke Cloud Build Trigger
+      - name: Build and deploy using repository configuration
         run: |
-          gcloud builds triggers run rmgpgab-agm-api-us-central1-agmtrader-agm-api--makbz \
-            --branch=main \
-            --project=agm-datalake
+          gcloud builds submit . \
+            --config=cloudbuild.yaml \
+            --project=agm-datalake \
+            --service-account=projects/agm-datalake/serviceAccounts/agm-api@agm-datalake.iam.gserviceaccount.com \
+            --quiet

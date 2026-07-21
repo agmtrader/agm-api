@@ -1,6 +1,7 @@
 # cloudbuild.yaml
 options:
   machineType: 'E2_HIGHCPU_8'
+  logging: 'CLOUD_LOGGING_ONLY'
 steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
@@ -25,7 +26,9 @@ steps:
           'agm-api',
         '--platform=managed',
         '--region=us-central1',
-        '--timeout=900',
+        '--concurrency=1',
+        '--max-instances=10',
+        '--timeout=300',
         '--image=us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api',
         '--quiet'
       ]

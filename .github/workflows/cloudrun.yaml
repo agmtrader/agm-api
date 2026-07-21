@@ -33,4 +33,7 @@ jobs:
               --format 'value(spec.template.spec.containers[0].image)') \
             --region us-central1 \
             --platform managed \
+            --concurrency 1 \
+            --max-instances 10 \
+            --timeout 300 \
             --quiet
