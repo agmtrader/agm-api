@@ -30,4 +30,5 @@ jobs:
             --config=cloudbuild.yaml \
             --project=agm-datalake \
             --service-account=projects/agm-datalake/serviceAccounts/agm-api@agm-datalake.iam.gserviceaccount.com \
+            --substitutions=_IMAGE_TAG=${GITHUB_SHA} \
             --quiet

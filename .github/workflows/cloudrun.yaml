@@ -24,7 +24,7 @@ jobs:
         with:
           project_id: agm-datalake
 
-      - name: Force redeploy existing image
+      - name: Force redeploy existing image with production configuration
         run: |
           gcloud run deploy agm-api \
             --image $(gcloud run services describe agm-api \
@@ -33,7 +33,17 @@ jobs:
               --format 'value(spec.template.spec.containers[0].image)') \
             --region us-central1 \
             --platform managed \
-            --concurrency 1 \
+            --concurrency 4 \
+            --min-instances 0 \
             --max-instances 10 \
             --timeout 300 \
+            --cpu 1 \
+            --memory 2Gi \
+            --port 5000 \
+            --service-account agm-api@agm-datalake.iam.gserviceaccount.com \
+            --set-env-vars DEV_MODE=false \
+            --vpc-connector agm-qa-connector \
+            --vpc-egress all-traffic \
+            --cpu-boost \
+            --ingress all \
             --quiet

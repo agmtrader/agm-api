@@ -2,6 +2,12 @@
 options:
   machineType: 'E2_HIGHCPU_8'
   logging: 'CLOUD_LOGGING_ONLY'
+
+substitutions:
+  # GitHub Actions overrides this with the commit SHA. The default keeps manual
+  # `gcloud builds submit` invocations valid; manual callers should override it.
+  _IMAGE_TAG: 'manual'
+
 steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
@@ -9,12 +15,16 @@ steps:
         'build',
         '--no-cache',
         '-t',
-        'us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api',
+        'us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api:${_IMAGE_TAG}',
         '.'
       ]
 
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api']
+    args:
+      [
+        'push',
+        'us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api:${_IMAGE_TAG}'
+      ]
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'gcloud'
@@ -26,9 +36,23 @@ steps:
           'agm-api',
         '--platform=managed',
         '--region=us-central1',
-        '--concurrency=1',
+        '--concurrency=4',
+        '--min-instances=0',
         '--max-instances=10',
         '--timeout=300',
-        '--image=us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api',
+        '--cpu=1',
+        '--memory=2Gi',
+        '--port=5000',
+        '--service-account=agm-api@agm-datalake.iam.gserviceaccount.com',
+        '--set-env-vars=DEV_MODE=false',
+        '--vpc-connector=agm-qa-connector',
+        '--vpc-egress=all-traffic',
+        '--cpu-boost',
+        '--ingress=all',
+        '--image=us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api:${_IMAGE_TAG}',
+        '--labels=managed-by=github-actions,commit-sha=${_IMAGE_TAG}',
         '--quiet'
       ]
+
+images:
+  - 'us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api:${_IMAGE_TAG}'
