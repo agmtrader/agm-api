@@ -254,6 +254,40 @@ class Supabase:
             name = Column(Text, nullable=False)
             query_id = Column(Text, nullable=False)
 
+        class TransactionMonitoringAlert(self.Base):
+            __tablename__ = 'transaction_monitoring_alert'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            transaction_id = Column(Text, nullable=False, unique=True)
+            transaction_datetime = Column(Text, nullable=True)
+            amount = Column(BIGINT, nullable=True)
+            currency = Column(Text, nullable=True)
+            direction = Column(Text, nullable=True)
+            comment = Column(Text, nullable=True)
+            status = Column(Text, nullable=False)
+            disposition = Column(Text, nullable=True)
+            reviewed_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            reviewed_at = Column(Text, nullable=True)
+            investigation_id = Column(UUID(as_uuid=True), nullable=True)
+
+        class SuspiciousActivityInvestigation(self.Base):
+            __tablename__ = 'suspicious_activity_investigation'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
+            transaction_monitoring_alert_id = Column(UUID(as_uuid=True), ForeignKey('transaction_monitoring_alert.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False, unique=True)
+            status = Column(Text, nullable=False)
+            risk_level = Column(Text, nullable=True)
+            decision = Column(Text, nullable=True)
+            decision_rationale = Column(Text, nullable=True)
+            decision_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            decision_at = Column(Text, nullable=True)
+            closure_date = Column(Text, nullable=True)
+            closure_reason = Column(Text, nullable=True)
+
         self.Account = Account
         self.AccountContact = AccountContact
         self.AccountInstruction = AccountInstruction
@@ -272,6 +306,8 @@ class Supabase:
         self.ManagementTypeRequest = ManagementTypeRequest
         self.RiskProfile = RiskProfile    
         self.TradeTicket = TradeTicket
+        self.TransactionMonitoringAlert = TransactionMonitoringAlert
+        self.SuspiciousActivityInvestigation = SuspiciousActivityInvestigation
         self.User = User
 
 db = Supabase().db
