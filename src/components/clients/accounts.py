@@ -4,6 +4,8 @@ from src.utils.logger import logger
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 from src.components.tools.public.reporting import get_clients_report, get_nav_report, get_ibkr_details
 from sqlalchemy import text
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 import os
 import re
 import time
@@ -15,6 +17,11 @@ logger.announcement('Initialized Accounts Service', type='success')
 
 _ACCOUNTS_METADATA_CACHE = {}
 _ACCOUNTS_METADATA_CACHE_TTL_SECONDS = int(os.getenv('ACCOUNTS_METADATA_CACHE_TTL_SECONDS', '120'))
+_ACCOUNTS_METADATA_CACHE_LOCKS = {
+    'clients_report': Lock(),
+    'nav_report': Lock(),
+    'ibkr_details': Lock(),
+}
 
 table = 'account'
 account_contact_table = 'account_contact'
@@ -110,21 +117,23 @@ def _normalize_join_key(value) -> str:
     return str(value).strip()
 
 def _get_cached_payload(cache_key: str, producer, force_refresh: bool = False):
-    if force_refresh or _ACCOUNTS_METADATA_CACHE_TTL_SECONDS <= 0:
-        return producer()
+    cache_lock = _ACCOUNTS_METADATA_CACHE_LOCKS.setdefault(cache_key, Lock())
+    with cache_lock:
+        if force_refresh or _ACCOUNTS_METADATA_CACHE_TTL_SECONDS <= 0:
+            return producer()
 
-    cache_entry = _ACCOUNTS_METADATA_CACHE.get(cache_key)
-    now = time.time()
+        cache_entry = _ACCOUNTS_METADATA_CACHE.get(cache_key)
+        now = time.time()
 
-    if cache_entry and (now - cache_entry['timestamp'] <= _ACCOUNTS_METADATA_CACHE_TTL_SECONDS):
-        return cache_entry['value']
+        if cache_entry and (now - cache_entry['timestamp'] <= _ACCOUNTS_METADATA_CACHE_TTL_SECONDS):
+            return cache_entry['value']
 
-    value = producer()
-    _ACCOUNTS_METADATA_CACHE[cache_key] = {
-        'timestamp': now,
-        'value': value
-    }
-    return value
+        value = producer()
+        _ACCOUNTS_METADATA_CACHE[cache_key] = {
+            'timestamp': now,
+            'value': value
+        }
+        return value
 
 def _parse_fee_template_summary(fee_template) -> str:
     if not isinstance(fee_template, dict):
@@ -249,13 +258,35 @@ def read_account_contacts_and_screenings(account_id: str = None) -> dict:
 
 @handle_exception
 def read_accounts_with_metadata(query: dict = None, include_advisor: bool = False, force_refresh: bool = False) -> list:
-    accounts = read_accounts(query=query or {})
+    tasks = {
+        'accounts': lambda: read_accounts(query=query or {}),
+        'clients': lambda: _get_cached_payload(
+            'clients_report', get_clients_report, force_refresh=force_refresh
+        ),
+        'nav_report': lambda: _get_cached_payload(
+            'nav_report', get_nav_report, force_refresh=force_refresh
+        ),
+        'ibkr_details': lambda: _get_cached_payload(
+            'ibkr_details', get_ibkr_details, force_refresh=force_refresh
+        ),
+        'account_contacts': lambda: db.read(table=account_contact_table, query={}) or [],
+        'contacts': lambda: db.read(table='contact', query={}) or [],
+    }
 
-    clients = _get_cached_payload('clients_report', get_clients_report, force_refresh=force_refresh)
-    nav_report = _get_cached_payload('nav_report', get_nav_report, force_refresh=force_refresh)
-    ibkr_details = _get_cached_payload('ibkr_details', get_ibkr_details, force_refresh=force_refresh)
-    account_contact_rows = db.read(table=account_contact_table, query={}) or []
-    all_contacts = db.read(table='contact', query={}) or []
+    if include_advisor:
+        from src.components.clients.advisors import read_advisors
+        tasks['advisors'] = lambda: read_advisors({})
+
+    with ThreadPoolExecutor(max_workers=len(tasks), thread_name_prefix='accounts-metadata') as executor:
+        futures = {name: executor.submit(task) for name, task in tasks.items()}
+        results = {name: future.result() for name, future in futures.items()}
+
+    accounts = results['accounts']
+    clients = results['clients']
+    nav_report = results['nav_report']
+    ibkr_details = results['ibkr_details']
+    account_contact_rows = results['account_contacts']
+    all_contacts = results['contacts']
     contacts_by_id = {c.get('id'): c for c in all_contacts if c.get('id')}
     account_contacts_by_account_id = {}
     for row in account_contact_rows:
@@ -266,11 +297,9 @@ def read_accounts_with_metadata(query: dict = None, include_advisor: bool = Fals
             account_contacts_by_account_id[account_id] = []
         account_contacts_by_account_id[account_id].append(row)
 
-    advisors = []
+    advisors = results.get('advisors', [])
     advisor_name_by_code = {}
     if include_advisor:
-        from src.components.clients.advisors import read_advisors
-        advisors = read_advisors({})
         advisor_name_by_code = {
             _normalize_join_key(advisor.get('code')): advisor.get('name')
             for advisor in advisors

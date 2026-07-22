@@ -88,6 +88,7 @@ def get_nav_report():
     nav = Drive.download_file(file_id=nav_file[0]['id'], parse=True)
     return nav
 
+
 @handle_exception
 def get_bond_report():
     """

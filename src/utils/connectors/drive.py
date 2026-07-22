@@ -16,6 +16,7 @@ import io
 import json
 import base64
 import time
+import threading
 from functools import wraps
 
 from typing import Union
@@ -60,6 +61,22 @@ def retry_on_connection_error(max_retries=3, delay=1):
 class GoogleDrive:
   _instance = None
 
+  @property
+  def service(self):
+    return getattr(self._thread_local, 'service', None)
+
+  @service.setter
+  def service(self, value):
+    self._thread_local.service = value
+
+  @property
+  def _last_connection_time(self):
+    return getattr(self._thread_local, 'last_connection_time', None)
+
+  @_last_connection_time.setter
+  def _last_connection_time(self, value):
+    self._thread_local.last_connection_time = value
+
   def __new__(cls):
     if cls._instance is None:
       cls._instance = super(GoogleDrive, cls).__new__(cls)
@@ -71,6 +88,11 @@ class GoogleDrive:
       return
       
     logger.announcement('Initializing Drive', type='info')
+
+    # google-api-python-client uses httplib2, whose service connections are not
+    # thread-safe. Keep the singleton API while isolating each worker thread's
+    # underlying Drive service and connection timestamp.
+    self._thread_local = threading.local()
     
     # Don't create the service immediately - do it lazily
     self.service = None

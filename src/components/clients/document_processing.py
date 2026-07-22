@@ -2114,6 +2114,24 @@ def _upsert_document_processing_record(
     return db.create(table=TABLE, data=payload)
 
 
+def upsert_document_text_extraction_record(
+    document_id: str,
+    source_language: Optional[str],
+    status: str,
+    output_text: Optional[str],
+    provider: Optional[str],
+    error: Optional[str],
+):
+    return _upsert_document_processing_record(
+        document_id=document_id,
+        source_language=source_language,
+        status=status,
+        output_text=output_text,
+        provider=provider,
+        error=error,
+    )
+
+
 @handle_exception
 def process_document_text_extraction(
     document_id: str,
@@ -2135,7 +2153,7 @@ def process_document_text_extraction(
             document_row,
             normalized_language,
         )
-        record_id = _upsert_document_processing_record(
+        record_id = upsert_document_text_extraction_record(
             document_id=document_id,
             source_language=normalized_language,
             status='completed',
@@ -2150,7 +2168,7 @@ def process_document_text_extraction(
         }
     except Exception as exc:
         logger.warning(f'Failed text extraction for document {document_id}: {exc}')
-        record_id = _upsert_document_processing_record(
+        record_id = upsert_document_text_extraction_record(
             document_id=document_id,
             source_language=normalized_language,
             status='failed',

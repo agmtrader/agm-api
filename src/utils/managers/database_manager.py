@@ -367,7 +367,7 @@ class DatabaseManager:
         @self.with_session(commit=False)
         def _read(session, table: str, query: dict = None, exclude_columns: list = None):
 
-            logger.info(f'Attempting to read entry from table: {table} with query: {query}')
+            logger.info(f'Attempting to read entry from table: {table}')
 
             if query is None:
                 raise Exception("Query must be provided.")
