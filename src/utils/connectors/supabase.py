@@ -1,8 +1,10 @@
 from sqlalchemy import BigInteger, Boolean, ForeignKey, Text, create_engine, Column, Integer, BIGINT
+from sqlalchemy.engine import URL
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 import uuid
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
+import os
 from src.utils.managers.database_manager import DatabaseManager
 from src.utils.logger import logger
 from src.utils.managers.secret_manager import get_secret
@@ -20,19 +22,59 @@ class Supabase:
         if not self._initialized:
             logger.announcement('Initializing Database Service', 'info')
 
-            supabase_user = get_secret('SUPABASE_USER')
-            supabase_password = get_secret('SUPABASE_PASSWORD')
-            
-            self.db_url = f'postgresql://postgres.{supabase_user}:{supabase_password}@aws-0-us-west-1.pooler.supabase.com:6543/postgres?gssencmode=disable'
-            self.engine = create_engine(self.db_url)
+            self.db_url = self._resolve_db_url()
+            self.engine = self._create_engine()
             
             self.Base = declarative_base()
             self._setup_models()
             
-            self.db = DatabaseManager(base=self.Base, engine=self.engine)
+            self.db = DatabaseManager(
+                base=self.Base,
+                engine=self.engine,
+                engine_factory=self._create_engine,
+            )
             
             logger.announcement('Successfully initialized Database Service', 'success')
             self._initialized = True
+
+    def _resolve_db_url(self):
+        env_db_url = os.getenv('SUPABASE_DB_URL')
+        if env_db_url:
+            logger.info('Using SUPABASE_DB_URL from environment')
+            return env_db_url
+
+        try:
+            secret_db_url = get_secret('SUPABASE_DB_URL')
+            if secret_db_url:
+                logger.info('Using SUPABASE_DB_URL from Secret Manager')
+                return secret_db_url
+        except Exception:
+            logger.warning('SUPABASE_DB_URL secret not found. Falling back to session pooler credentials.')
+
+        supabase_user = get_secret('SUPABASE_USER')
+        supabase_password = get_secret('SUPABASE_PASSWORD')
+
+        return URL.create(
+            drivername='postgresql',
+            username=f'postgres.{supabase_user}',
+            password=supabase_password,
+            host='aws-0-us-west-1.pooler.supabase.com',
+            port=6543,
+            database='postgres',
+            query={'gssencmode': 'disable'},
+        ).render_as_string(hide_password=False)
+
+    def _create_engine(self):
+        return create_engine(
+            self.db_url,
+            pool_pre_ping=True,
+            pool_recycle=300,
+            connect_args={
+                'connect_timeout': 10,
+                'sslmode': 'require',
+                'gssencmode': 'disable',
+            },
+        )
 
     def _setup_models(self):
 

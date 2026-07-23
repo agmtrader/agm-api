@@ -13,7 +13,7 @@ from sqlalchemy import inspect
 
 class DatabaseManager:
     
-    def __init__(self, base: declarative_base, engine: create_engine):
+    def __init__(self, base: declarative_base, engine: create_engine, engine_factory=None):
         """
         Initialize the DatabaseHandler class.
 
@@ -24,6 +24,7 @@ class DatabaseManager:
         """
         self.engine = engine
         self.base = base
+        self.engine_factory = engine_factory
         
         # First get all tables from the database
         inspector = inspect(self.engine)
@@ -241,10 +242,11 @@ class DatabaseManager:
 
                         # Re-create the engine using the same URL. This requires that the instance carrying
                         # the URL attribute is the original Supabase class that created this DatabaseManager.
-                        from sqlalchemy import create_engine  # Local import to avoid circular
-
                         try:
-                            self.engine = create_engine(self.engine.url)
+                            if self.engine_factory is not None:
+                                self.engine = self.engine_factory()
+                            else:
+                                self.engine = create_engine(self.engine.url)
                         except Exception as create_e:
                             logger.error(f"Failed to recreate engine: {create_e}")
                             break  # Give up and raise the original exception
