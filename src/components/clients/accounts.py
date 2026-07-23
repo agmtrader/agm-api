@@ -258,8 +258,18 @@ def read_account_contacts_and_screenings(account_id: str = None) -> dict:
 
 @handle_exception
 def read_accounts_with_metadata(query: dict = None, include_advisor: bool = False, force_refresh: bool = False) -> list:
-    tasks = {
-        'accounts': lambda: read_accounts(query=query or {}),
+    # Keep database reads serialized to avoid exhausting Supabase session-mode limits.
+    results = {
+        'accounts': read_accounts(query=query or {}),
+        'account_contacts': db.read(table=account_contact_table, query={}) or [],
+        'contacts': db.read(table='contact', query={}) or [],
+    }
+
+    if include_advisor:
+        from src.components.clients.advisors import read_advisors
+        results['advisors'] = read_advisors({})
+
+    external_tasks = {
         'clients': lambda: _get_cached_payload(
             'clients_report', get_clients_report, force_refresh=force_refresh
         ),
@@ -269,17 +279,15 @@ def read_accounts_with_metadata(query: dict = None, include_advisor: bool = Fals
         'ibkr_details': lambda: _get_cached_payload(
             'ibkr_details', get_ibkr_details, force_refresh=force_refresh
         ),
-        'account_contacts': lambda: db.read(table=account_contact_table, query={}) or [],
-        'contacts': lambda: db.read(table='contact', query={}) or [],
     }
 
-    if include_advisor:
-        from src.components.clients.advisors import read_advisors
-        tasks['advisors'] = lambda: read_advisors({})
-
-    with ThreadPoolExecutor(max_workers=len(tasks), thread_name_prefix='accounts-metadata') as executor:
-        futures = {name: executor.submit(task) for name, task in tasks.items()}
-        results = {name: future.result() for name, future in futures.items()}
+    with ThreadPoolExecutor(
+        max_workers=len(external_tasks),
+        thread_name_prefix='accounts-metadata-external'
+    ) as executor:
+        futures = {name: executor.submit(task) for name, task in external_tasks.items()}
+        for name, future in futures.items():
+            results[name] = future.result()
 
     accounts = results['accounts']
     clients = results['clients']

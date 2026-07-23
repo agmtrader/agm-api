@@ -103,5 +103,11 @@ class Logger:
         else:
             self.logger.error(message)
 
+    def exception(self, message):
+        if self.dev_mode:
+            self.logger.exception(f"[on white][error]{message}[/error][/on white]", extra={'markup': True})
+        else:
+            self.logger.exception(message)
+
 
 logger = Logger()

@@ -65,16 +65,29 @@ class Supabase:
         ).render_as_string(hide_password=False)
 
     def _create_engine(self):
-        return create_engine(
+        pool_size = int(os.getenv('DB_POOL_SIZE', '3'))
+        max_overflow = int(os.getenv('DB_MAX_OVERFLOW', '0'))
+        pool_timeout = int(os.getenv('DB_POOL_TIMEOUT', '15'))
+
+        engine = create_engine(
             self.db_url,
             pool_pre_ping=True,
             pool_recycle=300,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            pool_use_lifo=True,
             connect_args={
                 'connect_timeout': 10,
                 'sslmode': 'require',
                 'gssencmode': 'disable',
             },
         )
+        logger.info(
+            'Created Supabase engine '
+            f'(pool_size={pool_size}, max_overflow={max_overflow}, pool_timeout={pool_timeout})'
+        )
+        return engine
 
     def _setup_models(self):
 

@@ -3,6 +3,7 @@ from datetime import datetime
 from src.components.tools.public.email import Email
 from src.utils.connectors.supabase import db
 from src.utils.exception import ServiceError, handle_exception
+from src.utils.logger import logger
 
 TABLE = 'document_review_email'
 ALLOWED_DOCUMENT_KEYS = {'poi', 'poe', 'poa', 'sow'}
@@ -95,8 +96,10 @@ def send_document_review_email(payload=None):
                     'error_message': str(exc)[:2000],
                 },
             )
-        except Exception:
-            pass
+        except Exception as update_exc:
+            logger.exception(
+                f"Failed to persist email send failure for document_review_email {attempt_id}: {update_exc}"
+            )
         raise
 
     sent_at = _timestamp()

@@ -778,6 +778,7 @@ class IBKRWebAPI:
 
             logger.success("Trading permissions added successfully")
             data = response.json()
+            logger.info(data)
             return data
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds

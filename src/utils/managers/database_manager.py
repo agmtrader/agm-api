@@ -66,6 +66,38 @@ class DatabaseManager:
         self.metadata.reflect(bind=self.engine)
         logger.success(f'Database initialized')
 
+    def _pool_status(self) -> str:
+        try:
+            return self.engine.pool.status()
+        except Exception:
+            return 'unavailable'
+
+    def _database_service_error(self, func_name: str, exc: Exception) -> ServiceError:
+        message = 'Database operation failed'
+        status_code = 500
+        code = 'database_operation_failed'
+
+        error_msg = str(exc).lower()
+        if 'emaxconnsession' in error_msg or 'max clients reached' in error_msg or 'too many connections' in error_msg:
+            message = 'Database connection pool exhausted. Retry later.'
+            status_code = 503
+            code = 'database_pool_exhausted'
+        elif 'operationalerror' in error_msg or 'could not connect' in error_msg or 'connection refused' in error_msg:
+            message = 'Database temporarily unavailable'
+            status_code = 503
+            code = 'database_unavailable'
+
+        return ServiceError(
+            message=message,
+            status_code=status_code,
+            code=code,
+            details={
+                'operation': func_name,
+                'exception_type': type(exc).__name__,
+                'pool_status': self._pool_status(),
+            },
+        )
+
     def _validate_table_schema(self, inspector, table_name):
         """Validate detailed schema differences for a specific table"""
         db_columns = {col['name']: col for col in inspector.get_columns(table_name)}
@@ -217,6 +249,8 @@ class DatabaseManager:
                     error_msg = str(e).lower()
                     connection_error_indicators = [
                         "operationalerror",          # Generic SQLAlchemy wrapper
+                        "emaxconnsession",
+                        "max clients reached",
                         "server closed the connection",
                         "connection refused",
                         "could not connect",
@@ -227,12 +261,20 @@ class DatabaseManager:
                     ]
 
                     is_connection_error = any(indicator in error_msg for indicator in connection_error_indicators)
+                    is_pool_exhaustion = any(
+                        indicator in error_msg
+                        for indicator in ("emaxconnsession", "max clients reached", "too many connections")
+                    )
 
                     if is_connection_error and attempt < max_retries - 1:
-                        logger.warning(
+                        retry_message = (
                             f"Connection error when executing {func.__name__} (attempt {attempt + 1}/{max_retries}): {e}. "
-                            "Refreshing engine and retrying…"
+                            f"pool_status={self._pool_status()}. Disposing pooled connections and retrying."
                         )
+                        if is_pool_exhaustion:
+                            logger.error(retry_message)
+                        else:
+                            logger.warning(retry_message)
 
                         # Fully dispose of the existing engine (closes all pooled connections)
                         try:
@@ -240,31 +282,23 @@ class DatabaseManager:
                         except Exception:
                             pass  # Best-effort
 
-                        # Re-create the engine using the same URL. This requires that the instance carrying
-                        # the URL attribute is the original Supabase class that created this DatabaseManager.
-                        try:
-                            if self.engine_factory is not None:
-                                self.engine = self.engine_factory()
-                            else:
-                                self.engine = create_engine(self.engine.url)
-                        except Exception as create_e:
-                            logger.error(f"Failed to recreate engine: {create_e}")
-                            break  # Give up and raise the original exception
-
                         # Simple exponential back-off
                         import time  # Local import to keep module-level imports minimal
                         time.sleep(delay * (attempt + 1))
                         continue
 
                     # Not a connection error or retries exhausted ― re-raise.
-                    logger.error(f"Database error in {func.__name__}: {str(e)}")
-                    raise Exception(f"Database error: {str(e)}")
+                    logger.error(
+                        f"Database error in {func.__name__}: {str(e)}. "
+                        f"pool_status={self._pool_status()}"
+                    )
+                    raise self._database_service_error(func.__name__, e) from e
 
                 finally:
                     session.close()
 
             # All retries failed
-            raise last_exception
+            raise self._database_service_error(func.__name__, last_exception) from last_exception
 
         return wrapper
 
