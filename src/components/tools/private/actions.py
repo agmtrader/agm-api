@@ -12,6 +12,7 @@ def send_unfunded_emails():
     accounts that have zero NAV (not funded).
     """
     from src.components.clients.accounts import read_accounts
+    from src.components.clients.account_contacts import read_account_contacts
     from src.components.clients.contacts import read_contacts
     from src.components.clients.advisors import read_advisors
     from src.components.tools.public.email import Gmail
@@ -21,6 +22,7 @@ def send_unfunded_emails():
     # Base data
     nav_data = get_nav_report()
     accounts_data = read_accounts({})
+    account_contacts_data = read_account_contacts({})
 
     # Extract clients report for account status and date opened information
     clients_data = get_clients_report()
@@ -31,6 +33,7 @@ def send_unfunded_emails():
     
     nav_df = pd.DataFrame(nav_data)
     accounts_df = pd.DataFrame(accounts_data)
+    account_contacts_df = pd.DataFrame(account_contacts_data)
     clients_df = pd.DataFrame(clients_data)
     contacts_df = pd.DataFrame(contacts_data)
     advisors_df = pd.DataFrame(advisors_data)
@@ -64,6 +67,27 @@ def send_unfunded_emails():
         if pd.isna(business_days)
         else max(1, int((business_days + 4) // 5))
     )
+
+    if 'contact_id' not in total_accounts.columns:
+        latest_account_contacts_df = pd.DataFrame(columns=['account_id', 'contact_id'])
+        if not account_contacts_df.empty:
+            sortable_account_contacts_df = account_contacts_df.copy()
+            sortable_account_contacts_df['_sort_key'] = sortable_account_contacts_df.apply(
+                lambda row: str(row.get('updated') or row.get('created') or ''),
+                axis=1,
+            )
+            latest_account_contacts_df = (
+                sortable_account_contacts_df
+                .sort_values('_sort_key', ascending=False)
+                .drop_duplicates(subset=['account_id'], keep='first')[['account_id', 'contact_id']]
+            )
+
+        total_accounts = total_accounts.merge(
+            latest_account_contacts_df,
+            left_on='id',
+            right_on='account_id',
+            how='left'
+        )
 
     advisor_emails_df = advisors_df[['code', 'contact_id']].merge(
         contacts_df[['id', 'email']],
