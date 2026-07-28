@@ -411,11 +411,13 @@ def extract_account_details_backup(config=None):
     enriched_details = _append_missing_account_details(details)
     file_name = account_details_config['backup_name']
 
-    try:
-        existing_file = Drive.get_file_info(parent_id=backup_folder_id, file_name=file_name)
+    existing_file = Drive.get_file_info(
+        parent_id=backup_folder_id,
+        file_name=file_name,
+        raise_if_missing=False
+    )
+    if existing_file:
         Drive.delete_file(file_id=existing_file['id'])
-    except:
-        pass
 
     json_bytes = json.dumps(enriched_details, default=str).encode('utf-8')
     json_base64 = base64.b64encode(json_bytes).decode('utf-8')
@@ -1226,11 +1228,13 @@ def process_open_positions_template(df):
     :return: Processed dataframe
     """
     # Upload the full file
-    try:
-        existing_file = Drive.get_file_info(parent_id=resources_folder_id, file_name='ibkr_open_positions_all.csv')
+    existing_file = Drive.get_file_info(
+        parent_id=resources_folder_id,
+        file_name='ibkr_open_positions_all.csv',
+        raise_if_missing=False
+    )
+    if existing_file:
         Drive.delete_file(file_id=existing_file['id'])
-    except:
-        pass
 
     full_dict = df.to_dict(orient='records')
     Drive.upload_file(file_name='ibkr_open_positions_all.csv', mime_type='text/csv', file_data=full_dict, parent_folder_id=resources_folder_id)

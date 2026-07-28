@@ -303,7 +303,7 @@ class GoogleDrive:
 
   @retry_on_connection_error()
   @handle_exception
-  def get_file_info(self, parent_id, file_name):
+  def get_file_info(self, parent_id, file_name, raise_if_missing=True):
     logger.info(f'Getting file info for file: {file_name} in parent: {parent_id}')
     files = []
     page_token = None
@@ -323,6 +323,9 @@ class GoogleDrive:
         break
 
     if not files:
+      if not raise_if_missing:
+        logger.info(f"File not found with name '{file_name}' in parent '{parent_id}'")
+        return None
       raise Exception(f"No file found with name '{file_name}' in parent '{parent_id}'")
     logger.success(f"File found with name '{file_name}' in parent '{parent_id}'")
     return files[0]
