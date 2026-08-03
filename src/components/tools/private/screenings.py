@@ -196,6 +196,12 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
             "accounts_with_some_screenings": 0,
             "total_screenings_planned": 0,
             "screenings_executed": 0,
+            "screenings_with_list_matches": 0,
+            "screenings_without_list_matches": 0,
+            "ofac_matches": 0,
+            "uk_matches": 0,
+            "un_matches": 0,
+            "screening_error_contact_ids": [],
             "screening_errors": [],
         })
 
@@ -351,27 +357,58 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
             "accounts_with_some_screenings": accounts_with_some_screenings,
             "total_screenings_planned": total_screenings_planned,
             "screenings_executed": 0,
+            "screenings_with_list_matches": 0,
+            "screenings_without_list_matches": 0,
+            "ofac_matches": 0,
+            "uk_matches": 0,
+            "un_matches": 0,
+            "screening_error_contact_ids": [],
             "screening_errors": [],
         })
+
+    screenings_with_list_matches = 0
+    screenings_without_list_matches = 0
+    ofac_matches = 0
+    uk_matches = 0
+    un_matches = 0
+    screening_error_contact_ids = []
 
     if apply_screenings:
         screening_payloads = []
         for contact_id, row in planned_contacts_by_id.items():
             try:
-                screening_payloads.append(build_contact_screening_payload(
+                screening_payload = build_contact_screening_payload(
                     contact=row.get("contact") or {},
                     account_row=row.get("account_row") or {},
                     ibkr_detail=row.get("ibkr_detail"),
                     account_contact_link=row.get("account_contact_link") or {},
                     created=created_value_today,
-                ))
+                )
+                screening_payloads.append(screening_payload)
+
+                matched_ofac = bool(screening_payload.get("ofac_results"))
+                matched_uk = bool(screening_payload.get("uk_status"))
+                matched_un = bool(screening_payload.get("un_status"))
+                ofac_matches += int(matched_ofac)
+                uk_matches += int(matched_uk)
+                un_matches += int(matched_un)
+                if matched_ofac or matched_uk or matched_un:
+                    screenings_with_list_matches += 1
+                else:
+                    screenings_without_list_matches += 1
             except Exception as e:
                 screening_errors.append(f"{contact_id}: {str(e)}")
+                screening_error_contact_ids.append(contact_id)
 
         if screening_payloads:
             batch_result = create_contact_screenings_batch(screening_payloads)
             if isinstance(batch_result, dict) and batch_result.get("error"):
                 screening_errors.append(batch_result.get("error"))
+                screening_error_contact_ids.extend(
+                    payload.get("contact_id")
+                    for payload in screening_payloads
+                    if payload.get("contact_id")
+                )
             else:
                 screenings_executed = int((batch_result or {}).get("inserted", len(screening_payloads)))
 
@@ -390,6 +427,12 @@ def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
         "accounts_with_some_screenings": accounts_with_some_screenings,
         "total_screenings_planned": total_screenings_planned,
         "screenings_executed": screenings_executed,
+        "screenings_with_list_matches": screenings_with_list_matches,
+        "screenings_without_list_matches": screenings_without_list_matches,
+        "ofac_matches": ofac_matches,
+        "uk_matches": uk_matches,
+        "un_matches": un_matches,
+        "screening_error_contact_ids": list(dict.fromkeys(screening_error_contact_ids)),
         "screening_errors": screening_errors,
     }
     return _compact_screenings_result(result)

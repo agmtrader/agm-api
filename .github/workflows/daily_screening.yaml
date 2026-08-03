@@ -52,6 +52,18 @@ jobs:
           total_screenings_planned=$(echo "$body" | jq -r '.total_screenings_planned // 0')
           screenings_executed=$(echo "$body" | jq -r '.screenings_executed // 0')
           screening_errors=$(echo "$body" | jq -r '.screening_errors_count // (.screening_errors | length) // 0')
+          error_contact_ids=$(echo "$body" | jq -r '(.screening_error_contact_ids // []) | if length == 0 then "None" else join(", ") end')
+          contacts_targeted=$(echo "$body" | jq -r '.contacts_targeted // 0')
+          contacts_without_prior_screenings=$(echo "$body" | jq -r '.contacts_with_no_screenings // 0')
+          accounts_targeted=$(echo "$body" | jq -r '.accounts_targeted // 0')
+          accounts_without_screenings=$(echo "$body" | jq -r '.accounts_with_no_screenings_at_all // 0')
+          accounts_with_partial_screenings=$(echo "$body" | jq -r '.accounts_with_some_contacts_no_screenings // 0')
+          screenings_with_list_matches=$(echo "$body" | jq -r '.screenings_with_list_matches // 0')
+          screenings_without_list_matches=$(echo "$body" | jq -r '.screenings_without_list_matches // 0')
+          ofac_matches=$(echo "$body" | jq -r '.ofac_matches // 0')
+          uk_matches=$(echo "$body" | jq -r '.uk_matches // 0')
+          un_matches=$(echo "$body" | jq -r '.un_matches // 0')
+          summary_messages=$(echo "$body" | jq -r '(.summary_messages // []) | if length == 0 then "None" else join("; ") end')
           sanctions_available=$(echo "$body" | jq -r '.sanctions_comparison.available // false')
           sanctions_all_same=$(echo "$body" | jq -r '.sanctions_comparison.all_same // false')
           ofac_added=$(echo "$body" | jq -r '.sanctions_comparison.lists.ofac.added_count // 0')
@@ -71,7 +83,17 @@ jobs:
           UN delta: +$un_added / -$un_removed
           Total screenings planned: $total_screenings_planned
           Screenings executed: $screenings_executed
+          Contacts targeted: $contacts_targeted
+          Contacts without prior screenings: $contacts_without_prior_screenings
+          Accounts targeted: $accounts_targeted
+          Accounts with no screenings: $accounts_without_screenings
+          Accounts with partial screening coverage: $accounts_with_partial_screenings
+          Screened contacts appearing in OFAC/UK/UN lists: $screenings_with_list_matches
+          Screened contacts not appearing in OFAC/UK/UN lists: $screenings_without_list_matches
+          List matches by source: OFAC=$ofac_matches, UK=$uk_matches, UN=$un_matches
           Screening errors: $screening_errors
+          Error contact IDs: $error_contact_ids
+          Warnings: $summary_messages
           EOF
           )
 
