@@ -12,6 +12,7 @@ from src.utils.connectors.supabase import db
 from src.utils.logger import logger
 
 APPLY_SCREENINGS = True
+
 # CHECK IF PEOPLE NEED SCREENING PENDING
 def normalize_name(name: str) -> str:
     if not name:
@@ -21,7 +22,6 @@ def normalize_name(name: str) -> str:
     )
     normalized = re.sub(r"[^a-z0-9 ]+", " ", ascii_name.lower())
     return " ".join(normalized.split())
-
 
 def parse_screen_created(value: str | None) -> date | None:
     if not value:
@@ -47,7 +47,6 @@ def person_name_candidates(person: dict) -> set[str]:
 
     return {normalize_name(c) for c in raw_candidates if c.strip()}
 
-
 def _compact_screenings_result(
     payload: dict,
 ) -> dict:
@@ -62,7 +61,6 @@ def _compact_screenings_result(
     result["screening_errors"] = []
     result["contacts_targeted_rows"] = []
     return result
-
 
 def _sanctions_overview(sanctions_comparison: dict | None) -> dict:
     if not isinstance(sanctions_comparison, dict):
@@ -90,7 +88,6 @@ def _sanctions_overview(sanctions_comparison: dict | None) -> dict:
 
     return overview
 
-
 def _summary_messages(
     unavailable_lists: list[str],
     comparison_error: str | None = None,
@@ -106,7 +103,6 @@ def _summary_messages(
             + ", ".join(unavailable_lists)
         )
     return messages
-
 
 def run_screenings(apply_screenings: bool = APPLY_SCREENINGS) -> dict:
     sanctions_comparison = compare_all_sanctions_today_vs_yesterday()

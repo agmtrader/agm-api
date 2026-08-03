@@ -30,30 +30,11 @@ def sanitize_users(users: list = None):
     return [sanitize_user(user) for user in users or []]
 
 @handle_exception
-def create_user(user: dict = None):
-    if user is None:
-        raise Exception("User must be provided.")
-    if 'password' in user:
-        user['password_hash'] = hash_password(user['password'])
-        user.pop('password', None)
-    user_id = db.create(table='user', data=user)
-    return user_id
-
-@handle_exception
 def read_users(query=None, include_sensitive: bool = False):
     users = db.read(table='user', query=query)
     if include_sensitive:
         return users
     return sanitize_users(users)
-
-@handle_exception
-def read_user_by_id(id: str) -> dict:
-    user = read_users(query={'id': id})
-    if len(user) == 1:
-        return user[0]
-    else:
-        logger.error(f'Single entry has {len(user)} matches.')
-        raise Exception(f'Single entry has {len(user)} matches.')
 
 @handle_exception
 def update_user(query: dict = None, user: dict = None):

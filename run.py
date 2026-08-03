@@ -10,6 +10,7 @@ from flask_limiter.util import get_remote_address
 from src.utils.logger import logger
 from datetime import timedelta
 from src.utils.managers.secret_manager import get_secret
+from src.utils.connectors.supabase import initialize_database
 from src.utils.response import format_response
 from src.utils.exception import (
     ServiceError,
@@ -20,7 +21,7 @@ from src.utils.exception import (
 
 load_dotenv()
 
-public_routes = ['docs', 'index', 'token', 'users.login', 'users.create']
+public_routes = ['docs', 'index', 'token', 'users.login']
 
 def jwt_required_except_login():
     if request.endpoint not in public_routes:
@@ -57,6 +58,11 @@ def start_api():
         storage_uri='memory://',
         strategy="fixed-window"
     )
+
+    # Initialize the database explicitly before importing blueprints. This
+    # preserves fail-fast schema validation in production while keeping
+    # component imports free of database side effects.
+    initialize_database()
 
     # Apply JWT authentication to all routes except login
     app.before_request(jwt_required_except_login)
@@ -196,13 +202,11 @@ def start_api():
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
 
     # Clients
-    from src.app.clients import accounts, account_contacts, advisors, applications, contacts, documents, investment_proposals, risk_profiles, users
+    from src.app.clients import accounts, account_contacts, advisors, contacts, investment_proposals, risk_profiles, users
     app.register_blueprint(accounts.bp, url_prefix='/accounts')
     app.register_blueprint(account_contacts.bp, url_prefix='/account_contacts')
     app.register_blueprint(advisors.bp, url_prefix='/advisors')
-    app.register_blueprint(applications.bp, url_prefix='/applications')
     app.register_blueprint(contacts.bp, url_prefix='/contacts')
-    app.register_blueprint(documents.bp, url_prefix='/documents')
     app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')
     app.register_blueprint(risk_profiles.bp, url_prefix='/risk_profiles')
     app.register_blueprint(users.bp, url_prefix='/users')

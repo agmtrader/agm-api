@@ -7,15 +7,10 @@ import csv
 import os
 
 from src.utils.logger import logger
-from src.utils.connectors.drive import GoogleDrive
-from datetime import datetime
 from requests.exceptions import RequestException
 
-logger.announcement('Initializing Flex Query Service', type='info')
-drive = GoogleDrive()
 version='&v=3'
 url = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest?"
-logger.announcement('Initialized Flex Query Service', type='success')
 
 FLEX_QUERY_MAX_RETRIES = int(os.getenv('FLEX_QUERY_MAX_RETRIES', '6'))
 FLEX_QUERY_RETRY_DELAY_SECONDS = int(os.getenv('FLEX_QUERY_RETRY_DELAY_SECONDS', '3'))

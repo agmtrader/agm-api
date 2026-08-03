@@ -204,7 +204,6 @@ def update_account_aliases():
         'skipped_accounts': skipped_accounts
     }
 
-
 @handle_exception
 def send_compliance_manual_update_email():
 

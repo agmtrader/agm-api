@@ -23,20 +23,3 @@ def create_management_type_request(management_type_request: dict = None):
     management_type_request_id = db.create(table='management_type_request', data=management_type_request)
     return {'id': management_type_request_id}
 
-
-@handle_exception
-def read_management_type_requests(query=None):
-    """Read management_type_request records matching query.
-
-    Parameters
-    ----------
-    query : dict
-        Query parameters.
-
-    Returns
-    -------
-    list
-        Management type request records.
-    """
-    management_type_requests = db.read(table='management_type_request', query=query)
-    return management_type_requests

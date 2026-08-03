@@ -23,6 +23,11 @@ def read(query_id):
     trades = getFlexQuery(query_id)
     return trades
 
+@handle_exception
+def generate(flex_query_dict, indices):
+    generated = generate_trade_confirmation_message(flex_query_dict=flex_query_dict, indices=indices)
+    return generated
+
 def generate_trade_confirmation_message(flex_query_dict, indices):
 
     logger.info('Generating trade ticket. Processing data...')
@@ -222,140 +227,3 @@ def extract_bond_details(description: str):
         'isin': isin,
         'ratings': ratings,
     }
-
-def generate_excel_file(flex_query_dict, indices):
-    logger.info('Generating trade ticket. Processing data...')
-
-    # Create dataframe with indexed rows only
-    flex_query_df = pd.DataFrame(flex_query_dict)
-    df_indexed = flex_query_df.iloc[indices].copy()
-
-    bond_details = extract_bond_details(df_indexed['Description'].iloc[0])
-
-    if (df_indexed.loc[:,'AccruedInterest'] == 0).any():
-        logger.error('At least one row has AccruedInterest value of 0.')
-        raise Exception('At least one row has AccruedInterest value of 0.')
-
-    df_indexed['Coupon'] = bond_details['coupon']
-    df_indexed['Maturity'] = bond_details['maturity']
-
-    df_indexed.loc[:,'Quantity'] = df_indexed['Quantity'].astype(float).abs()
-    df_indexed.loc[:,'AccruedInterest'] = df_indexed['AccruedInterest'].astype(float).abs()
-    df_indexed.loc[:,'NetCash'] = df_indexed['NetCash'].astype(float).abs()
-    df_indexed.loc[:,'Amount'] = df_indexed['NetCash'].astype(float).abs()
-
-    try:
-        df_indexed.loc[:,'Accrued (Days)'] = round((df_indexed['AccruedInterest'].astype(float)) / (df_indexed['Coupon'].astype(float)/100 * df_indexed['Quantity'].astype(float)) * 360).astype(float)
-    except:
-        df_indexed.loc[:,'Accrued (Days)'] = 0
-
-    df_indexed.loc[:,'TotalAmount'] = round(df_indexed['AccruedInterest'] + df_indexed['NetCash'], 2).astype(float)
-
-    df_indexed.loc[:,'Price (including Commissions)'] = round((df_indexed['NetCash']/df_indexed['Quantity']) * 100, 4).astype(float)
-    
-    df_indexed['Price'] = df_indexed['Price'].astype(float)
-    df_indexed = df_indexed.fillna('')
-
-    # Generate email message
-    trade_confirmation_columns = [
-        "ClientAccountID",
-        "AccountAlias",
-        "CurrencyPrimary",
-
-        "AssetClass",
-        "Symbol",
-        "Description",
-        "Conid",
-        "SecurityID",
-        "SecurityIDType",
-        "CUSIP",
-        "ISIN",
-        "FIGI",
-        "Issuer",
-        "Maturity",
-
-        "Buy/Sell",
-        "SettleDate",
-        "TradeDate",
-        "Exchange",
-        "Quantity",
-        "AccruedInterest",
-        "Accrued (Days)",
-        "Price",
-        "Price (including Commissions)",
-        "Amount",
-        "TotalAmount"
-    ]
-
-    df_indexed = df_indexed[trade_confirmation_columns]
-
-    # Translate the columns to Spanish
-    df_indexed = df_indexed.rename(columns={
-        'ClientAccountID': 'Cuenta de Cliente',
-        'AccountAlias': 'Alias de Cuenta',
-        'CurrencyPrimary': 'Moneda',
-        'AssetClass': 'Clase de Activo',
-        'Symbol': 'Símbolo',
-        'Description': 'Descripción',
-        'Conid': 'Numero de Contrato',
-        'SecurityID': 'ID de Seguridad',
-        'SecurityIDType': 'Tipo de ID de Seguridad',
-        'CUSIP': 'CUSIP',
-        'ISIN': 'Serie',
-        'FIGI': 'FIGI',
-        'Issuer': 'Emisor',
-        'Maturity': 'Vencimiento',
-        'Buy/Sell': 'Tipo de Transacción',
-        'SettleDate': 'Fecha de Liquidación',
-        'TradeDate': 'Fecha de Operación',
-        'Exchange': 'Bolsa',
-        'Quantity': 'Facial',
-        'AccruedInterest': 'Interés Acumulado',
-        'Accrued (Days)': 'Días de Interés Acumulado',
-        'Price': 'Precio',
-        'Price (including Commissions)': 'Precio (incluyendo Comisiones)',
-        'Amount': 'Cantidad',
-        'TotalAmount': 'Valor Transado'
-    })
-
-    df_indexed['Emision'] = df_indexed['Serie']
-    df_indexed['Dias Al Vencimiento'] = ''
-    df_indexed['Rendimiento Bruto'] = ''
-    df_indexed['Mercado'] = ''
-    df_indexed['Comision En Bolsa En Caso De Que Aplique'] = ''
-
-    df_indexed = df_indexed[[
-        "Numero de Contrato",
-        "Fecha de Operación",
-        "Fecha de Liquidación",
-        "Emision",
-        "Serie",
-        "Facial",
-
-        "Precio",
-        'Rendimiento Bruto',
-        "Interés Acumulado",
-        "Valor Transado",
-
-        "Moneda",
-        'Dias Al Vencimiento',
-        "Vencimiento",
-
-        "Bolsa",
-        'Mercado',
-        "Tipo de Transacción",
-        "Comision En Bolsa En Caso De Que Aplique"
-    ]]
-
-    indexed_dict = df_indexed.to_dict(orient='records')
-    return {'data': indexed_dict}
-
-query_function_map = {
-    '986431': generate_trade_confirmation_message,
-    '1321545': generate_excel_file,
-}
-
-@handle_exception
-def generate(query_id, flex_query_dict, indices):
-    generated = query_function_map[query_id](flex_query_dict=flex_query_dict, indices=indices)
-    return generated

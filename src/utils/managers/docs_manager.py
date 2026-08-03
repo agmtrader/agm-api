@@ -264,7 +264,7 @@ def generate_docs(
         '  <h1>AGM API Routes</h1>',
         '  <section class="intro">',
         '    <h2>Authentication</h2>',
-        '    <p>Most routes require a JWT access token. Public routes are <code>/</code>, <code>/docs</code>, <code>/token</code>, <code>/users/login</code>, and <code>/users/create</code>.</p>',
+        '    <p>Most routes require a JWT access token. Public routes are <code>/</code>, <code>/docs</code>, <code>/token</code>, and <code>/users/login</code>.</p>',
         '    <p>Fetch a token by posting the local token payload to <code>/token</code>:</p>',
         '    <pre><code>curl -X POST http://localhost:5000/token \\',
         '  -H "Content-Type: application/json" \\',

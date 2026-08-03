@@ -365,4 +365,45 @@ class Supabase:
         self.SuspiciousActivityInvestigation = SuspiciousActivityInvestigation
         self.User = User
 
-db = Supabase().db
+class DatabaseProxy:
+    """Stable reference to the explicitly initialized database manager.
+
+    Components can continue importing ``db`` without causing database
+    connection or schema validation during module import. The application
+    startup path must call :func:`initialize_database` first.
+    """
+
+    def __init__(self):
+        self._target = None
+
+    def set_target(self, target):
+        self._target = target
+
+    def __getattr__(self, name):
+        if self._target is None:
+            raise RuntimeError(
+                'Database has not been initialized. '
+                'Call initialize_database() during application startup.'
+            )
+        return getattr(self._target, name)
+
+
+_supabase_instance = None
+db = DatabaseProxy()
+
+
+def initialize_database():
+    """Initialize and validate the database exactly once.
+
+    ``DatabaseManager`` retains the existing behavior: schema validation is
+    skipped when ``DEV_MODE=true`` and performed otherwise. The important
+    change is that this work happens from an explicit startup call instead of
+    as a side effect of importing this module.
+    """
+    global _supabase_instance
+
+    if _supabase_instance is None:
+        _supabase_instance = Supabase()
+        db.set_target(_supabase_instance.db)
+
+    return db

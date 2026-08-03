@@ -33,11 +33,3 @@ def update_account_contact(query: dict = None, account_contact: dict = None):
     db.update(table=table, query=query, data=account_contact)
     return {'status': 'success'}
 
-
-@handle_exception
-def delete_account_contact(query: dict = None):
-    if not query:
-        raise Exception('query is required')
-
-    db.delete(table=table, query=query)
-    return {'status': 'success'}

@@ -5,32 +5,6 @@ TABLE = 'document_review_responsible'
 
 
 @handle_exception
-def create_document_review_responsible(document_review_responsible: dict = None):
-    if not document_review_responsible:
-        raise Exception('document_review_responsible payload is required')
-
-    required_keys = ['account_id', 'contact_id', 'user_id']
-    missing_keys = [key for key in required_keys if not document_review_responsible.get(key)]
-    if missing_keys:
-        raise Exception(f"Missing required fields: {', '.join(missing_keys)}")
-
-    existing = db.read(
-        table=TABLE,
-        query={
-            'account_id': document_review_responsible['account_id'],
-            'contact_id': document_review_responsible['contact_id'],
-            'user_id': document_review_responsible['user_id'],
-        },
-    )
-
-    if existing:
-        return {'id': existing[0]['id'], 'status': 'exists'}
-
-    record_id = db.create(table=TABLE, data=document_review_responsible)
-    return {'id': record_id, 'status': 'created'}
-
-
-@handle_exception
 def upsert_document_review_responsible(account_id: str = None, contact_id: str = None, user_id: str = None, comment: str = None):
     if not account_id:
         raise Exception('account_id is required')
@@ -76,11 +50,3 @@ def upsert_document_review_responsible(account_id: str = None, contact_id: str =
 def read_document_review_responsibles(query=None):
     return db.read(table=TABLE, query=query or {})
 
-
-@handle_exception
-def delete_document_review_responsible(query: dict = None):
-    if not query:
-        raise Exception('query is required')
-
-    deleted_id = db.delete(table=TABLE, query=query)
-    return {'id': deleted_id, 'status': 'deleted'}

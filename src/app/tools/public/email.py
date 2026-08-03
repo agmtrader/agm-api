@@ -25,13 +25,6 @@ def send_application_link_email_route():
   payload = request.get_json(force=True)
   return Email.send_application_link_email(payload['content'], payload['client_email'], payload['lang'])
 
-@bp.route('/send_email/task_reminder', methods=['POST'])
-@format_response
-def send_task_reminder_email_route():
-  """Send an internal task reminder email to an AGM user."""
-  payload = request.get_json(force=True)
-  return Email.send_task_reminder_email(payload['content'], payload['agm_user_email'])
-
 @bp.route('/send_email/lead_reminder', methods=['POST'])
 @format_response
 def send_lead_reminder_email_route():

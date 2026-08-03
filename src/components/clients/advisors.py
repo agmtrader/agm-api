@@ -19,12 +19,6 @@ def read_advisors(query=None):
     return advisors
 
 @handle_exception
-def update_advisor(query=None, advisor=None):
-    advisor_id = db.update(table='advisor', query=query, data=advisor)
-    return {'id': advisor_id}
-
-
-@handle_exception
 def link_advisor_contact(advisor_id: str = None, contact_id: str = None):
     """Link an existing advisor to an existing contact and return the saved advisor."""
     if not advisor_id or not contact_id:

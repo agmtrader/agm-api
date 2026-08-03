@@ -4,7 +4,6 @@ from src.components.clients.account_contacts import (
     create_account_contact,
     read_account_contacts,
     update_account_contact,
-    delete_account_contact,
 )
 from src.utils.response import format_response
 
@@ -51,11 +50,3 @@ def update_account_contact_route():
     account_contact = payload.get('account_contact', None)
     return update_account_contact(query=query, account_contact=account_contact)
 
-
-@bp.route('/delete', methods=['POST'])
-@format_response
-def delete_account_contact_route():
-    """Delete account-contact relationship records that match the provided query payload."""
-    payload = request.get_json(force=True)
-    query = payload.get('query', None)
-    return delete_account_contact(query=query)

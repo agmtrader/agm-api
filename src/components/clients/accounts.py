@@ -205,10 +205,6 @@ def create_account(account: dict = None) -> dict:
     return {'id': account_id}
 
 @handle_exception
-def create_instruction(account_id: str = None) -> dict:
-    return db.create(table='account_instruction', data={'account_id': account_id})
-
-@handle_exception
 def read_accounts(query: dict = None) -> list:
     accounts = db.read(table=table, query=query)
     return _sanitize_accounts(accounts)
@@ -466,20 +462,12 @@ def send_to_ibkr(account_id: str = None, master_account: str = None, application
 Account Management API
 """
 @handle_exception
-def list_accounts(master_account: str = None) -> dict:
-    return ibkr_web_api.list_accounts(master_account=master_account)
-
-@handle_exception
 def read_account_details(account_id: str = None, master_account: str = None) -> dict:
     return ibkr_web_api.get_account_details(account_id=account_id, master_account=master_account)
 
 @handle_exception
 def get_pending_tasks(account_id: str = None, master_account: str = None) -> list:
     return ibkr_web_api.get_pending_tasks(account_id=account_id, master_account=master_account)
-
-@handle_exception
-def get_registration_tasks(account_id: str = None, master_account: str = None) -> list:
-    return ibkr_web_api.get_registration_tasks(account_id=account_id, master_account=master_account)
 
 @handle_exception
 def get_account_statements(
@@ -499,17 +487,8 @@ def get_account_statements(
     )
 
 @handle_exception
-def get_available_statements(account_id: str = None, master_account: str = None) -> dict:
-    """Get available statements via IBKR API."""
-    return ibkr_web_api.get_available_statements(account_id=account_id, master_account=master_account)
-
-@handle_exception
 def submit_documents(document_submission: dict = None, master_account: str = None) -> dict:
     return ibkr_web_api.submit_documents(document_submission=document_submission, master_account=master_account)
-
-@handle_exception
-def submit_all_agreements(master_account: str = None, forms: list = None) -> dict:
-    return ibkr_web_api.submit_all_agreements(master_account=master_account or 'I6413690', forms=forms)
 
 @handle_exception
 def apply_fee_template(account_id: str = None, template_name: str = None, master_account: str = None) -> dict:
@@ -527,23 +506,9 @@ def add_clp_capability(account_id: str = None, document_submission: dict = None,
     return ibkr_web_api.add_clp_capability(account_id=account_id, document_submission=document_submission, master_account=master_account)
 
 @handle_exception
-def close_account(account_id: str = None, close_reason: str = None, master_account: str = None) -> dict:
-    """Close account via IBKR API."""
-    return ibkr_web_api.close_account(
-        account_id=account_id,
-        close_reason=close_reason,
-        master_account=master_account
-    )
-
-@handle_exception
 def update_account_alias(account_id: str = None, new_alias: str = None, master_account: str = None) -> dict:
     """Update account alias via IBKR API."""
     return ibkr_web_api.update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
-
-@handle_exception
-def update_account_email(reference_user_name: str = None, new_email: str = None, access: bool = True, master_account: str = None) -> dict:
-    """Update account email via IBKR API."""
-    return ibkr_web_api.update_account_email(reference_user_name=reference_user_name, new_email=new_email, access=access, master_account=master_account)
 
 @handle_exception
 def change_financial_information(account_id: str = None, new_financial_information: dict = None, master_account: str = None) -> dict:
@@ -566,15 +531,6 @@ def change_account_holder_external_id(account_id: str = None, id: str = None, ma
     )
 
 @handle_exception
-def change_investment_experience(account_id: str = None, investment_experience: dict = None, master_account: str = None) -> dict:
-    """Backward-compatible wrapper for legacy callers."""
-    return change_financial_information(
-        account_id=account_id,
-        new_financial_information={"investmentExperience": investment_experience} if investment_experience else {},
-        master_account=master_account
-    )
-
-@handle_exception
 def deposit_funds(master_account: str = None, instruction: dict = None, account_id: str = None) -> dict:
     """Deposit funds via IBKR API."""
     client_instruction_id = db.create(table='account_instruction', data={'account_id': account_id})
@@ -587,14 +543,6 @@ def withdraw_funds(master_account: str = None, instruction: dict = None, account
     client_instruction_id = db.create(table='account_instruction', data={'account_id': account_id})
     instruction['clientInstructionId'] = client_instruction_id
     return ibkr_web_api.withdraw_funds(master_account=master_account, instruction=instruction)
-
-@handle_exception
-def transfer_position_internally(source_account_id: str = None, target_account_id: str = None, position: int = None, transfer_quantity: int = None, master_account: str = None) -> dict:
-    return ibkr_web_api.transfer_position_internally(source_account_id=source_account_id, target_account_id=target_account_id, position=position, transfer_quantity=transfer_quantity, master_account=master_account)
-
-@handle_exception
-def transfer_position_externally(account_id: str = None, client_instruction_id: int = None, contra_broker_account_id: str = None, contra_broker_dtc_code: str = None, quantity: int = None, conid: int = None, master_account: str = None) -> dict:
-    return ibkr_web_api.transfer_position_externally(account_id=account_id, client_instruction_id=client_instruction_id, contra_broker_account_id=contra_broker_account_id, contra_broker_dtc_code=contra_broker_dtc_code, quantity=quantity, conid=conid, master_account=master_account)
 
 @handle_exception
 def get_status_of_instruction(client_instruction_id: str = None) -> dict:

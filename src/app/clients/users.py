@@ -1,28 +1,10 @@
 from flask import Blueprint, request
-from src.components.clients.users import read_users, update_user, create_user, verify_password, sanitize_user
+from src.components.clients.users import read_users, update_user, verify_password, sanitize_user
 from src.utils.response import format_response
 from src.utils.logger import logger
 from src.utils.exception import ServiceError
 
 bp = Blueprint('users', __name__)
-
-@bp.route('/create', methods=['POST'])
-@format_response
-def create():
-    """Create a user record after removing any incoming password hash and enforcing email uniqueness."""
-    payload = request.get_json(force=True)
-    user = payload['user']
-    user.pop('password_hash', None)
-    
-    # Check if user email already exists
-    existing_user = read_users(query={'email': user['email']})
-
-    if existing_user and len(existing_user) > 0:
-        logger.error(f'User email already exists')
-        raise Exception('User email already exists')
-    
-    user = create_user(user=user)
-    return user
 
 @bp.route('/login', methods=['POST'])
 @format_response
