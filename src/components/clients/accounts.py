@@ -37,11 +37,9 @@ def link_account_contact(account_contact: dict = None) -> dict:
         raise Exception('account_contact payload is required')
     return {'id': db.create(table=account_contact_table, data=account_contact)}
 
-
 @handle_exception
 def read_account_contacts(query: dict = None) -> list:
     return db.read(table=account_contact_table, query=query or {})
-
 
 @handle_exception
 def update_account_contact(query: dict = None, account_contact: dict = None) -> dict:
@@ -452,7 +450,6 @@ def send_account_credentials_email(
         db.update(table=table, query={'id': account_id}, data={'emailed_credentials': True})
 
     return {'status': 'success'}
-
 
 @handle_exception
 def send_credentials_email(content, client_email, lang='es', cc=''):

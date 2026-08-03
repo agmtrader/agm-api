@@ -70,7 +70,6 @@ def read_contacts_screenings_summary_route():
     account_id = request.args.get('account_id', None)
     return read_account_contacts_and_screenings(account_id=account_id)
 
-
 @bp.route('/with_metadata', methods=['GET'])
 @format_response
 def read_with_metadata_route():

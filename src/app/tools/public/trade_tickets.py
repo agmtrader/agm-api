@@ -35,8 +35,7 @@ def read_route():
 def generate_route():
     """Generate trade ticket output from a flex query payload and a list of selected indices."""
     payload = request.get_json(force=True)
-    query_id = payload['query_id']
     indices = payload['indices'].split(',')
     indices = [int(index) for index in indices]
     flex_query_dict = payload['flex_query_dict']
-    return generate(query_id=query_id, flex_query_dict=flex_query_dict, indices=indices)
+    return generate(flex_query_dict=flex_query_dict, indices=indices)

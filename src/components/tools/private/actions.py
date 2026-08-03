@@ -15,13 +15,11 @@ import pandas as pd
 from src.utils.logger import logger
 from src.utils.connectors.gmail import GmailConnector
 
-
 def _screen_created_date(value):
     try:
         return datetime.strptime(str(value), '%Y%m%d%H%M%S').date()
     except (TypeError, ValueError):
         return None
-
 
 @handle_exception
 def run_screenings(apply_screenings: bool = True) -> dict:

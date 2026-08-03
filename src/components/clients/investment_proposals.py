@@ -53,11 +53,9 @@ PROPOSAL_BUCKET_KEYS = {
     'etfs': 'etfs',
 }
 
-
 def _normalize_rating_token(value: str) -> str:
     token = str(value or '').strip().upper().replace(' ', '')
     return token
-
 
 def _extract_sp_like_rating_from_text(value: str) -> str:
     text = str(value or '').upper()
@@ -71,7 +69,6 @@ def _extract_sp_like_rating_from_text(value: str) -> str:
         if candidate in text:
             return candidate
     return ''
-
 
 def _is_likely_ust_record(row: dict) -> bool:
     joined = ' '.join([
@@ -94,7 +91,6 @@ def _is_likely_ust_record(row: dict) -> bool:
         r'\bU\.?S\.?\s+GOVT\b',
     ]
     return any(re.search(pattern, joined) for pattern in ust_patterns)
-
 
 def _resolve_rating(row: dict) -> str:
     if _is_likely_ust_record(row):
@@ -120,7 +116,6 @@ def _resolve_rating(row: dict) -> str:
 
     return ''
 
-
 def _to_float_or_none(value):
     if value is None:
         return None
@@ -137,7 +132,6 @@ def _to_float_or_none(value):
     except (TypeError, ValueError):
         return None
 
-
 def _normalize_yield_percent(value: float | None) -> float:
     if value is None:
         return 0.0
@@ -145,7 +139,6 @@ def _normalize_yield_percent(value: float | None) -> float:
     if 0 <= value <= 1:
         return round(value * 100, 4)
     return round(value, 4)
-
 
 def _resolve_current_yield_percent(row: dict) -> float:
     # Priority: explicit Current Yield, then CY, then YTM.
@@ -163,7 +156,6 @@ def _resolve_current_yield_percent(row: dict) -> float:
 
     return 0.0
 
-
 def _get_string_field(row: dict, keys: list[str]) -> str:
     for key in keys:
         value = row.get(key)
@@ -174,10 +166,8 @@ def _get_string_field(row: dict, keys: list[str]) -> str:
             return text
     return ''
 
-
 def _resolve_market_asset_symbol(row: dict) -> str:
     return _get_string_field(row, ['Symbol', 'symbol', 'Ticker', 'ticker', 'sheet_name'])
-
 
 def _resolve_market_asset_display_symbol(row: dict, fallback_symbol: str) -> str:
     return _get_string_field(
@@ -185,14 +175,12 @@ def _resolve_market_asset_display_symbol(row: dict, fallback_symbol: str) -> str
         ['Financial Instrument', 'financialInstrument', 'Ticker', 'ticker', 'Symbol', 'symbol', 'sheet_name'],
     ) or fallback_symbol
 
-
 def _resolve_equity_yield_percent(row: dict) -> float:
     for key in ['Current Yield', 'current_yield', 'Dividend Yield', 'dividend_yield', 'Yield', 'yield', 'YTM', 'ytm']:
         value = _to_float_or_none(row.get(key))
         if value is not None:
             return _normalize_yield_percent(value)
     return 0.0
-
 
 def _find_matching_market_row(df: pd.DataFrame, symbol: str) -> dict | None:
     normalized_symbol = str(symbol or '').strip().upper()
@@ -215,11 +203,9 @@ def _find_matching_market_row(df: pd.DataFrame, symbol: str) -> dict | None:
 
     return None
 
-
 def _resolve_source_bucket(asset: dict) -> str:
     source_bucket = str(asset.get('source_bucket') or asset.get('source') or asset.get('asset_class') or '').strip().upper()
     return source_bucket
-
 
 def _build_investment_proposal_template() -> list[dict]:
     return [
@@ -250,7 +236,6 @@ def _build_investment_proposal_template() -> list[dict]:
         }
     ]
 
-
 def _get_bucket_for_rating(rating: str) -> str:
     normalized = str(rating).strip().upper().replace('+', '').replace('-', '')
     if normalized == 'UST':
@@ -264,7 +249,6 @@ def _get_bucket_for_rating(rating: str) -> str:
     if normalized == 'BB':
         return 'bonds_bb'
     return ''
-
 
 def _load_investment_proposal_context() -> dict:
     global _investment_proposal_context_cache
