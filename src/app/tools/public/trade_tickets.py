@@ -1,8 +1,14 @@
 from flask import request, Blueprint
-from src.components.tools.public.trade_tickets import list_trade_tickets, read, generate
+from src.components.tools.public.trade_tickets import list_trade_tickets, read, generate, send_trade_ticket_email
 from src.utils.response import format_response
 
 bp = Blueprint('trade_tickets', __name__)
+
+@bp.route('/send_email', methods=['POST'])
+@format_response
+def send_email_route():
+    payload = request.get_json(force=True)
+    return send_trade_ticket_email(payload['content'], payload['client_email'])
 
 @bp.route('/list', methods=['GET'])
 @format_response

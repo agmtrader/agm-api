@@ -1,5 +1,4 @@
 from flask import Blueprint, request
-from src.components.tools.private.screenings import run_screenings
 from src.components.tools.private.actions import (
     send_unfunded_emails,
     update_account_aliases,

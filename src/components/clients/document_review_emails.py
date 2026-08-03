@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from src.components.tools.public.email import Email
+from src.components.clients.accounts import send_missing_documents_email
 from src.utils.connectors.supabase import db
 from src.utils.exception import ServiceError, handle_exception
 from src.utils.logger import logger
@@ -9,10 +9,8 @@ TABLE = 'document_review_email'
 ALLOWED_DOCUMENT_KEYS = {'poi', 'poe', 'poa', 'sow'}
 ALLOWED_RECIPIENT_SOURCES = {'contact', 'ibkr', 'testing'}
 
-
 def _timestamp():
     return datetime.now().strftime('%Y%m%d%H%M%S')
-
 
 def _validate_send_payload(payload):
     required_fields = ['account_id', 'contact_id', 'recipient_email', 'recipient_source', 'language', 'content']
@@ -57,7 +55,6 @@ def _validate_send_payload(payload):
 
     return normalized_keys
 
-
 @handle_exception
 def send_document_review_email(payload=None):
     if not isinstance(payload, dict):
@@ -79,7 +76,7 @@ def send_document_review_email(payload=None):
     )
 
     try:
-        provider_message_id = Email.send_missing_documents_email(
+        provider_message_id = send_missing_documents_email(
             content=payload['content'],
             client_email=str(payload['recipient_email']).strip(),
             missing_type='multiple',
@@ -120,7 +117,6 @@ def send_document_review_email(payload=None):
         'provider_message_id': provider_message_id,
         'sent_at': sent_at,
     }
-
 
 @handle_exception
 def read_document_review_emails(query=None):

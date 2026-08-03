@@ -6,11 +6,16 @@ import re
 from datetime import datetime
 from src.utils.connectors.supabase import db
 from src.utils.connectors.flex_query_api import getFlexQuery
+from src.utils.connectors.gmail import GmailConnector
 
 logger.announcement('Initializing Trade Tickets Service', type='info')
 agmToken = "t=419584539155539272816800"
 logger.announcement('Initialized Trade Tickets Service', type='success')
 
+@handle_exception
+def send_trade_ticket_email(content, client_email):
+    gmail = GmailConnector()
+    return gmail.send_email(content, client_email, 'Confirmación de Transacción', 'trade_ticket')
 
 @handle_exception
 def list_trade_tickets(query: dict):

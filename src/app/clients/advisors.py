@@ -1,9 +1,8 @@
 from flask import Blueprint, request
 from src.components.clients.advisors import (
     create_advisor,
-    create_and_link_advisor_contact,
-    link_advisor_contact,
     read_advisors,
+    update_advisor,
 )
 from src.utils.response import format_response
 
@@ -16,6 +15,16 @@ def create_advisor_route():
     payload = request.get_json(force=True)  
     advisor = payload.get('advisor', None)
     return create_advisor(advisor)
+
+@bp.route('/update', methods=['POST'])
+@format_response
+def update_advisor_route():
+    """Update an advisor record selected by the provided query payload."""
+    payload = request.get_json(force=True)
+    return update_advisor(
+        query=payload.get('query'),
+        advisor=payload.get('advisor'),
+    )
 
 @bp.route('/read', methods=['GET'])
 @format_response
@@ -32,25 +41,3 @@ def advisors_route():
     if contact_id:
         query['contact_id'] = contact_id
     return read_advisors(query=query)
-
-
-@bp.route('/contact', methods=['POST'])
-@format_response
-def link_advisor_contact_route():
-    """Link an advisor to a contact selected by an operator."""
-    payload = request.get_json(force=True)
-    return link_advisor_contact(
-        advisor_id=payload.get('advisor_id'),
-        contact_id=payload.get('contact_id'),
-    )
-
-
-@bp.route('/contact/create', methods=['POST'])
-@format_response
-def create_and_link_advisor_contact_route():
-    """Create a contact and link it to an advisor atomically."""
-    payload = request.get_json(force=True)
-    return create_and_link_advisor_contact(
-        advisor_id=payload.get('advisor_id'),
-        contact=payload.get('contact'),
-    )

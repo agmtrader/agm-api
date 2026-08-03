@@ -1,9 +1,82 @@
 
+from datetime import date, datetime
 from src.utils.exception import handle_exception
-from src.components.tools.public.reporting import get_nav_report, get_clients_report
+from src.components.tools.public.reporting import (
+    get_nav_report,
+    get_clients_report,
+    get_ofac_sdn_list,
+    get_uk_sanctions_list,
+    get_un_sanctions_list,
+    compare_all_sanctions_today_vs_yesterday,
+)
+from src.components.clients.contacts import create_contact_screening_from_contact_id
+from src.utils.connectors.supabase import db
 import pandas as pd
 from src.utils.logger import logger
-from src.components.tools.public.email import Gmail
+from src.utils.connectors.gmail import GmailConnector
+
+
+def _screen_created_date(value):
+    try:
+        return datetime.strptime(str(value), '%Y%m%d%H%M%S').date()
+    except (TypeError, ValueError):
+        return None
+
+
+@handle_exception
+def run_screenings(apply_screenings: bool = True) -> dict:
+    """Screen every contact linked to an account using one loaded set of lists."""
+    comparison = compare_all_sanctions_today_vs_yesterday() or {}
+    if comparison.get('all_available') and comparison.get('all_same'):
+        return {
+            'apply_screenings': apply_screenings,
+            'screenings_skipped': True,
+            'skip_reason': 'OFAC, UK, and UN sanctions lists unchanged vs yesterday',
+            'contacts_targeted': 0,
+            'screenings_executed': 0,
+            'screening_errors': [],
+        }
+
+    sanctions_lists = (
+        get_ofac_sdn_list() or [],
+        get_uk_sanctions_list() or [],
+        get_un_sanctions_list() or [],
+    )
+    links = db.read(table='account_contact', query={}) or []
+    screenings = db.read(table='contact_screening', query={}) or []
+    today = date.today()
+    screened_today = {
+        row.get('contact_id')
+        for row in screenings
+        if row.get('contact_id')
+        and _screen_created_date(row.get('created')) == today
+    }
+    contact_ids = list(dict.fromkeys(
+        link.get('contact_id') for link in links
+        if link.get('account_id') and link.get('contact_id')
+    ))
+    result = {
+        'apply_screenings': apply_screenings,
+        'screenings_skipped': False,
+        'contacts_targeted': len(contact_ids),
+        'screenings_executed': 0,
+        'screening_errors': [],
+    }
+    contact_ids = [contact_id for contact_id in contact_ids if contact_id not in screened_today]
+    result['contacts_targeted'] = len(contact_ids)
+    if not apply_screenings:
+        return result
+
+    for contact_id in contact_ids:
+        try:
+            create_contact_screening_from_contact_id(
+                contact_id=contact_id,
+                sanctions_lists=sanctions_lists,
+            )
+            result['screenings_executed'] += 1
+        except Exception as error:
+            result['screening_errors'].append(f'{contact_id}: {error}')
+    return result
 
 @handle_exception
 def send_unfunded_emails():
@@ -12,12 +85,10 @@ def send_unfunded_emails():
     accounts that have zero NAV (not funded).
     """
     from src.components.clients.accounts import read_accounts
-    from src.components.clients.account_contacts import read_account_contacts
+    from src.components.clients.accounts import read_account_contacts
     from src.components.clients.contacts import read_contacts
     from src.components.clients.advisors import read_advisors
-    from src.components.tools.public.email import Gmail
-
-    email = Gmail()
+    from src.components.clients.accounts import send_funding_notification_email
 
     # Base data
     nav_data = get_nav_report()
@@ -120,7 +191,7 @@ def send_unfunded_emails():
         else:
             advisor_email = advisor_email.strip()
 
-        email.send_funding_notification_email(
+        send_funding_notification_email(
             content={},
             client_email=client_email.strip(),
             lang='es',
@@ -207,10 +278,14 @@ def update_account_aliases():
 @handle_exception
 def send_compliance_manual_update_email():
 
-    email = Gmail()
-    message = email.send_compliance_manual_update_email(
-        content={},
-        recipient_email="aa@agmtechnology.com,cr@agmtechnology.com,hc@agmtechnology.com,as@agmtechnology.com",
+    gmail = GmailConnector()
+    message = gmail.send_email(
+        {},
+        "aa@agmtechnology.com,cr@agmtechnology.com,hc@agmtechnology.com,as@agmtechnology.com",
+        'Compliance Manual Update Requires Review',
+        'compliance_manual_update',
+        bcc='',
+        cc='',
     )
     return {
         "status": "sent",

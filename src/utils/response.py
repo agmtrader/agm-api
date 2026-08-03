@@ -9,7 +9,6 @@ from src.utils.exception import (
     wrap_unhandled_exception,
 )
 
-
 def format_response(func):
     """Decorator for Flask route functions."""
 

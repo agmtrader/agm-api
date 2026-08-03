@@ -100,7 +100,6 @@ risk_archetypes = [
 def list_risk_archetypes():
     return risk_archetypes
 
-
 def get_risk_archetype_for_score(score) -> dict | None:
     try:
         normalized_score = float(score)
@@ -118,7 +117,6 @@ def get_risk_archetype_for_score(score) -> dict | None:
         None
     )
 
-
 def _with_derived_risk_archetype(risk_profile: dict) -> dict:
     if not isinstance(risk_profile, dict):
         return risk_profile
@@ -128,7 +126,6 @@ def _with_derived_risk_archetype(risk_profile: dict) -> dict:
         **risk_profile,
         'assigned_risk_archetype': derived_risk_archetype.get('name') if derived_risk_archetype else None,
     }
-
 
 @handle_exception
 def create_risk_profile(data: dict):

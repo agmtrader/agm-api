@@ -196,15 +196,13 @@ def start_api():
     app.register_blueprint(actions.bp, url_prefix='/actions')
     app.register_blueprint(etl.bp, url_prefix='/etl')
 
-    from src.app.tools.public import email, reporting, trade_tickets
-    app.register_blueprint(email.bp, url_prefix='/email')
+    from src.app.tools.public import reporting, trade_tickets
     app.register_blueprint(reporting.bp, url_prefix='/reporting')
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
 
     # Clients
-    from src.app.clients import accounts, account_contacts, advisors, contacts, investment_proposals, risk_profiles, users
+    from src.app.clients import accounts, advisors, contacts, investment_proposals, risk_profiles, users
     app.register_blueprint(accounts.bp, url_prefix='/accounts')
-    app.register_blueprint(account_contacts.bp, url_prefix='/account_contacts')
     app.register_blueprint(advisors.bp, url_prefix='/advisors')
     app.register_blueprint(contacts.bp, url_prefix='/contacts')
     app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')

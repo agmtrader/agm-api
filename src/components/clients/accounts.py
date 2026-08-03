@@ -1,4 +1,5 @@
-from src.utils.exception import handle_exception    
+from src.utils.exception import ServiceError, handle_exception
+from src.utils.connectors.gmail import GmailConnector
 from src.utils.connectors.supabase import db
 from src.utils.logger import logger
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
@@ -29,6 +30,28 @@ SENSITIVE_ACCOUNT_FIELDS = {
     'ibkr_password_secret_id',
     'temporal_password_secret_id',
 }
+
+@handle_exception
+def link_account_contact(account_contact: dict = None) -> dict:
+    if not account_contact:
+        raise Exception('account_contact payload is required')
+    return {'id': db.create(table=account_contact_table, data=account_contact)}
+
+
+@handle_exception
+def read_account_contacts(query: dict = None) -> list:
+    return db.read(table=account_contact_table, query=query or {})
+
+
+@handle_exception
+def update_account_contact(query: dict = None, account_contact: dict = None) -> dict:
+    if not query:
+        raise Exception('query is required')
+    if not account_contact:
+        raise Exception('account_contact payload is required')
+    db.update(table=account_contact_table, query=query, data=account_contact)
+    return {'status': 'success'}
+
 
 def _sanitize_account(account: dict = None):
     if account is None:
@@ -413,9 +436,7 @@ def send_account_credentials_email(
     if not username or not password:
         raise Exception('Account credentials not found')
 
-    from src.components.tools.public.email import Gmail
-    email_service = Gmail()
-    email_service.send_credentials_email(
+    send_credentials_email(
         content={'username': username, 'password': password},
         client_email=client_email,
         lang=lang,
@@ -423,7 +444,7 @@ def send_account_credentials_email(
     )
 
     if send_welcome:
-        email_service.send_welcome_email(
+        send_welcome_email(
             content={'client_name': client_name or 'Client'},
             client_email=client_email,
             lang=lang,
@@ -431,6 +452,51 @@ def send_account_credentials_email(
         db.update(table=table, query={'id': account_id}, data={'emailed_credentials': True})
 
     return {'status': 'success'}
+
+
+@handle_exception
+def send_credentials_email(content, client_email, lang='es', cc=''):
+    gmail = GmailConnector()
+    subject = 'Credenciales de acceso para cuenta AGM' if lang == 'es' else 'Access Credentials for AGM Account'
+    return gmail.send_email(content, client_email, subject, f'credentials_{lang}', bcc='', cc='jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com,' + cc)
+
+@handle_exception
+def send_transfer_instructions_email(content, client_email, lang='es', cc='', initial=True):
+    gmail = GmailConnector()
+    subject = 'Instrucciones de transferencia' if lang == 'es' else 'Transfer Instructions'
+    template = 'transfer_instructions' if initial else 'transfer_instructions_existing'
+    return gmail.send_email(content, client_email, subject, f'{template}_{lang}', bcc='', cc='jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com,' + cc)
+
+@handle_exception
+def send_welcome_email(content, client_email, lang='es', cc=''):
+    gmail = GmailConnector()
+    subject = 'Bienvenido a AGM Technology' if lang == 'es' else 'Welcome to AGM Technology'
+    return gmail.send_email(content, client_email, subject, f'welcome_{lang}', bcc='', cc='jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com,' + cc)
+
+@handle_exception
+def send_funding_notification_email(content, client_email, lang='es', cc='', days_since_opened=None, notice_number=None):
+    gmail = GmailConnector()
+    subject = 'Recordatorio de Fondeo' if lang == 'es' else 'Funding Reminder'
+    return gmail.send_email(content, client_email, subject, f'funding_notification_{lang}', bcc='', cc='jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com,' + cc)
+
+@handle_exception
+def send_missing_documents_email(content, client_email, missing_type='multiple', lang='en', cc=''):
+    normalized_lang = 'es' if lang == 'es' else 'en'
+    normalized_type = missing_type if missing_type in {'poi', 'poa', 'sow', 'multiple'} else 'multiple'
+    payload = content or {}
+    is_company = bool(payload.get('is_company_contact'))
+    company_name = str(payload.get('company_name') or '').strip()
+    if is_company and not company_name:
+        raise ServiceError('company_name is required for company missing-documents emails', status_code=400)
+    subject = (
+        ('Documentos pendientes para su cuenta corporativa' if is_company else 'Documentos pendientes para su cuenta personal')
+        if normalized_lang == 'es' else
+        ('Pending Documents for Your Corporate Account' if is_company else 'Pending Documents for Your Personal Account')
+    )
+    if payload.get('important'):
+        subject = f"{'IMPORTANTE' if normalized_lang == 'es' else 'IMPORTANT'}: {subject}"
+    gmail = GmailConnector()
+    return gmail.send_email({**payload, 'company_name': company_name, 'missing_type': normalized_type}, client_email, subject, f'missing_documents_{normalized_lang}', bcc='', cc='jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com,' + cc)
 
 @handle_exception
 def send_to_ibkr(account_id: str = None, master_account: str = None, application: dict = None) -> dict:
@@ -456,7 +522,6 @@ def send_to_ibkr(account_id: str = None, master_account: str = None, application
         application={'application': application_json},
         master_account=resolved_master_account
     )
-
 
 """
 Account Management API

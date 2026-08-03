@@ -117,9 +117,19 @@ def read_contact_screenings_route():
     return read_contact_screenings(contact_id=contact_id)
 
 
-@bp.route('/screening', methods=['POST'])
+@bp.route('/screen', methods=['POST'])
 @format_response
 def create_contact_screening_route():
-    """Run or create a screening record for a contact using its contact_id."""
+    """Run or create a screening record for one contact."""
     payload = request.get_json(force=True)
-    return create_contact_screening_from_contact_id(contact_id=payload.get('contact_id'))
+    lists = payload.get('lists') or {}
+    if not isinstance(lists, dict):
+        lists = {}
+    ofac_list = lists.get('ofac') or payload.get('ofac_list')
+    uk_list = lists.get('uk') or payload.get('uk_list')
+    un_list = lists.get('un') or payload.get('un_list')
+    sanctions_lists = (ofac_list, uk_list, un_list) if all(isinstance(value, list) for value in (ofac_list, uk_list, un_list)) else None
+    return create_contact_screening_from_contact_id(
+        contact_id=payload.get('contact_id'),
+        sanctions_lists=sanctions_lists,
+    )

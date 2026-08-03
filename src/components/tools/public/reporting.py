@@ -88,7 +88,6 @@ def get_nav_report():
     nav = Drive.download_file(file_id=nav_file[0]['id'], parse=True)
     return nav
 
-
 @handle_exception
 def get_bond_report():
     """
@@ -393,7 +392,6 @@ def _parse_report_datetime(value):
 
     return parsed
 
-
 def _get_year_months_between(start_date: datetime, end_date: datetime):
     periods = []
     cursor = datetime(start_date.year, start_date.month, 1)
@@ -407,7 +405,6 @@ def _get_year_months_between(start_date: datetime, end_date: datetime):
             cursor = datetime(cursor.year, cursor.month + 1, 1)
 
     return periods
-
 
 @handle_exception
 def get_monthly_deposits_withdrawals(years: list, months: list, start_date=None, end_date=None):
@@ -1079,7 +1076,6 @@ def get_ending_balances_from_statements():
     logger.info(f'Ending balances from statements report loaded with {len(ending_balances)} rows')
     return ending_balances
 
-
 def _extract_change_in_nav_rows(statement_bytes, expected_account, year, month):
     """Normalize one account's Change in NAV section from an IBKR statement."""
     try:
@@ -1132,7 +1128,6 @@ def _extract_change_in_nav_rows(statement_bytes, expected_account, year, month):
         )
 
     return ending_balances
-
 
 def _extract_named_sheet_rows(rows, expected_sheet_name):
     """

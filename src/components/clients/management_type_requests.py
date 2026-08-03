@@ -5,7 +5,6 @@ from src.utils.logger import logger
 logger.announcement('Initializing Management Type Requests Service', type='info')
 logger.announcement('Initialized Management Type Requests Service', type='success')
 
-
 @handle_exception
 def create_management_type_request(management_type_request: dict = None):
     """Create a new management_type_request record.

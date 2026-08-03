@@ -275,7 +275,7 @@ def delete_contact_document(document_id: str = None):
 
 
 @handle_exception
-def create_contact_screening(
+def _create_contact_screening(
     contact_id: str = None,
     risk_score: Optional[float] = None,
     fatf_status: Optional[list[dict]] = None,
@@ -297,7 +297,7 @@ def create_contact_screening(
     })
 
 
-def build_contact_screening_payload(
+def _build_contact_screening_payload(
     contact: dict,
     account_row: dict | None,
     ibkr_detail: dict | None,
@@ -342,18 +342,6 @@ def build_contact_screening_payload(
         'ofac_results': ofac_results_value,
         'created': created or datetime.now().strftime('%Y%m%d%H%M%S'),
     }
-
-
-@handle_exception
-def create_contact_screenings_batch(screenings: list[dict], batch_size: int = 500):
-    if not screenings:
-        raise Exception('screenings are required')
-    inserted = db.create_many(
-        table=contact_screening_table,
-        data=screenings,
-        batch_size=batch_size,
-    )
-    return {'inserted': inserted}
 
 
 def _normalize_name(value: str) -> str:
@@ -792,8 +780,10 @@ def _unique_rows(rows: list[dict]) -> list[dict]:
     return unique
 
 
-def _build_sanctions_match_indexes() -> tuple[dict[str, list[dict]], dict[str, list[dict]], dict[str, list[dict]]]:
-    ofac_sdn_list, uk_sanctions_list, un_sanctions_list = _get_sanctions_lists()
+def _build_sanctions_match_indexes(
+    sanctions_lists: tuple[list[dict], list[dict], list[dict]] | None = None,
+) -> tuple[dict[str, list[dict]], dict[str, list[dict]], dict[str, list[dict]]]:
+    ofac_sdn_list, uk_sanctions_list, un_sanctions_list = sanctions_lists or _get_sanctions_lists()
 
     ofac_index: dict[str, list[dict]] = {}
     for row in ofac_sdn_list:
@@ -865,7 +855,11 @@ def _match_associated_person(contact: dict, associated_people: list[dict]) -> di
 
 
 @handle_exception
-def create_contact_screening_from_contact_id(contact_id: str = None, created: Optional[str] = None):
+def create_contact_screening_from_contact_id(
+    contact_id: str = None,
+    created: Optional[str] = None,
+    sanctions_lists: tuple[list[dict], list[dict], list[dict]] | None = None,
+):
     if not contact_id:
         raise Exception('contact_id is required')
 
@@ -899,14 +893,15 @@ def create_contact_screening_from_contact_id(contact_id: str = None, created: Op
     ibkr_account_number = str(account_row.get('ibkr_account_number') or '').strip()
     ibkr_detail = _get_ibkr_details_by_account_id().get(ibkr_account_number) if ibkr_account_number else None
 
-    screening_payload = build_contact_screening_payload(
+    screening_payload = _build_contact_screening_payload(
         contact=contact,
         account_row=account_row,
         ibkr_detail=ibkr_detail,
         account_contact_link=latest_contact_link,
         created=created,
+        sanctions_indexes=_build_sanctions_match_indexes(sanctions_lists) if sanctions_lists else None,
     )
-    return create_contact_screening(**screening_payload)
+    return _create_contact_screening(**screening_payload)
 
 
 @handle_exception
