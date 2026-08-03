@@ -9,7 +9,7 @@ jobs:
   etl:
     runs-on: ubuntu-latest
     outputs:
-      summary: ${{ steps.reporting.outputs.summary }}
+      summary: ${{ steps.email-output.outputs.summary }}
 
     steps:
       # ─────────────────────────────────────────────────────────────
@@ -18,6 +18,12 @@ jobs:
         uses: Wandalen/wretry.action@v2
         with:
           command: |
+            output_file="$RUNNER_TEMP/etl_clients_output.txt"
+
+            publish_output() {
+              printf '%s\n' "$1" | tee "$output_file"
+            }
+
             # Fetch access token
             response=$(curl -s -w "\n%{http_code}" -X POST \
               -H "Content-Type: application/json" \
@@ -28,13 +34,13 @@ jobs:
             body=$(echo "$response" | sed '$d')
 
             if [ "$http_status" != "200" ]; then
-              echo "Token request failed with status $http_status"
+              publish_output "Token request failed with status $http_status"
               exit 1
             fi
 
             access_token=$(echo "$body" | jq -r '.access_token')
             if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
-              echo "access_token not found in response"
+              publish_output "access_token not found in response"
               exit 1
             fi
 
@@ -47,8 +53,12 @@ jobs:
             body=$(echo "$response" | sed '$d')
 
             if [ "$status_clients" != "200" ]; then
-              echo "Clients reporting run request failed with status $status_clients"
-              echo "$body"
+              error_output=$(cat <<EOF
+            Clients reporting run request failed with status $status_clients
+            $body
+            EOF
+              )
+              publish_output "$error_output"
               exit 1
             fi
 
@@ -88,12 +98,26 @@ jobs:
             EOF
             )
 
-            printf "summary<<EOF\n%s\nEOF\n" "$summary" >> "$GITHUB_OUTPUT"
-            echo "$summary"
+            publish_output "$summary"
             
             echo "http_status=200" >> "$GITHUB_OUTPUT"
           attempt_limit: 12 # 1 original + 11 retries (2 hours)
           attempt_delay: 600000 # 10-minute pause (ms)
+
+      - name: Prepare console output for email
+        id: email-output
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          output_file="$RUNNER_TEMP/etl_clients_output.txt"
+
+          if [ -s "$output_file" ]; then
+            summary=$(cat "$output_file")
+          else
+            summary="The workflow failed before the Clients ETL command produced output. Review the GitHub Actions console for runner or action errors."
+          fi
+
+          printf "summary<<EOF\n%s\nEOF\n" "$summary" >> "$GITHUB_OUTPUT"
           
   notify-success:
     needs: etl
