@@ -1,6 +1,6 @@
 from flask import Blueprint, request
 
-from src.components.clients.accounts import create_account, read_accounts, read_accounts_with_metadata, submit_documents, read_instructions, send_to_ibkr, read_account_contacts_and_screenings, send_account_credentials_email, send_transfer_instructions_email, send_welcome_email, send_funding_notification_email, send_missing_documents_email, link_account_contact, read_account_contacts, update_account_contact
+from src.components.clients.accounts import create_account, read_accounts, submit_documents, read_instructions, send_to_ibkr, send_account_credentials_email, send_transfer_instructions_email, send_welcome_email, send_funding_notification_email, send_missing_documents_email, link_account_contact, read_account_contacts, update_account_contact
 
 from src.components.clients.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, apply_fee_template, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, change_account_holder_external_id, withdraw_funds, get_financial_ranges, get_business_and_occupation, view_active_bank_instructions, view_withdrawable_cash
 
@@ -62,37 +62,6 @@ def read_route():
         query['advisor_code'] = code
     return read_accounts(query=query)
 
-
-@bp.route('/contacts_screenings_summary', methods=['GET'])
-@format_response
-def read_contacts_screenings_summary_route():
-    """Read the contact and screening summary for a single account."""
-    account_id = request.args.get('account_id', None)
-    return read_account_contacts_and_screenings(account_id=account_id)
-
-@bp.route('/with_metadata', methods=['GET'])
-@format_response
-def read_with_metadata_route():
-    """Read accounts together with derived metadata and optional advisor details."""
-    query = {}
-    id = request.args.get('id', None)
-    user_id = request.args.get('user_id', None)
-    code = request.args.get('advisor_code', None)
-    include_advisor = request.args.get('include_advisor', 'false').strip().lower() in ('1', 'true', 'yes')
-    force_refresh = request.args.get('refresh', 'false').strip().lower() in ('1', 'true', 'yes')
-
-    if id:
-        query['id'] = id
-    if user_id:
-        query['user_id'] = user_id
-    if code:
-        query['advisor_code'] = code
-
-    return read_accounts_with_metadata(
-        query=query,
-        include_advisor=include_advisor,
-        force_refresh=force_refresh
-    )
 
 @bp.route('/update', methods=['POST'])
 @format_response
