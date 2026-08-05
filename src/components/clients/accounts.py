@@ -13,6 +13,7 @@ logger.announcement('Initialized Accounts Service', type='success')
 
 table = 'account'
 account_contact_table = 'account_contact'
+account_comments_table = 'account_comments'
 SENSITIVE_ACCOUNT_FIELDS = {
     'ibkr_password_secret_id',
     'temporal_password_secret_id',
@@ -35,6 +36,50 @@ def update_account_contact(query: dict = None, account_contact: dict = None) -> 
     if not account_contact:
         raise Exception('account_contact payload is required')
     db.update(table=account_contact_table, query=query, data=account_contact)
+    return {'status': 'success'}
+
+@handle_exception
+def read_account_comments(account_id: str = None) -> list:
+    if not account_id:
+        raise ServiceError('account_id is required', status_code=400)
+    comments = db.read(table=account_comments_table, query={'account_id': account_id})
+    return sorted(comments, key=lambda comment: str(comment.get('created') or ''))
+
+@handle_exception
+def create_account_comment(account_id: str = None, user_id: str = None, author_name: str = None, author_email: str = None, body: str = None) -> dict:
+    body = str(body or '').strip()
+    if not account_id or not body or not author_name:
+        raise ServiceError('account_id, author_name, and body are required', status_code=400)
+    if not db.read(table=table, query={'id': account_id}):
+        raise ServiceError('Account not found', status_code=404)
+    comment_id = db.create(table=account_comments_table, data={
+        'account_id': account_id, 'user_id': user_id or None,
+        'author_name': str(author_name).strip(), 'author_email': author_email or None,
+        'body': body,
+    })
+    return (db.read(table=account_comments_table, query={'id': comment_id}) or [{}])[0]
+
+@handle_exception
+def update_account_comment(comment_id: str = None, user_id: str = None, body: str = None) -> dict:
+    body = str(body or '').strip()
+    if not comment_id or not user_id or not body:
+        raise ServiceError('comment_id, user_id, and body are required', status_code=400)
+    comments = db.read(table=account_comments_table, query={'id': comment_id, 'user_id': user_id, 'deleted_at': None})
+    if not comments:
+        raise ServiceError('Comment not found or not owned by user', status_code=404)
+    from datetime import datetime
+    db.update(table=account_comments_table, query={'id': comment_id}, data={'body': body, 'edited_at': datetime.now().strftime('%Y%m%d%H%M%S')})
+    return (db.read(table=account_comments_table, query={'id': comment_id}) or [{}])[0]
+
+@handle_exception
+def delete_account_comment(comment_id: str = None, user_id: str = None) -> dict:
+    if not comment_id or not user_id:
+        raise ServiceError('comment_id and user_id are required', status_code=400)
+    comments = db.read(table=account_comments_table, query={'id': comment_id, 'user_id': user_id, 'deleted_at': None})
+    if not comments:
+        raise ServiceError('Comment not found or not owned by user', status_code=404)
+    from datetime import datetime
+    db.update(table=account_comments_table, query={'id': comment_id}, data={'deleted_at': datetime.now().strftime('%Y%m%d%H%M%S'), 'body': '[deleted]'})
     return {'status': 'success'}
 
 

@@ -1,6 +1,6 @@
 from flask import Blueprint, request
 
-from src.components.clients.accounts import create_account, read_accounts, submit_documents, read_instructions, send_to_ibkr, send_account_credentials_email, send_transfer_instructions_email, send_welcome_email, send_funding_notification_email, send_missing_documents_email, link_account_contact, read_account_contacts, update_account_contact
+from src.components.clients.accounts import create_account, read_accounts, submit_documents, read_instructions, send_to_ibkr, send_account_credentials_email, send_transfer_instructions_email, send_welcome_email, send_funding_notification_email, send_missing_documents_email, link_account_contact, read_account_contacts, update_account_contact, read_account_comments, create_account_comment, update_account_comment, delete_account_comment
 
 from src.components.clients.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, apply_fee_template, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, change_account_holder_external_id, withdraw_funds, get_financial_ranges, get_business_and_occupation, view_active_bank_instructions, view_withdrawable_cash
 
@@ -9,6 +9,29 @@ from src.components.clients.accounts import get_account_statements
 from src.utils.response import format_response
 
 bp = Blueprint('accounts', __name__)
+
+@bp.route('/comments', methods=['GET'])
+@format_response
+def read_account_comments_route():
+    return read_account_comments(account_id=request.args.get('account_id'))
+
+@bp.route('/comments', methods=['POST'])
+@format_response
+def create_account_comment_route():
+    payload = request.get_json(force=True) or {}
+    return create_account_comment(account_id=payload.get('account_id'), user_id=payload.get('user_id'), author_name=payload.get('author_name'), author_email=payload.get('author_email'), body=payload.get('body'))
+
+@bp.route('/comments/update', methods=['POST'])
+@format_response
+def update_account_comment_route():
+    payload = request.get_json(force=True) or {}
+    return update_account_comment(comment_id=payload.get('comment_id'), user_id=payload.get('user_id'), body=payload.get('body'))
+
+@bp.route('/comments/delete', methods=['POST'])
+@format_response
+def delete_account_comment_route():
+    payload = request.get_json(force=True) or {}
+    return delete_account_comment(comment_id=payload.get('comment_id'), user_id=payload.get('user_id'))
 
 @bp.route('/contact', methods=['POST'])
 @format_response

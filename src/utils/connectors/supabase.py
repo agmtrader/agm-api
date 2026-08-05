@@ -131,6 +131,19 @@ class Supabase:
             entity_id = Column(BIGINT, nullable=True)
             external_id = Column(Text, nullable=True)
 
+        class AccountComment(self.Base):
+            __tablename__ = 'account_comments'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            user_id = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            author_name = Column(Text, nullable=False)
+            author_email = Column(Text, nullable=True)
+            body = Column(Text, nullable=False)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            edited_at = Column(Text, nullable=True)
+            deleted_at = Column(Text, nullable=True)
+
         class AccountInstruction(self.Base):
             __tablename__ = 'account_instruction'
             id = Column(BigInteger, primary_key=True, autoincrement=True)
