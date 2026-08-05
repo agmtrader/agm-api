@@ -9,6 +9,7 @@ from src.utils.logger import logger
 from src.utils.exception import ServiceError, handle_exception
 import re
 import os
+import uuid
 from sqlalchemy import inspect
 
 class DatabaseManager:
@@ -335,13 +336,14 @@ class DatabaseManager:
             
             # Get the model class for the table
             model = None
-            for class_ in self.base.__subclasses__():
-                if hasattr(class_, '__tablename__') and class_.__tablename__ == table:
+            # Use SQLAlchemy's mapper registry rather than relying only on
+            # Base.__subclasses__(). The latter can miss models when they are
+            # declared dynamically (as the Supabase connector does).
+            for mapper in self.base.registry.mappers:
+                class_ = mapper.class_
+                if getattr(class_, '__tablename__', None) == table:
                     model = class_
                     break
-            
-            if not model:
-                raise Exception(f"Model not found for table: {table}")
             
             current_time = datetime.now().strftime('%Y%m%d%H%M%S')
             data = self._dates_to_timestamp(data)
@@ -351,6 +353,24 @@ class DatabaseManager:
                 'updated': current_time,
                 **data
             }
+
+            # Some connector models are declared dynamically and may not be
+            # discoverable through the ORM registry in an already-running
+            # worker. The reflected table is authoritative and supports the
+            # same insert operation, including server/default values.
+            if not model:
+                tbl = Table(table, self.metadata, autoload_with=self.engine)
+                if 'id' in tbl.c and not data.get('id'):
+                    data['id'] = uuid.uuid4()
+                result = session.execute(tbl.insert().values(**data))
+                session.flush()
+                created_id = data.get('id')
+                if created_id is None and result.inserted_primary_key:
+                    created_id = result.inserted_primary_key[0]
+                if created_id is None:
+                    raise Exception(f"Could not determine created id for table: {table}")
+                logger.success(f'Successfully created entry with id: {created_id}')
+                return str(created_id)
             
             # Create a new instance of the model
             new_record = model(**data)

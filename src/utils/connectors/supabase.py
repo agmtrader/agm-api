@@ -359,6 +359,7 @@ class Supabase:
         self.Account = Account
         self.AccountContact = AccountContact
         self.AccountInstruction = AccountInstruction
+        self.AccountComment = AccountComment
         self.Advisor = Advisor
         self.AdvisorChangeRequest = AdvisorChangeRequest
         self.Contact = Contact
