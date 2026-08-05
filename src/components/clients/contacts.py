@@ -590,6 +590,45 @@ def _resolve_customer_type(value: str | None) -> str:
     return customer_type
 
 
+def _get_customer_type(account_row: dict, ibkr_detail: dict | None = None) -> str:
+    """Resolve the customer type from the most authoritative available source.
+
+    IBKR account details do not always include ``applicantType``.  The submitted
+    application is the durable source of truth in that case, so do not treat a
+    partial IBKR response as proof that the type is missing.
+    """
+    account_payload = (ibkr_detail or {}).get('account') or {}
+    application_json = (account_row or {}).get('application_json') or {}
+    if isinstance(application_json, dict) and isinstance(application_json.get('application'), dict):
+        application_json = application_json['application']
+    customer = (
+        application_json.get('customer') or {}
+        if isinstance(application_json, dict)
+        else {}
+    )
+
+    candidates = (
+        account_payload.get('applicantType'),
+        account_payload.get('customerType'),
+        account_payload.get('type'),
+        (account_row or {}).get('applicant_type'),
+        (account_row or {}).get('customer_type'),
+        customer.get('type') if isinstance(customer, dict) else None,
+        customer.get('customerType') if isinstance(customer, dict) else None,
+        customer.get('accountType') if isinstance(customer, dict) else None,
+        application_json.get('customerType') if isinstance(application_json, dict) else None,
+        application_json.get('accountType') if isinstance(application_json, dict) else None,
+    )
+    invalid_candidate = ''
+    for candidate in candidates:
+        resolved = _resolve_customer_type(candidate)
+        if resolved in {'INDIVIDUAL', 'JOINT', 'ORG'}:
+            return resolved
+        if resolved and not invalid_candidate:
+            invalid_candidate = resolved
+    return invalid_candidate
+
+
 def _get_contact_risk_country(contact: dict, account_row: dict | None, ibkr_detail: dict | None, account_contact_link: dict | None) -> str:
     if ibkr_detail:
         associated_people = ibkr_detail.get('associatedPersons') or []
@@ -643,8 +682,7 @@ def _compute_weighted_holder_risk_score(contact: dict, account_row: dict | None,
     advisor_code = account_row.get('advisor_code')
     if ibkr_detail:
         account_payload = ibkr_detail.get('account') or {}
-        raw_customer_type = account_payload.get('applicantType')
-        customer_type = _resolve_customer_type(raw_customer_type)
+        customer_type = _get_customer_type(account_row, ibkr_detail)
         if customer_type not in {'INDIVIDUAL', 'JOINT', 'ORG'}:
             raise Exception(f'invalid customer type for risk score calculation: {customer_type or "missing"}')
 
