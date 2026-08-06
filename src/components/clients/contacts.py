@@ -898,6 +898,22 @@ def create_contact_screening_from_contact_id(
     created: Optional[str] = None,
     sanctions_lists: tuple[list[dict], list[dict], list[dict]] | None = None,
 ):
+    screening_payload = build_contact_screening_from_contact_id(
+        contact_id=contact_id,
+        created=created,
+        sanctions_lists=sanctions_lists,
+    )
+    return _create_contact_screening(**screening_payload)
+
+
+@handle_exception
+def build_contact_screening_from_contact_id(
+    contact_id: str = None,
+    created: Optional[str] = None,
+    sanctions_lists: tuple[list[dict], list[dict], list[dict]] | None = None,
+    sanctions_indexes: tuple[dict[str, list[dict]], dict[str, list[dict]], dict[str, list[dict]]] | None = None,
+):
+    """Build one screening payload without writing it to the database."""
     if not contact_id:
         raise Exception('contact_id is required')
 
@@ -937,9 +953,54 @@ def create_contact_screening_from_contact_id(
         ibkr_detail=ibkr_detail,
         account_contact_link=latest_contact_link,
         created=created,
-        sanctions_indexes=_build_sanctions_match_indexes(sanctions_lists) if sanctions_lists else None,
+        sanctions_indexes=(
+            sanctions_indexes
+            or (_build_sanctions_match_indexes(sanctions_lists) if sanctions_lists else None)
+        ),
     )
-    return _create_contact_screening(**screening_payload)
+    return screening_payload
+
+
+@handle_exception
+def create_contact_screenings_batch_from_contact_ids(
+    contact_ids: list[str],
+    sanctions_lists: tuple[list[dict], list[dict], list[dict]] | None = None,
+    created: Optional[str] = None,
+    batch_size: int = 500,
+) -> dict:
+    """Build contact screenings with the normal single-contact logic and persist them in bulk."""
+    if not contact_ids:
+        return {'inserted': 0, 'screening_errors': [], 'screening_error_contact_ids': []}
+
+    sanctions_indexes = _build_sanctions_match_indexes(sanctions_lists) if sanctions_lists else None
+    payloads = []
+    screening_errors = []
+    screening_error_contact_ids = []
+    for contact_id in contact_ids:
+        try:
+            payloads.append(build_contact_screening_from_contact_id(
+                contact_id=contact_id,
+                created=created,
+                sanctions_indexes=sanctions_indexes,
+            ))
+        except Exception as error:
+            screening_errors.append(f'{contact_id}: {error}')
+            screening_error_contact_ids.append(contact_id)
+
+    inserted = 0
+    if payloads:
+        result = db.create_many(
+            table=contact_screening_table,
+            data=payloads,
+            batch_size=batch_size,
+        )
+        inserted = result if isinstance(result, int) else len(payloads)
+
+    return {
+        'inserted': inserted,
+        'screening_errors': screening_errors,
+        'screening_error_contact_ids': screening_error_contact_ids,
+    }
 
 
 @handle_exception

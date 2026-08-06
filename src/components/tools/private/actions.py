@@ -9,7 +9,7 @@ from src.components.tools.public.reporting import (
     get_un_sanctions_list,
     compare_all_sanctions_today_vs_yesterday,
 )
-from src.components.clients.contacts import create_contact_screening_from_contact_id
+from src.components.clients.contacts import create_contact_screenings_batch_from_contact_ids
 from src.utils.connectors.supabase import db
 import pandas as pd
 from src.utils.logger import logger
@@ -65,15 +65,13 @@ def run_screenings(apply_screenings: bool = True) -> dict:
     if not apply_screenings:
         return result
 
-    for contact_id in contact_ids:
-        try:
-            create_contact_screening_from_contact_id(
-                contact_id=contact_id,
-                sanctions_lists=sanctions_lists,
-            )
-            result['screenings_executed'] += 1
-        except Exception as error:
-            result['screening_errors'].append(f'{contact_id}: {error}')
+    batch_result = create_contact_screenings_batch_from_contact_ids(
+        contact_ids=contact_ids,
+        sanctions_lists=sanctions_lists,
+    )
+    result['screenings_executed'] = batch_result.get('inserted', 0)
+    result['screening_errors'] = batch_result.get('screening_errors', [])
+    result['screening_error_contact_ids'] = batch_result.get('screening_error_contact_ids', [])
     return result
 
 @handle_exception
