@@ -967,19 +967,56 @@ def create_contact_screenings_batch_from_contact_ids(
     sanctions_lists: tuple[list[dict], list[dict], list[dict]] | None = None,
     created: Optional[str] = None,
     batch_size: int = 500,
+    persist: bool = True,
 ) -> dict:
     """Build contact screenings with the normal single-contact logic and persist them in bulk."""
     if not contact_ids:
         return {'inserted': 0, 'screening_errors': [], 'screening_error_contact_ids': []}
 
+    # Load all relational inputs once. The single-contact API intentionally keeps
+    # its own reads, but the daily job must not repeat those reads 800+ times.
+    contacts_by_id = {
+        row.get('id'): row
+        for row in (db.read(table=contact_table, query={}) or [])
+        if row.get('id')
+    }
+    links = db.read(table='account_contact', query={}) or []
+    accounts_by_id = {
+        row.get('id'): row
+        for row in (db.read(table='account', query={}) or [])
+        if row.get('id')
+    }
+    latest_link_by_contact_id = {}
+    for link in links:
+        contact_id = link.get('contact_id')
+        if not contact_id or not link.get('account_id'):
+            continue
+        current = latest_link_by_contact_id.get(contact_id)
+        link_key = str(link.get('updated') or link.get('created') or '')
+        current_key = str((current or {}).get('updated') or (current or {}).get('created') or '')
+        if current is None or link_key > current_key:
+            latest_link_by_contact_id[contact_id] = link
+
+    ibkr_details_by_account_id = _get_ibkr_details_by_account_id()
     sanctions_indexes = _build_sanctions_match_indexes(sanctions_lists) if sanctions_lists else None
     payloads = []
     screening_errors = []
     screening_error_contact_ids = []
     for contact_id in contact_ids:
         try:
-            payloads.append(build_contact_screening_from_contact_id(
-                contact_id=contact_id,
+            contact = contacts_by_id.get(contact_id)
+            if not contact:
+                raise Exception('contact not found')
+            account_contact_link = latest_link_by_contact_id.get(contact_id)
+            account_row = accounts_by_id.get((account_contact_link or {}).get('account_id'))
+            if not account_row:
+                raise Exception('linked account not found')
+            ibkr_account_number = str(account_row.get('ibkr_account_number') or '').strip()
+            payloads.append(_build_contact_screening_payload(
+                contact=contact,
+                account_row=account_row,
+                ibkr_detail=ibkr_details_by_account_id.get(ibkr_account_number),
+                account_contact_link=account_contact_link,
                 created=created,
                 sanctions_indexes=sanctions_indexes,
             ))
@@ -988,7 +1025,7 @@ def create_contact_screenings_batch_from_contact_ids(
             screening_error_contact_ids.append(contact_id)
 
     inserted = 0
-    if payloads:
+    if payloads and persist:
         result = db.create_many(
             table=contact_screening_table,
             data=payloads,
@@ -998,6 +1035,7 @@ def create_contact_screenings_batch_from_contact_ids(
 
     return {
         'inserted': inserted,
+        'payloads_built': len(payloads),
         'screening_errors': screening_errors,
         'screening_error_contact_ids': screening_error_contact_ids,
     }
