@@ -28,7 +28,6 @@ def run_screenings_route():
     apply_screenings = request.args.get('apply_screenings', 'true').lower() == 'true'
     return run_screenings(apply_screenings=apply_screenings)
 
-
 @bp.route('/send_compliance_manual_update_email', methods=['POST'])
 @format_response
 def send_compliance_manual_update_email_route():
