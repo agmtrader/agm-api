@@ -44,4 +44,61 @@ jobs:
             exit 1
           fi
 
-          echo "$body"
+          # Keep the raw response in the job log for troubleshooting, but make
+          # the useful result readable from the Actions Summary tab.
+          if ! echo "$body" | jq -e 'type == "array"' >/dev/null; then
+            echo "send_unfunded_emails returned an unexpected response (expected a JSON array)" >&2
+            echo "$body" >&2
+            exit 1
+          fi
+
+          echo "Raw response:"
+          echo "$body" | jq .
+
+          run_timestamp=$(date -u '+%Y-%m-%d %H:%M UTC')
+          total_count=$(echo "$body" | jq 'length')
+          sent_count=$(echo "$body" | jq '[.[] | select((.email // "") | tostring | test("^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$"))] | length')
+          skipped_count=$((total_count - sent_count))
+
+          # Normalize null/NaN values and escape table-breaking characters.
+          clean_jq='def clean:
+            if . == null or (type == "number" and isnan) then "—"
+            else tostring | gsub("[\\r\\n|]"; " ")
+            end;'
+
+          {
+            echo "## Unfunded email run"
+            echo
+            echo "**Completed:** $run_timestamp  "
+            echo "**Recipients emailed:** $sent_count  "
+            echo "**Records skipped:** $skipped_count"
+            echo
+            echo "### Recipients emailed"
+            echo
+            if [ "$sent_count" -gt 0 ]; then
+              echo '| Client | IBKR account | Email | Advisor | Notice | Business days open |'
+              echo '| --- | --- | --- | --- | ---: | ---: |'
+              echo "$body" | jq -r "$clean_jq
+                .[]
+                | select((.email // \"\") | tostring | test(\"^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$\"))
+                | [(.name | clean), (.ibkr_account_number | clean), (.email | clean), (.advisor_email | clean), (.notice_number | clean), (.business_days_since_date_opened | clean)]
+                | \"| \" + join(\" | \") + \" |\""
+            else
+              echo "No recipients found."
+            fi
+
+            if [ "$skipped_count" -gt 0 ]; then
+              echo
+              echo "### Skipped records"
+              echo
+              echo "The API returned these records without a usable client email, so no email was sent:"
+              echo
+              echo '| Client | IBKR account | Reason |'
+              echo '| --- | --- | --- |'
+              echo "$body" | jq -r "$clean_jq
+                .[]
+                | select(((.email // \"\") | tostring | test(\"^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$\")) | not)
+                | [(.name | clean), (.ibkr_account_number | clean), \"Missing or invalid client email\"]
+                | \"| \" + join(\" | \") + \" |\""
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

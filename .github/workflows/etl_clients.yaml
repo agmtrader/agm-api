@@ -71,6 +71,16 @@ jobs:
             extract_success=$(echo "$body" | jq -r '.overview.extract.summary.successful // 0')
             extract_skipped=$(echo "$body" | jq -r '.overview.extract.summary.skipped // 0')
             extract_failed=$(echo "$body" | jq -r '.overview.extract.summary.failed // 0')
+            extract_failed_details=$(echo "$body" | jq -r '
+              [
+                (if .overview.extract.status == "failed" then
+                  ["extract stage: \(.overview.extract.error // "No error details returned")"]
+                else [] end),
+                ([.overview.extract.steps[]? | select(.status == "failed") |
+                  "\(.name): \(.error // "No error details returned")"])
+              ] | add |
+              if length == 0 then "none" else join("\n  - ") end
+            ')
 
             backup_rename_status=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="rename_batch_files") | .status // empty' | head -n1)
             backup_rename_status=${backup_rename_status:-unknown}
@@ -80,21 +90,51 @@ jobs:
             backup_sort_status=${backup_sort_status:-unknown}
             backup_sort_count=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="sort_batch_files") | .summary.moved // 0' | head -n1)
             backup_sort_failed=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="sort_batch_files") | .summary.failed // 0' | head -n1)
+            backup_failed_details=$(echo "$body" | jq -r '
+              [
+                (if .overview.backup.status == "failed" then
+                  ["backup stage: \(.overview.backup.error // "No error details returned")"]
+                else [] end),
+                ([.overview.backup.steps[]? |
+                  (.failed_files[]? // (select(.status == "failed") | .)) |
+                  if .from then "rename \(.from): \(.error // "No error details returned")"
+                  elif .file then "sort \(.file): \(.error // "No error details returned")"
+                  elif .name then "\(.name): \(.error // "No error details returned")"
+                  else empty end])
+              ] | add |
+              if length == 0 then "none" else join("\n  - ") end
+            ')
             backup_clear_status=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="clear_batch_folder") | .status // empty' | head -n1)
             backup_clear_status=${backup_clear_status:-unknown}
 
             transform_total=$(echo "$body" | jq -r '.overview.transform.summary.total // 0')
             transform_success=$(echo "$body" | jq -r '.overview.transform.summary.successful // 0')
             transform_failed=$(echo "$body" | jq -r '.overview.transform.summary.failed // 0')
+            transform_failed_details=$(echo "$body" | jq -r '
+              [
+                (if .overview.transform.status == "failed" then
+                  ["transform stage: \(.overview.transform.error // "No error details returned")"]
+                else [] end),
+                ([.overview.transform.reports[]? | select(.status == "failed") |
+                  "\(.name): \(.error // "No error details returned")"])
+              ] | add |
+              if length == 0 then "none" else join("\n  - ") end
+            ')
 
             summary=$(cat <<EOF
             Clients ETL status: $overall_status
             Extract status: $extract_status (total: $extract_total, successful: $extract_success, skipped: $extract_skipped, failed: $extract_failed)
+            Extract failures:
+              - $extract_failed_details
             Backup status: $backup_status
               - Rename batch files: $backup_rename_status (renamed: $backup_rename_count, failed: $backup_rename_failed)
               - Sort batch files: $backup_sort_status (moved: $backup_sort_count, failed: $backup_sort_failed)
               - Clear batch folder: $backup_clear_status
+            Backup failures:
+              - $backup_failed_details
             Transform status: $transform_status (total: $transform_total, successful: $transform_success, failed: $transform_failed)
+            Transform failures:
+              - $transform_failed_details
             EOF
             )
 
