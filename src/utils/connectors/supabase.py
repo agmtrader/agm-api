@@ -296,6 +296,10 @@ class Supabase:
         class InvestmentProposal(self.Base):
             __tablename__ = 'investment_proposal'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            # Optional owner for both contact-scoped and global custom proposals.
+            # Risk-profile proposals should carry the same contact_id as their
+            # linked risk profile; this invariant is enforced by the service layer.
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             risk_profile_id = Column(UUID(as_uuid=True), ForeignKey('risk_profile.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
@@ -316,6 +320,7 @@ class Supabase:
         class RiskProfile(self.Base):
             __tablename__ = 'risk_profile'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             score = Column(Text, nullable=False)
