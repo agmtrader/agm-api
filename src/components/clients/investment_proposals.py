@@ -4,7 +4,6 @@ from src.components.tools.public.reporting import (
     get_bond_report,
     get_etfs_report,
     get_open_positions_report,
-    get_proposals_equity_report,
     get_stocks_report,
     get_ust_bond_report,
 )
@@ -187,7 +186,10 @@ def _find_matching_market_row(df: pd.DataFrame, symbol: str) -> dict | None:
     if not normalized_symbol or df.empty:
         return None
 
-    for column in ['Symbol', 'symbol', 'Ticker', 'ticker', 'sheet_name']:
+    for column in [
+        'Symbol', 'symbol', 'Ticker', 'ticker', 'sheet_name',
+        'Financial Instrument', 'financialInstrument',
+    ]:
         if column not in df.columns:
             continue
 
@@ -272,57 +274,6 @@ def _load_investment_proposal_context() -> dict:
     bonds_df_no_duplicates = bonds_df.drop_duplicates(subset=['Symbol'])
     logger.announcement(f'Total bonds: {len(bonds_df)}')
     logger.announcement(f'Total unique bonds: {len(bonds_df_no_duplicates)}')
-
-    # Get proposals equity report
-    proposals_equity = get_proposals_equity_report()
-    proposals_equity_df = pd.DataFrame(proposals_equity)
-
-    """
-    ticker_list = proposals_equity_df['Ticker'].tolist()
-
-    market_data_df = yf.download(ticker_list, period='max', interval='1d')
-    """
-
-    spy_df = proposals_equity_df[proposals_equity_df['sheet_name'] == 'SPY']
-    spy_df = spy_df[['sheet_name', 'Date', 'Close']]
-
-    # Compute SPY year-over-year yields for the most recent five 1-year periods
-    avg_yield = None
-
-    spy_df_calc = spy_df.copy()
-    spy_df_calc['Date'] = pd.to_datetime(spy_df_calc['Date'])
-    spy_df_calc = spy_df_calc[['Date', 'Close']].dropna()
-    spy_df_calc['Close'] = spy_df_calc['Close'].astype(float)
-    spy_series = spy_df_calc.set_index('Date')['Close'].sort_index()
-
-    if len(spy_series) >= 1250:  # roughly 5 years of trading days
-        t_current = spy_series.index.max()
-        t_minus_1y = t_current - pd.DateOffset(years=1)
-        t_minus_2y = t_current - pd.DateOffset(years=2)
-        t_minus_3y = t_current - pd.DateOffset(years=3)
-        t_minus_4y = t_current - pd.DateOffset(years=4)
-        t_minus_5y = t_current - pd.DateOffset(years=5)
-
-        def price_asof(target_date: pd.Timestamp) -> float:
-            return spy_series.loc[:target_date].iloc[-1]
-
-        p_t = price_asof(t_current)
-        p_t_1 = price_asof(t_minus_1y)
-        p_t_2 = price_asof(t_minus_2y)
-        p_t_3 = price_asof(t_minus_3y)
-        p_t_4 = price_asof(t_minus_4y)
-        p_t_5 = price_asof(t_minus_5y)
-
-        y_t_to_t1 = (p_t / p_t_1) - 1.0
-        y_t1_to_t2 = (p_t_1 / p_t_2) - 1.0
-        y_t2_to_t3 = (p_t_2 / p_t_3) - 1.0
-        y_t3_to_t4 = (p_t_3 / p_t_4) - 1.0
-        y_t4_to_t5 = (p_t_4 / p_t_5) - 1.0
-
-        yoy_yields = [y_t_to_t1, y_t1_to_t2, y_t2_to_t3, y_t3_to_t4, y_t4_to_t5]
-        avg_yield = np.round(sum(yoy_yields) / len(yoy_yields), 4) * 100
-    else:
-        logger.warning('Not enough SPY history to compute five 1-year period yields.')
 
     # Get RTD report
     rtd_report = get_bond_report()
@@ -418,7 +369,6 @@ def _load_investment_proposal_context() -> dict:
 
     context = {
         'bonds_df_no_duplicates': bonds_df_no_duplicates,
-        'avg_yield': avg_yield,
         'rtd_df': rtd_df,
         'ust_df': ust_df,
         'stocks_df': stocks_df,
@@ -594,6 +544,30 @@ def _prepare_bucket_candidates(
     return ranked_candidates, rescored_profile
 
 
+def _prepare_etf_candidates(etfs_df: pd.DataFrame) -> pd.DataFrame:
+    """Adapt the ETF report to the common candidate schema.
+
+    ETF selection must use the historical-performance Current Yield produced
+    by the market-data ETL, rather than the legacy SPY-only estimate.
+    """
+    if etfs_df.empty or 'Current Yield' not in etfs_df.columns:
+        return pd.DataFrame(columns=['Ticker', 'Symbol_x', 'Current Yield_x', 'S&P Equivalent_x'])
+
+    candidates = etfs_df.copy()
+    display_symbol = (
+        candidates.get('Financial Instrument', candidates.get('Symbol', pd.Series(index=candidates.index)))
+        .astype(str)
+        .str.strip()
+    )
+    candidates['Ticker'] = display_symbol
+    candidates['Symbol_x'] = display_symbol
+    candidates['Current Yield_x'] = candidates['Current Yield'].apply(
+        lambda value: _normalize_yield_percent(_to_float_or_none(value))
+    )
+    candidates['S&P Equivalent_x'] = 'ETF'
+    return candidates[['Ticker', 'Symbol_x', 'Current Yield_x', 'S&P Equivalent_x']]
+
+
 def _normalize_planner_inputs(planner_inputs: dict | None) -> dict | None:
     if not isinstance(planner_inputs, dict):
         return None
@@ -724,8 +698,8 @@ def _populate_investment_proposal_from_distribution(
     context: dict,
 ):
     bonds_df_no_duplicates = context['bonds_df_no_duplicates']
-    avg_yield = context['avg_yield']
     merged_df = context['merged_df']
+    etf_candidates = _prepare_etf_candidates(context['etfs_df'])
     normalized_distribution = _normalize_distribution(distribution)
 
     used_symbols = _initialize_used_symbols(bonds_df_no_duplicates)
@@ -740,16 +714,10 @@ def _populate_investment_proposal_from_distribution(
         logger.info(f"Assets to invest: {assets_to_invest}")
         logger.info(f"Current bonds in bucket: {len(asset_type['bonds'])}")
 
-        if asset_type['name'] == 'etfs' and assets_to_invest > 0:
-            asset_type['bonds'].append({
-                'Symbol_x': 'SPY',
-                'Current Yield_x': float(avg_yield) if avg_yield is not None else 0.0,
-                'S&P Equivalent_x': 'ETF',
-            })
-            used_symbols.add('SPY')
-
         sanitized_equivalents = asset_type['equivalents']
-        if asset_type['name'] == 'treasuries':
+        if asset_type['name'] == 'etfs':
+            combined_df = etf_candidates
+        elif asset_type['name'] == 'treasuries':
             combined_df = merged_df[
                 merged_df.apply(lambda row: _resolve_rating(row.to_dict()) == 'UST', axis=1)
             ]

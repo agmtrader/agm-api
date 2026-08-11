@@ -631,7 +631,13 @@ def _resolve_snapshot_conids(api_client, tickers: list[str], sec_type: str = 'ST
 
     return conids
 
-def _extract_equity_like_snapshot(tickers: list[str], config_name: str, snapshot_type: str, config=None):
+def _extract_equity_like_snapshot(
+    tickers: list[str],
+    config_name: str,
+    snapshot_type: str,
+    config=None,
+    upload: bool = True,
+):
     api_client = _initialize_ibkr_market_data_client()
     conids = _resolve_snapshot_conids(api_client, tickers, sec_type='STK')
 
@@ -666,6 +672,95 @@ def _extract_equity_like_snapshot(tickers: list[str], config_name: str, snapshot
     df['Last'] = df['Last_price'].astype(str).apply(extract_price)
     df['Last'] = pd.to_numeric(df['Last'], errors='coerce').fillna(0.0)
 
+    # IBKR's historical endpoint returns daily OHLC bars.  Use the close from
+    # the latest bar on (or before) each one-year boundary and average the five
+    # sequential price returns.  The result is a percentage, matching the
+    # Current Yield convention used by the investment proposal code.
+    def _average_annual_return(conid):
+        try:
+            history = api_client.get_historical_market_data(
+                conid=str(conid),
+                period='5y',
+                bar='1d',
+                source='Last',
+                outside_rth=True,
+            )
+            bars = history.get('data', []) if isinstance(history, dict) else []
+
+            # IBKR caps a daily response at 1,000 bars. A five-year request
+            # therefore needs a second, backward-looking page for the older
+            # portion of the requested period.
+            if bars:
+                parsed_timestamps = pd.to_datetime(
+                    [bar.get('t') for bar in bars if isinstance(bar, dict)],
+                    unit='ms',
+                    errors='coerce',
+                )
+                parsed_timestamps = parsed_timestamps[parsed_timestamps.notna()]
+                if len(parsed_timestamps) > 0:
+                    latest_timestamp = parsed_timestamps.max()
+                    oldest_timestamp = parsed_timestamps.min()
+                    required_start = latest_timestamp - pd.DateOffset(years=5)
+                    if oldest_timestamp > required_start:
+                        older_history = api_client.get_historical_market_data(
+                            conid=str(conid),
+                            period='5y',
+                            bar='1d',
+                            start_time=oldest_timestamp.strftime('%Y%m%d-%H:%M:%S'),
+                            direction=-1,
+                            source='Last',
+                            outside_rth=True,
+                        )
+                        older_bars = older_history.get('data', []) if isinstance(older_history, dict) else []
+                        bars = list(bars) + list(older_bars or [])
+
+            rows = []
+            for bar in bars:
+                if not isinstance(bar, dict):
+                    continue
+                timestamp = pd.to_datetime(bar.get('t'), unit='ms', errors='coerce')
+                close = pd.to_numeric(bar.get('c'), errors='coerce')
+                if pd.notna(timestamp) and pd.notna(close) and float(close) > 0:
+                    rows.append((timestamp, float(close)))
+
+            if not rows:
+                return None
+
+            prices = pd.Series(
+                data=[close for _, close in rows],
+                index=pd.DatetimeIndex([timestamp for timestamp, _ in rows]),
+            ).sort_index()
+            prices = prices[~prices.index.duplicated(keep='last')]
+            latest = prices.index.max()
+            anchors = [
+                prices.loc[: latest - pd.DateOffset(years=offset)].iloc[-1]
+                for offset in range(6)
+                if not prices.loc[: latest - pd.DateOffset(years=offset)].empty
+            ]
+            if len(anchors) < 6:
+                logger.warning(
+                    f'Only {len(anchors)} annual anchors available for ETF conid {conid}; '
+                    f'cannot calculate five-year Current Yield.'
+                )
+                return None
+
+            annual_returns = [
+                (anchors[offset] / anchors[offset + 1]) - 1.0
+                for offset in range(5)
+            ]
+            return round(sum(annual_returns) / len(annual_returns) * 100, 4)
+        except Exception as exc:
+            logger.warning(f'Failed fetching 5-year ETF history for conid {conid}: {exc}')
+            return None
+
+    if snapshot_type in {'ETF', 'STOCK'}:
+        historical_yields = []
+        for conid in df['Conidex']:
+            historical_yields.append(_average_annual_return(conid))
+            # Avoid bursting the IBKR historical-data endpoint for the equity list.
+            time.sleep(0.1)
+        df['Current Yield'] = historical_yields
+
     rename_map = {
         'Company_name': 'Company Name',
         'Bid_size': 'Bid Size',
@@ -682,17 +777,18 @@ def _extract_equity_like_snapshot(tickers: list[str], config_name: str, snapshot
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
     df['Timestamp'] = timestamp
 
-    market_data_snapshot_config = config or _get_file_config(config_name, [market_data_etl])
-    if market_data_snapshot_config is None:
-        raise Exception(f'Missing report config for {config_name}')
+    if upload:
+        market_data_snapshot_config = config or _get_file_config(config_name, [market_data_etl])
+        if market_data_snapshot_config is None:
+            raise Exception(f'Missing report config for {config_name}')
 
-    file_name = market_data_snapshot_config['backup_name']
-    Drive.upload_file(
-        file_name=file_name,
-        mime_type='text/csv',
-        file_data=df.to_dict(orient='records'),
-        parent_folder_id=market_data_snapshot_config['backup_folder_id']
-    )
+        file_name = market_data_snapshot_config['backup_name']
+        Drive.upload_file(
+            file_name=file_name,
+            mime_type='text/csv',
+            file_data=df.to_dict(orient='records'),
+            parent_folder_id=market_data_snapshot_config['backup_folder_id']
+        )
     return df
 
 def extract_stock_snapshot(config=None):
@@ -703,12 +799,13 @@ def extract_stock_snapshot(config=None):
         config=config,
     )
 
-def extract_etf_snapshot(config=None):
+def extract_etf_snapshot(config=None, upload: bool = True):
     return _extract_equity_like_snapshot(
         tickers=ETF_SNAPSHOT_TICKERS,
         config_name='etfs_snapshot',
         snapshot_type='ETF',
         config=config,
+        upload=upload,
     )
 
 def _collect_watchlist_bond_conids(api_client, watchlist_id: str, max_retries: int = 5, sleep_seconds: int = 2, target_size: int = 500) -> list:

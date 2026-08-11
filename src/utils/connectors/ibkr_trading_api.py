@@ -415,7 +415,18 @@ class IBKRTradingAPI(IBKRWebAPI):
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def get_historical_market_data(self, conid: str, period: str, bar: str) -> dict:
+    def get_historical_market_data(
+        self,
+        conid: str,
+        period: str,
+        bar: str,
+        *,
+        start_time: str | None = None,
+        direction: int | None = None,
+        source: str = "Last",
+        exchange: str | None = None,
+        outside_rth: bool = True,
+    ) -> dict:
         try:
             original_creds = self._apply_credentials("I6413690")
             url = f"{self.BASE_URL}/v1/api/iserver/marketdata/history"
@@ -423,8 +434,15 @@ class IBKRTradingAPI(IBKRWebAPI):
                 "conid": conid,
                 "period": period,
                 "bar": bar,
-                "outsideRth": True,
+                "outsideRth": outside_rth,
+                "source": source,
             }
+            if start_time:
+                params["startTime"] = start_time
+            if direction is not None:
+                params["direction"] = direction
+            if exchange:
+                params["exchange"] = exchange
             logger.info(f"Fetching historical market data for {conid} (period={period}, bar={bar})")
             response = requests.get(url, headers=self._require_sso_headers(None), params=params)
             if response.status_code != 200:
