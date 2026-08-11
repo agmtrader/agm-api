@@ -194,6 +194,16 @@ def _resolve_equity_yield_percent(row: dict) -> float:
             return _normalize_yield_percent(value)
     return 0.0
 
+
+def _median_equity_yield_percent(rows) -> float:
+    values = [
+        _resolve_equity_yield_percent(row)
+        for row in rows
+        if isinstance(row, dict)
+    ]
+    values = [value for value in values if value > 0]
+    return float(np.median(values)) if values else 0.0
+
 def _find_matching_market_row(df: pd.DataFrame, symbol: str) -> dict | None:
     normalized_symbol = str(symbol or '').strip().upper()
     if not normalized_symbol or df.empty:
@@ -308,6 +318,9 @@ def _load_investment_proposal_context() -> dict:
     # existing proposal-equity feed.
     proposal_equity_report = get_proposals_equity_report()
     proposal_equity_df = pd.DataFrame(proposal_equity_report)
+    proposal_equity_yield_pct = _median_equity_yield_percent(
+        proposal_equity_df.to_dict(orient='records')
+    )
 
     # Remove IBCID Symbol column if it exists and clean it (though not strictly used for merge anymore)
     if 'Symbol' in rtd_df.columns:
@@ -394,6 +407,7 @@ def _load_investment_proposal_context() -> dict:
         'stocks_df': stocks_df,
         'etfs_df': etfs_df,
         'proposal_equity_df': proposal_equity_df,
+        'proposal_equity_yield_pct': proposal_equity_yield_pct,
         'merged_universe_df': merged_universe_df,
         'merged_df': merged_df
     }
@@ -606,13 +620,11 @@ def _prepare_etf_candidates(etfs_df: pd.DataFrame, proposal_equity_df: pd.DataFr
             lambda value: _normalize_yield_percent(_to_float_or_none(value))
         )
     else:
-        fallback_values = []
-        if proposal_equity_df is not None and not proposal_equity_df.empty:
-            for _, row in proposal_equity_df.iterrows():
-                value = _resolve_equity_yield_percent(row.to_dict())
-                if value > 0:
-                    fallback_values.append(value)
-        fallback_yield = float(np.median(fallback_values)) if fallback_values else 0.0
+        fallback_yield = _median_equity_yield_percent(
+            proposal_equity_df.to_dict(orient='records')
+            if proposal_equity_df is not None and not proposal_equity_df.empty
+            else []
+        )
         logger.warning(
             'ETF snapshot is missing Current Yield; using proposal-equity median fallback '
             f'of {fallback_yield:.4f}% until the ETL snapshot is refreshed.'
@@ -1075,12 +1087,16 @@ def create_investment_proposal_with_assets(assets: list[dict], risk_profile_id=N
                 rating = 'ETF'
                 if matched_row:
                     current_yield_pct = _resolve_equity_yield_percent(matched_row)
+                if current_yield_pct <= 0:
+                    current_yield_pct = float(context.get('proposal_equity_yield_pct') or 0)
             elif source_bucket == 'STOCKS':
                 matched_row = _find_matching_market_row(stocks_df, normalized_symbol)
                 bucket_name = 'etfs'
                 rating = 'ETF'
                 if matched_row:
                     current_yield_pct = _resolve_equity_yield_percent(matched_row)
+                if current_yield_pct <= 0:
+                    current_yield_pct = float(context.get('proposal_equity_yield_pct') or 0)
             else:
                 matched_row = _find_matching_market_row(merged_universe_df, normalized_symbol)
                 if matched_row:
