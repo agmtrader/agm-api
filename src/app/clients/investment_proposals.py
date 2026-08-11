@@ -25,7 +25,12 @@ def create_with_assets_route():
     payload = request.get_json(force=True)
     assets = payload.get('assets', None)
     risk_profile_id = payload.get('risk_profile_id', None)
-    return create_investment_proposal_with_assets(assets=assets, risk_profile_id=risk_profile_id)
+    contact_id = payload.get('contact_id', None)
+    return create_investment_proposal_with_assets(
+        assets=assets,
+        risk_profile_id=risk_profile_id,
+        contact_id=contact_id,
+    )
 
 
 @bp.route('/create/plan', methods=['POST'])
@@ -48,15 +53,21 @@ def preview_with_portfolio_plan_route():
 @bp.route('/read', methods=['GET'])
 @format_response
 def read_route():
-    """Read investment proposals filtered by proposal id, risk_profile_id, or account_id."""
+    """Read investment proposals filtered by ownership and source."""
     query = {}
     id = request.args.get('id', None)
     risk_profile_id = request.args.get('risk_profile_id', None)
     account_id = request.args.get('account_id', None)
+    contact_id = request.args.get('contact_id', None)
+    source_type = request.args.get('source_type', None)
     if id:
         query['id'] = id
     if risk_profile_id:
         query['risk_profile_id'] = risk_profile_id
     if account_id:
         query['account_id'] = account_id
+    if contact_id:
+        query['contact_id'] = contact_id
+    if source_type:
+        query['source_type'] = source_type
     return read_investment_proposals(query=query)

@@ -824,39 +824,26 @@ def _persist_investment_proposal(
     risk_profile_id,
     source_type: str,
     planner_inputs: dict | None = None,
+    contact_id=None,
 ):
+    if risk_profile_id and not contact_id:
+        linked_profiles = db.read(table='risk_profile', query={'id': risk_profile_id}) or []
+        if linked_profiles:
+            contact_id = linked_profiles[0].get('contact_id')
+
     proposal_record = _serialize_investment_proposal(
         investment_proposal=investment_proposal,
         risk_profile_id=risk_profile_id,
         source_type=source_type,
         planner_inputs=planner_inputs,
+        contact_id=contact_id,
     )
 
     logger.announcement('Saving investment proposal...')
-    existing_proposals = []
-    if source_type == 'hub_original' and risk_profile_id:
-        matching_risk_profile_proposals = db.read(table='investment_proposal', query={'risk_profile_id': risk_profile_id}) or []
-        existing_proposals = [
-            proposal for proposal in matching_risk_profile_proposals
-            if str(proposal.get('source_type') or '').strip() == source_type
-        ]
-
-    existing_proposals = sorted(
-        existing_proposals,
-        key=lambda proposal: str(proposal.get('created') or ''),
-        reverse=True,
-    )
-
-    if existing_proposals:
-        proposal_id = db.update(
-            table='investment_proposal',
-            query={'id': existing_proposals[0]['id']},
-            data=proposal_record,
-        )
-        logger.success(f'Investment proposal updated with id: {proposal_id}')
-    else:
-        proposal_id = db.create(table='investment_proposal', data=proposal_record)
-        logger.success(f'Investment proposal saved with id: {proposal_id}')
+    # Every generation is a new immutable proposal record. A planner run must
+    # never overwrite the original risk-profile proposal.
+    proposal_id = db.create(table='investment_proposal', data=proposal_record)
+    logger.success(f'Investment proposal saved with id: {proposal_id}')
 
     saved_proposals = db.read(table='investment_proposal', query={'id': proposal_id}) or []
     if saved_proposals:
@@ -881,12 +868,16 @@ def _serialize_investment_proposal(
     risk_profile_id,
     source_type: str,
     planner_inputs: dict | None = None,
+    contact_id=None,
 ):
     return {
         'assets': _assets_from_investment_proposal(investment_proposal),
         'risk_profile_id': risk_profile_id,
+        'contact_id': contact_id,
         'source_type': source_type,
-        'planner_inputs': _normalize_planner_inputs(planner_inputs),
+        # Planner inputs are intentionally not persisted for new proposals.
+        # The generated assets are the proposal's source of truth.
+        'planner_inputs': None,
     }
 
 
@@ -906,7 +897,7 @@ def _build_investment_proposal_preview(
     proposal_record = _serialize_investment_proposal(
         investment_proposal=investment_proposal,
         risk_profile_id=risk_profile_id,
-        source_type='planner',
+        source_type='portfolio_plan',
         planner_inputs=planner_inputs,
     )
 
@@ -949,7 +940,7 @@ def _derive_distribution_for_saved_proposal(proposal: dict) -> dict | None:
     source_type = str(proposal.get('source_type') or '').strip()
     risk_profile_id = proposal.get('risk_profile_id')
 
-    if source_type == 'planner':
+    if source_type in {'planner', 'portfolio_plan'}:
         normalized_planner_inputs = _normalize_planner_inputs(proposal.get('planner_inputs'))
         if normalized_planner_inputs:
             return _distribution_from_portfolio_plan(normalized_planner_inputs)
@@ -969,8 +960,12 @@ def _derive_distribution_for_saved_proposal(proposal: dict) -> dict | None:
 
 def _normalize_saved_investment_proposal(proposal: dict) -> dict:
     normalized_source_type = str(proposal.get('source_type') or '').strip()
-    if normalized_source_type not in {'hub_original', 'planner', 'custom'}:
-        normalized_source_type = 'hub_original'
+    normalized_source_type = {
+        'hub_original': 'risk_profile',
+        'planner': 'portfolio_plan',
+    }.get(normalized_source_type, normalized_source_type)
+    if normalized_source_type not in {'risk_profile', 'portfolio_plan', 'custom'}:
+        normalized_source_type = 'risk_profile'
 
     return {
         **proposal,
@@ -981,7 +976,7 @@ def _normalize_saved_investment_proposal(proposal: dict) -> dict:
     }
 
 @handle_exception
-def create_investment_proposal_with_assets(assets: list[dict], risk_profile_id=None):
+def create_investment_proposal_with_assets(assets: list[dict], risk_profile_id=None, contact_id=None):
     logger.announcement('Generating investment proposal from assets...')
 
     try:
@@ -1128,7 +1123,7 @@ def create_investment_proposal_with_assets(assets: list[dict], risk_profile_id=N
         logger.error(f'Failed creating investment proposal: {exc}')
         raise Exception(f'Failed creating investment proposal: {exc}')
 
-    return _persist_investment_proposal(investment_proposal, risk_profile_id, 'custom')
+    return _persist_investment_proposal(investment_proposal, risk_profile_id, 'custom', contact_id=contact_id)
 
 
 @handle_exception
@@ -1161,7 +1156,7 @@ def create_investment_proposal_with_risk_profile(risk_profile: dict):
         logger.error(f'Failed creating investment proposal: {exc}')
         raise Exception(f'Failed creating investment proposal: {exc}')
 
-    return _persist_investment_proposal(investment_proposal, risk_profile_id, 'hub_original')
+    return _persist_investment_proposal(investment_proposal, risk_profile_id, 'risk_profile')
 
 
 @handle_exception
@@ -1190,8 +1185,7 @@ def create_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
     return _persist_investment_proposal(
         investment_proposal,
         risk_profile_id,
-        'planner',
-        planner_inputs=portfolio_plan,
+        'portfolio_plan',
     )
 
 

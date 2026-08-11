@@ -108,11 +108,43 @@ def extract_data(etl_config) -> dict:
     logger.announcement('Extracting information for reports.', type='info')
 
     steps = []
+    # Some pipeline sources are supplied manually before the ETL starts and
+    # therefore have no extractor. Snapshot the batch folder before running
+    # any extractors so those sources can be validated without counting a
+    # missing pre-existing file as a harmless skip.
+    preexisting_batch_files = None
+    batch_file_inspection_error = None
+    if any(file_config.get('extract_func') is None for file_config in etl_config.get('files', [])):
+        try:
+            preexisting_batch_files = {
+                file.get('name')
+                for file in (Drive.get_files_in_folder(batch_folder_id) or [])
+                if file.get('name')
+            }
+        except Exception as e:
+            logger.error(f'Unable to inspect pre-existing batch files: {e}')
+            preexisting_batch_files = set()
+            batch_file_inspection_error = str(e)
+
     for file_config in etl_config.get('files', []):
         step_name = file_config.get('name', 'unknown')
         extract_func = file_config.get('extract_func')
         if extract_func is None:
-            steps.append({'name': step_name, 'status': 'skipped'})
+            expected_file_name = file_config.get('backup_name')
+            if preexisting_batch_files is not None and expected_file_name in preexisting_batch_files:
+                steps.append({'name': step_name, 'status': 'skipped'})
+            else:
+                steps.append({
+                    'name': step_name,
+                    'status': 'failed',
+                    'error': (
+                        f'Unable to verify pre-existing batch file '
+                        f'{expected_file_name}: {batch_file_inspection_error}'
+                        if batch_file_inspection_error
+                        else f'Expected pre-existing batch file was not found: '
+                        f'{expected_file_name}'
+                    )
+                })
             continue
         try:
             extract_func(file_config)

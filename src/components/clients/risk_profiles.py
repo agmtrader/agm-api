@@ -1,6 +1,8 @@
 from src.utils.logger import logger
 from src.utils.connectors.supabase import db
 from src.utils.exception import handle_exception
+import re
+import unicodedata
 
 logger.announcement('Initializing Risk Profile Service', type='info')
 logger.announcement('Initialized Risk Profile Service', type='success')
@@ -127,12 +129,46 @@ def _with_derived_risk_archetype(risk_profile: dict) -> dict:
         'assigned_risk_archetype': derived_risk_archetype.get('name') if derived_risk_archetype else None,
     }
 
+
+def _normalize_identity(value) -> str:
+    text = unicodedata.normalize('NFKD', str(value or ''))
+    text = ''.join(char for char in text if not unicodedata.combining(char))
+    return re.sub(r'[^a-z0-9]', '', text.casefold())
+
+
+def _resolve_or_create_contact(name: str, email: str) -> str:
+    normalized_name = _normalize_identity(name)
+    normalized_email = str(email or '').strip().casefold()
+    if not normalized_name:
+        raise ValueError('A name is required to associate a risk profile with a contact.')
+
+    contacts = db.read(table='contact', query={})
+    matches = [
+        contact for contact in contacts
+        if _normalize_identity(contact.get('name')) == normalized_name
+        and (
+            not normalized_email
+            or str(contact.get('email') or '').strip().casefold() == normalized_email
+        )
+    ]
+    if len(matches) == 1:
+        return str(matches[0]['id'])
+    if len(matches) > 1:
+        raise ValueError(f'Multiple contacts found for name and email: {name} / {email}')
+
+    return db.create(table='contact', data={'name': str(name).strip(), 'email': str(email or '').strip() or None})
+
 @handle_exception
 def create_risk_profile(data: dict):
     data_to_save = {**(data or {})}
     data_to_save.pop('assigned_risk_archetype', None)
+    contact_id = data_to_save.pop('contact_id', None)
+    email = data_to_save.pop('email', None)
+    if not contact_id:
+        contact_id = _resolve_or_create_contact(data_to_save.get('name'), email)
+    data_to_save['contact_id'] = contact_id
     risk_profile_id = db.create(table='risk_profile', data=data_to_save)
-    return {'id': risk_profile_id}
+    return {'id': risk_profile_id, 'contact_id': contact_id}
 
 @handle_exception
 def read_risk_profiles(query: dict = None):
