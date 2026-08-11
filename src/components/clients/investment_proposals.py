@@ -4,6 +4,7 @@ from src.components.tools.public.reporting import (
     get_bond_report,
     get_etfs_report,
     get_open_positions_report,
+    get_proposals_equity_report,
     get_stocks_report,
     get_ust_bond_report,
 )
@@ -175,7 +176,19 @@ def _resolve_market_asset_display_symbol(row: dict, fallback_symbol: str) -> str
     ) or fallback_symbol
 
 def _resolve_equity_yield_percent(row: dict) -> float:
-    for key in ['Current Yield', 'current_yield', 'Dividend Yield', 'dividend_yield', 'Yield', 'yield', 'YTM', 'ytm']:
+    for key in [
+        'Current Yield',
+        'current_yield',
+        'Dividend Yield',
+        'dividend_yield',
+        'Yield(UserInput)',
+        'Average Annual Return',
+        'average_annual_return',
+        'Yield',
+        'yield',
+        'YTM',
+        'ytm',
+    ]:
         value = _to_float_or_none(row.get(key))
         if value is not None:
             return _normalize_yield_percent(value)
@@ -289,6 +302,13 @@ def _load_investment_proposal_context() -> dict:
     etfs_report = get_etfs_report()
     etfs_df = pd.DataFrame(etfs_report)
 
+    # Some currently-uploaded stock/ETF snapshots predate the five-year
+    # Current Yield column. Keep proposal previews usable while those files
+    # are refreshed by deriving a temporary equity-yield fallback from the
+    # existing proposal-equity feed.
+    proposal_equity_report = get_proposals_equity_report()
+    proposal_equity_df = pd.DataFrame(proposal_equity_report)
+
     # Remove IBCID Symbol column if it exists and clean it (though not strictly used for merge anymore)
     if 'Symbol' in rtd_df.columns:
         # logger.announcement(rtd_df['Symbol'].head(10))
@@ -373,6 +393,7 @@ def _load_investment_proposal_context() -> dict:
         'ust_df': ust_df,
         'stocks_df': stocks_df,
         'etfs_df': etfs_df,
+        'proposal_equity_df': proposal_equity_df,
         'merged_universe_df': merged_universe_df,
         'merged_df': merged_df
     }
@@ -440,13 +461,32 @@ def _distribution_from_saved_assets_payload(assets: dict) -> dict | None:
     if not isinstance(assets, dict):
         return None
 
-    raw_distribution = {
-        'treasuries': len(assets.get('treasury') or []),
-        'bonds_aaa_a': len(assets.get('aaa_a') or []),
-        'bonds_bbb': len(assets.get('bbb') or []),
-        'bonds_bb': len(assets.get('bb') or []),
-        'etfs': len(assets.get('etfs') or []),
+    bucket_assets = {
+        'treasuries': assets.get('treasury') or [],
+        'bonds_aaa_a': assets.get('aaa_a') or [],
+        'bonds_bbb': assets.get('bbb') or [],
+        'bonds_bb': assets.get('bb') or [],
+        'etfs': assets.get('etfs') or [],
     }
+
+    # Asset percentages are the proposal's actual allocation. Do not infer
+    # allocation from the number of selected securities: a custom proposal
+    # can contain one ETF at 20% and many bonds at 5% each.
+    percentage_distribution = {
+        key: sum(
+            float(asset.get('percentage') or 0)
+            for asset in bucket
+            if isinstance(asset, dict) and asset.get('percentage') is not None
+        )
+        for key, bucket in bucket_assets.items()
+    }
+
+    if sum(percentage_distribution.values()) > 0:
+        return _normalize_distribution(percentage_distribution)
+
+    # Compatibility fallback for older proposals whose assets did not store
+    # percentages.
+    raw_distribution = {key: len(bucket) for key, bucket in bucket_assets.items()}
 
     if sum(raw_distribution.values()) == 0:
         return None
@@ -544,13 +584,13 @@ def _prepare_bucket_candidates(
     return ranked_candidates, rescored_profile
 
 
-def _prepare_etf_candidates(etfs_df: pd.DataFrame) -> pd.DataFrame:
+def _prepare_etf_candidates(etfs_df: pd.DataFrame, proposal_equity_df: pd.DataFrame | None = None) -> pd.DataFrame:
     """Adapt the ETF report to the common candidate schema.
 
     ETF selection must use the historical-performance Current Yield produced
     by the market-data ETL, rather than the legacy SPY-only estimate.
     """
-    if etfs_df.empty or 'Current Yield' not in etfs_df.columns:
+    if etfs_df.empty:
         return pd.DataFrame(columns=['Ticker', 'Symbol_x', 'Current Yield_x', 'S&P Equivalent_x'])
 
     candidates = etfs_df.copy()
@@ -561,9 +601,23 @@ def _prepare_etf_candidates(etfs_df: pd.DataFrame) -> pd.DataFrame:
     )
     candidates['Ticker'] = display_symbol
     candidates['Symbol_x'] = display_symbol
-    candidates['Current Yield_x'] = candidates['Current Yield'].apply(
-        lambda value: _normalize_yield_percent(_to_float_or_none(value))
-    )
+    if 'Current Yield' in candidates.columns:
+        candidates['Current Yield_x'] = candidates['Current Yield'].apply(
+            lambda value: _normalize_yield_percent(_to_float_or_none(value))
+        )
+    else:
+        fallback_values = []
+        if proposal_equity_df is not None and not proposal_equity_df.empty:
+            for _, row in proposal_equity_df.iterrows():
+                value = _resolve_equity_yield_percent(row.to_dict())
+                if value > 0:
+                    fallback_values.append(value)
+        fallback_yield = float(np.median(fallback_values)) if fallback_values else 0.0
+        logger.warning(
+            'ETF snapshot is missing Current Yield; using proposal-equity median fallback '
+            f'of {fallback_yield:.4f}% until the ETL snapshot is refreshed.'
+        )
+        candidates['Current Yield_x'] = fallback_yield
     candidates['S&P Equivalent_x'] = 'ETF'
     return candidates[['Ticker', 'Symbol_x', 'Current Yield_x', 'S&P Equivalent_x']]
 
@@ -681,7 +735,10 @@ def _populate_investment_proposal_from_distribution(
 ):
     bonds_df_no_duplicates = context['bonds_df_no_duplicates']
     merged_df = context['merged_df']
-    etf_candidates = _prepare_etf_candidates(context['etfs_df'])
+    etf_candidates = _prepare_etf_candidates(
+        context['etfs_df'],
+        context.get('proposal_equity_df'),
+    )
     normalized_distribution = _normalize_distribution(distribution)
 
     used_symbols = _initialize_used_symbols(bonds_df_no_duplicates)
@@ -911,13 +968,14 @@ def _build_investment_proposal_preview(
 
 
 def _derive_distribution_for_saved_proposal(proposal: dict) -> dict | None:
-    source_type = str(proposal.get('source_type') or '').strip()
     risk_profile_id = proposal.get('risk_profile_id')
 
-    if source_type == 'portfolio_plan':
-        derived_from_assets = _distribution_from_saved_assets_payload(_assets_from_saved_proposal(proposal))
-        if derived_from_assets:
-            return derived_from_assets
+    # The proposal's saved assets are authoritative for every source type.
+    # Risk archetypes are only a compatibility fallback for legacy rows that
+    # have no persisted assets.
+    derived_from_assets = _distribution_from_saved_assets_payload(_assets_from_saved_proposal(proposal))
+    if derived_from_assets:
+        return derived_from_assets
 
     if risk_profile_id:
         risk_profiles = db.read(table='risk_profile', query={'id': risk_profile_id}) or []
