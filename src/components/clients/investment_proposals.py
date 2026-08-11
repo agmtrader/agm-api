@@ -568,24 +568,6 @@ def _prepare_etf_candidates(etfs_df: pd.DataFrame) -> pd.DataFrame:
     return candidates[['Ticker', 'Symbol_x', 'Current Yield_x', 'S&P Equivalent_x']]
 
 
-def _normalize_planner_inputs(planner_inputs: dict | None) -> dict | None:
-    if not isinstance(planner_inputs, dict):
-        return None
-
-    return {
-        'risk_profile_id': planner_inputs.get('risk_profile_id'),
-        'name': planner_inputs.get('name'),
-        'target_return': planner_inputs.get('target_return'),
-        'starting_amount': planner_inputs.get('starting_amount'),
-        'risk_tolerance': planner_inputs.get('risk_tolerance'),
-        'selected_risk_archetype': planner_inputs.get('selected_risk_archetype'),
-        'allocation': planner_inputs.get('allocation') or {},
-        'bond_rating_allocation': planner_inputs.get('bond_rating_allocation') or {},
-        'locked_assets': planner_inputs.get('locked_assets') or {},
-        'locked_bond_ratings': planner_inputs.get('locked_bond_ratings') or {},
-    }
-
-
 def _distribution_from_risk_archetype(risk_archetype: dict) -> dict:
     distribution = {
         'treasuries': risk_archetype.get('treasuries', 0),
@@ -823,7 +805,6 @@ def _persist_investment_proposal(
     investment_proposal: list[dict],
     risk_profile_id,
     source_type: str,
-    planner_inputs: dict | None = None,
     contact_id=None,
 ):
     if risk_profile_id and not contact_id:
@@ -835,7 +816,6 @@ def _persist_investment_proposal(
         investment_proposal=investment_proposal,
         risk_profile_id=risk_profile_id,
         source_type=source_type,
-        planner_inputs=planner_inputs,
         contact_id=contact_id,
     )
 
@@ -867,7 +847,6 @@ def _serialize_investment_proposal(
     investment_proposal: list[dict],
     risk_profile_id,
     source_type: str,
-    planner_inputs: dict | None = None,
     contact_id=None,
 ):
     return {
@@ -875,9 +854,6 @@ def _serialize_investment_proposal(
         'risk_profile_id': risk_profile_id,
         'contact_id': contact_id,
         'source_type': source_type,
-        # Planner inputs are intentionally not persisted for new proposals.
-        # The generated assets are the proposal's source of truth.
-        'planner_inputs': None,
     }
 
 
@@ -891,14 +867,12 @@ def _build_investment_proposal_preview(
     investment_proposal: list[dict],
     risk_profile_id,
     distribution: dict,
-    planner_inputs: dict | None = None,
 ):
     normalized_distribution = _normalize_distribution(distribution)
     proposal_record = _serialize_investment_proposal(
         investment_proposal=investment_proposal,
         risk_profile_id=risk_profile_id,
         source_type='portfolio_plan',
-        planner_inputs=planner_inputs,
     )
 
     bucket_mapping = [
@@ -940,10 +914,7 @@ def _derive_distribution_for_saved_proposal(proposal: dict) -> dict | None:
     source_type = str(proposal.get('source_type') or '').strip()
     risk_profile_id = proposal.get('risk_profile_id')
 
-    if source_type in {'planner', 'portfolio_plan'}:
-        normalized_planner_inputs = _normalize_planner_inputs(proposal.get('planner_inputs'))
-        if normalized_planner_inputs:
-            return _distribution_from_portfolio_plan(normalized_planner_inputs)
+    if source_type == 'portfolio_plan':
         derived_from_assets = _distribution_from_saved_assets_payload(_assets_from_saved_proposal(proposal))
         if derived_from_assets:
             return derived_from_assets
@@ -960,10 +931,6 @@ def _derive_distribution_for_saved_proposal(proposal: dict) -> dict | None:
 
 def _normalize_saved_investment_proposal(proposal: dict) -> dict:
     normalized_source_type = str(proposal.get('source_type') or '').strip()
-    normalized_source_type = {
-        'hub_original': 'risk_profile',
-        'planner': 'portfolio_plan',
-    }.get(normalized_source_type, normalized_source_type)
     if normalized_source_type not in {'risk_profile', 'portfolio_plan', 'custom'}:
         normalized_source_type = 'risk_profile'
 
@@ -971,7 +938,6 @@ def _normalize_saved_investment_proposal(proposal: dict) -> dict:
         **proposal,
         'source_type': normalized_source_type,
         'assets': _assets_from_saved_proposal(proposal),
-        'planner_inputs': _normalize_planner_inputs(proposal.get('planner_inputs')),
         'derived_distribution': _derive_distribution_for_saved_proposal({**proposal, 'source_type': normalized_source_type}),
     }
 
@@ -1215,7 +1181,6 @@ def preview_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
         investment_proposal,
         risk_profile_id,
         distribution,
-        planner_inputs=portfolio_plan,
     )
 
 @handle_exception
