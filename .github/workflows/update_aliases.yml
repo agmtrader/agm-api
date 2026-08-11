@@ -2,7 +2,7 @@ name: Update IBKR Account Aliases
 
 on:
   schedule:
-    - cron: '0 21 * * *'   # Every day at 9 PM UTC (3:00 PM CST)
+    - cron: '30 20 * * *'   # Every day at 2:30 PM Costa Rica time (20:30 UTC)
   workflow_dispatch:
 
 jobs:
