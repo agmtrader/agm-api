@@ -46,10 +46,13 @@ MOODYS_TO_SP_EQUIVALENT = {
 }
 
 PROPOSAL_BUCKET_KEYS = {
+    'cash': 'cash',
     'treasuries': 'treasury',
     'bonds_aaa_a': 'aaa_a',
     'bonds_bbb': 'bbb',
     'bonds_bb': 'bb',
+    'bonds': 'bonds',
+    'stocks': 'stocks',
     'etfs': 'etfs',
 }
 
@@ -234,6 +237,7 @@ def _resolve_source_bucket(asset: dict) -> str:
 
 def _build_investment_proposal_template() -> list[dict]:
     return [
+        {'name': 'cash', 'equivalents': ['CASH'], 'bonds': []},
         {
             'name': 'treasuries',
             'equivalents': ['UST'],
@@ -258,7 +262,9 @@ def _build_investment_proposal_template() -> list[dict]:
             'name': 'etfs',
             'equivalents': ['ETF'],
             'bonds': []
-        }
+        },
+        {'name': 'stocks', 'equivalents': ['STOCK'], 'bonds': []},
+        {'name': 'bonds', 'equivalents': [], 'bonds': []},
     ]
 
 def _get_bucket_for_rating(rating: str) -> str:
@@ -267,6 +273,8 @@ def _get_bucket_for_rating(rating: str) -> str:
         return 'treasuries'
     if normalized == 'ETF':
         return 'etfs'
+    if normalized == 'STOCK':
+        return 'stocks'
     if normalized in {'AAA', 'AA', 'A'}:
         return 'bonds_aaa_a'
     if normalized == 'BBB':
@@ -442,6 +450,11 @@ def _assets_from_investment_proposal(investment_proposal: list[dict]) -> dict:
     for bucket_name, proposal_key in PROPOSAL_BUCKET_KEYS.items():
         bucket = next((bucket for bucket in investment_proposal if bucket['name'] == bucket_name), None)
         assets[proposal_key] = [_normalize_bond_record(bond) for bond in (bucket.get('bonds', []) if bucket else [])]
+    assets['bonds'] = [
+        *assets.get('aaa_a', []),
+        *assets.get('bbb', []),
+        *assets.get('bb', []),
+    ]
     return assets
 
 
@@ -458,6 +471,8 @@ def _assets_from_saved_proposal(proposal: dict) -> dict:
         for key in assets:
             bucket_assets = raw_assets.get(key) or []
             assets[key] = [_normalize_bond_record(asset) for asset in bucket_assets if isinstance(asset, dict)]
+        if not any(key in raw_assets for key in ('cash', 'bonds', 'stocks')):
+            assets['bonds'] = [*assets.get('aaa_a', []), *assets.get('bbb', []), *assets.get('bb', [])]
         return assets
 
     # Legacy fallback for rows that still have the old columns before migration is applied.
@@ -875,6 +890,7 @@ def _persist_investment_proposal(
     risk_profile_id,
     source_type: str,
     contact_id=None,
+    starting_amount=None,
 ):
     if risk_profile_id and not contact_id:
         linked_profiles = db.read(table='risk_profile', query={'id': risk_profile_id}) or []
@@ -886,6 +902,7 @@ def _persist_investment_proposal(
         risk_profile_id=risk_profile_id,
         source_type=source_type,
         contact_id=contact_id,
+        starting_amount=starting_amount,
     )
 
     logger.announcement('Saving investment proposal...')
@@ -917,12 +934,14 @@ def _serialize_investment_proposal(
     risk_profile_id,
     source_type: str,
     contact_id=None,
+    starting_amount=None,
 ):
     return {
         'assets': _assets_from_investment_proposal(investment_proposal),
         'risk_profile_id': risk_profile_id,
         'contact_id': contact_id,
         'source_type': source_type,
+        'starting_amount': starting_amount,
     }
 
 
@@ -936,12 +955,14 @@ def _build_investment_proposal_preview(
     investment_proposal: list[dict],
     risk_profile_id,
     distribution: dict,
+    starting_amount=None,
 ):
     normalized_distribution = _normalize_distribution(distribution)
     proposal_record = _serialize_investment_proposal(
         investment_proposal=investment_proposal,
         risk_profile_id=risk_profile_id,
         source_type='portfolio_plan',
+        starting_amount=starting_amount,
     )
 
     bucket_mapping = [
@@ -1012,7 +1033,7 @@ def _normalize_saved_investment_proposal(proposal: dict) -> dict:
     }
 
 @handle_exception
-def create_investment_proposal_with_assets(assets: list[dict], risk_profile_id=None, contact_id=None):
+def create_investment_proposal_with_assets(assets: list[dict], risk_profile_id=None, contact_id=None, starting_amount=None):
     logger.announcement('Generating investment proposal from assets...')
 
     try:
@@ -1091,8 +1112,8 @@ def create_investment_proposal_with_assets(assets: list[dict], risk_profile_id=N
                     current_yield_pct = float(context.get('proposal_equity_yield_pct') or 0)
             elif source_bucket == 'STOCKS':
                 matched_row = _find_matching_market_row(stocks_df, normalized_symbol)
-                bucket_name = 'etfs'
-                rating = 'ETF'
+                bucket_name = 'stocks'
+                rating = 'STOCK'
                 if matched_row:
                     current_yield_pct = _resolve_equity_yield_percent(matched_row)
                 if current_yield_pct <= 0:
@@ -1136,8 +1157,8 @@ def create_investment_proposal_with_assets(assets: list[dict], risk_profile_id=N
             if not bucket_name:
                 bucket_name = _get_bucket_for_rating(rating)
             if not bucket_name and source_bucket in {'STOCKS', 'ETFS'}:
-                bucket_name = 'etfs'
-                rating = 'ETF'
+                bucket_name = 'stocks' if source_bucket == 'STOCKS' else 'etfs'
+                rating = 'STOCK' if source_bucket == 'STOCKS' else 'ETF'
             if not bucket_name:
                 raise Exception(f'Unknown rating "{rating}" for asset {symbol}.')
 
@@ -1163,11 +1184,11 @@ def create_investment_proposal_with_assets(assets: list[dict], risk_profile_id=N
         logger.error(f'Failed creating investment proposal: {exc}')
         raise Exception(f'Failed creating investment proposal: {exc}')
 
-    return _persist_investment_proposal(investment_proposal, risk_profile_id, 'custom', contact_id=contact_id)
+    return _persist_investment_proposal(investment_proposal, risk_profile_id, 'custom', contact_id=contact_id, starting_amount=starting_amount)
 
 
 @handle_exception
-def create_investment_proposal_with_risk_profile(risk_profile: dict):
+def create_investment_proposal_with_risk_profile(risk_profile: dict, starting_amount=None):
     logger.announcement('Generating investment proposal from risk profile...')
 
     try:
@@ -1196,7 +1217,7 @@ def create_investment_proposal_with_risk_profile(risk_profile: dict):
         logger.error(f'Failed creating investment proposal: {exc}')
         raise Exception(f'Failed creating investment proposal: {exc}')
 
-    return _persist_investment_proposal(investment_proposal, risk_profile_id, 'risk_profile')
+    return _persist_investment_proposal(investment_proposal, risk_profile_id, 'risk_profile', starting_amount=starting_amount)
 
 
 @handle_exception
@@ -1226,6 +1247,8 @@ def create_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
         investment_proposal,
         risk_profile_id,
         'portfolio_plan',
+        contact_id=portfolio_plan.get('contact_id'),
+        starting_amount=portfolio_plan.get('starting_amount'),
     )
 
 
@@ -1255,6 +1278,7 @@ def preview_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
         investment_proposal,
         risk_profile_id,
         distribution,
+        starting_amount=portfolio_plan.get('starting_amount'),
     )
 
 @handle_exception

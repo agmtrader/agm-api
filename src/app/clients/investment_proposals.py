@@ -16,7 +16,10 @@ def create_with_risk_profile_route():
     """Create an investment proposal from a risk profile payload."""
     payload = request.get_json(force=True)
     risk_profile = payload.get('risk_profile', None)
-    return create_investment_proposal_with_risk_profile(risk_profile=risk_profile)
+    return create_investment_proposal_with_risk_profile(
+        risk_profile=risk_profile,
+        starting_amount=payload.get('starting_amount', (risk_profile or {}).get('starting_amount')),
+    )
 
 @bp.route('/create/assets', methods=['POST'])
 @format_response
@@ -26,10 +29,12 @@ def create_with_assets_route():
     assets = payload.get('assets', None)
     risk_profile_id = payload.get('risk_profile_id', None)
     contact_id = payload.get('contact_id', None)
+    starting_amount = payload.get('starting_amount', None)
     return create_investment_proposal_with_assets(
         assets=assets,
         risk_profile_id=risk_profile_id,
         contact_id=contact_id,
+        starting_amount=starting_amount,
     )
 
 

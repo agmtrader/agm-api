@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Boolean, ForeignKey, Text, create_engine, Column, Integer, BIGINT
+from sqlalchemy import BigInteger, Boolean, ForeignKey, Text, create_engine, Column, Integer, BIGINT, Numeric
 from sqlalchemy.engine import URL
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 import uuid
@@ -304,6 +304,7 @@ class Supabase:
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             source_type = Column(Text, nullable=False)
+            starting_amount = Column(Numeric(precision=18, scale=2), nullable=True)
             assets = Column(JSONB, nullable=True)
 
         class ManagementTypeRequest(self.Base):
