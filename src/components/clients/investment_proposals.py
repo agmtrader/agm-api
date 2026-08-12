@@ -1025,9 +1025,16 @@ def _normalize_saved_investment_proposal(proposal: dict) -> dict:
     if normalized_source_type not in {'risk_profile', 'portfolio_plan', 'custom'}:
         normalized_source_type = 'risk_profile'
 
+    raw_starting_amount = proposal.get('starting_amount')
+    try:
+        normalized_starting_amount = float(raw_starting_amount) if raw_starting_amount is not None else None
+    except (TypeError, ValueError):
+        normalized_starting_amount = None
+
     return {
         **proposal,
         'source_type': normalized_source_type,
+        'starting_amount': normalized_starting_amount,
         'assets': _assets_from_saved_proposal(proposal),
         'derived_distribution': _derive_distribution_for_saved_proposal({**proposal, 'source_type': normalized_source_type}),
     }
