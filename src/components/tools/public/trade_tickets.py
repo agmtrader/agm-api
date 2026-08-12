@@ -166,8 +166,21 @@ def extract_bond_details(description: str):
     # -----------------------------
     # Symbol (take everything before the coupon figure)
     # -----------------------------
-    coupon_pattern = re.compile(r"\b\d+(?:\s+\d+/\d+|\.\d+)?\b")  # e.g. 5 or 5 1/2 or 5.25
-    coupon_match = coupon_pattern.search(description)
+    # IBKR descriptions commonly contain the issue date before the coupon,
+    # e.g. ``... D08/26/13 05.950% MS43``. Prefer the number explicitly
+    # marked as a percentage so the month/day/year is never mistaken for the
+    # coupon. The optional trailing digit handles descriptions such as
+    # ``8.5%7``.
+    percentage_pattern = re.compile(
+        r"(?<![\d.])(?P<coupon>\d+(?:\.\d+)?|\d+\s+\d+/\d+)\s*%",
+        re.IGNORECASE,
+    )
+    coupon_match = percentage_pattern.search(description)
+    if coupon_match is None:
+        # Preserve support for descriptions without a percent sign, while
+        # avoiding the numeric components of slash-separated dates.
+        coupon_pattern = re.compile(r"(?<![/\d])\d+(?:\s+\d+/\d+|\.\d+)?(?![/\d])")
+        coupon_match = coupon_pattern.search(description)
     if coupon_match:
         symbol_part = description[:coupon_match.start()].strip()
     else:
@@ -181,7 +194,7 @@ def extract_bond_details(description: str):
     # -----------------------------
     coupon = None
     if coupon_match:
-        coupon_str = coupon_match.group(0)
+        coupon_str = coupon_match.group('coupon') if 'coupon' in coupon_match.groupdict() else coupon_match.group(0)
         if ' ' in coupon_str:  # mixed number e.g. "5 1/2"
             whole, fraction = coupon_str.split(' ')
             num, den = fraction.split('/')
@@ -204,9 +217,10 @@ def extract_bond_details(description: str):
         except ValueError:
             pass
 
-    # Format 2: MM/DD/YY(YY) e.g. 12/31/2032
+    # Format 2: MM/DD/YY(YY) e.g. 12/31/2032. IBKR prefixes issue dates
+    # with ``D`` (D08/26/13), so do not treat those as maturities.
     if maturity is None:
-        mat2 = re.search(r"(\d{2})/(\d{2})/(\d{2,4})", description)
+        mat2 = re.search(r"(?<![Dd])(\d{2})/(\d{2})/(\d{2,4})", description)
         if mat2:
             m, d, y = mat2.groups()
             fmt = "%y" if len(y) == 2 else "%Y"
