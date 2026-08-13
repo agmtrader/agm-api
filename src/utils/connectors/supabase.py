@@ -130,6 +130,7 @@ class Supabase:
             account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
             entity_id = Column(BIGINT, nullable=True)
             external_id = Column(Text, nullable=True)
+            role = Column(Text, nullable=True)
 
         class AccountComment(self.Base):
             __tablename__ = 'account_comments'
