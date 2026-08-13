@@ -386,13 +386,7 @@ class IBKRWebAPI:
         """
         try:
             original_creds = self._apply_credentials(master_account)
-            effective_master_account = str(master_account or 'I6413690').strip().upper()
-            logger.info(
-                f"IBKR alias request: account_id={account_id!r}, "
-                f"requested_master_account={master_account!r}, "
-                f"effective_master_account={effective_master_account!r}, "
-                f"client_id={self.CLIENT_ID!r}, key_id={self.KEY_ID!r}, alias={new_alias!r}"
-            )
+            logger.info(f"Updating alias for account {account_id} to {new_alias}")
 
             url = f"{self.BASE_URL}/gw/api/v1/accounts"
 
@@ -445,7 +439,7 @@ class IBKRWebAPI:
                     code='ibkr_account_alias_update_failed',
                     details={
                         'account_id': account_id,
-                        'master_account': effective_master_account,
+                        'master_account': master_account,
                         'ibkr_status': status,
                         'ibkr_request_id': alias_result.get('requestId'),
                         'ibkr_response': data,

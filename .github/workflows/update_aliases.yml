@@ -9,7 +9,10 @@ jobs:
   update-aliases:
     runs-on: ubuntu-latest
     outputs:
-      accounts: ${{ steps.update.outputs.accounts_list }}
+      summary: ${{ steps.update.outputs.summary }}
+      accounts: ${{ steps.update.outputs.summary }}
+      aliases_updated: ${{ steps.update.outputs.aliases_updated }}
+      errors: ${{ steps.update.outputs.errors }}
     steps:
       - name: Request token and update aliases
         id: update
@@ -45,26 +48,30 @@ jobs:
             http_status=$(echo "$response" | tail -n1)
             body=$(echo "$response" | sed '$d')
 
+            # Successful responses contain the summary at the top level;
+            # aggregate failures contain it under details.
+            summary_json=$(echo "$body" | jq -c '.details // .')
+            updated=$(echo "$summary_json" | jq -r '.updated // 0')
+            errors=$(echo "$summary_json" | jq -r '.failed // 0')
+            pending=$(echo "$summary_json" | jq -r '.pending // 0')
+            skipped=$(echo "$summary_json" | jq -r '.skipped // 0')
+
+            accounts_lines=$(echo "$summary_json" | jq -r '(.accounts // [])[] | "- " + ((.old_alias // "None") + " -> " + .new_alias)')
+            error_lines=$(echo "$summary_json" | jq -r '(.failed_accounts // [])[] | "- " + (.account_id // "unknown") + ": " + (.error // "Unknown error")')
+            if [ -z "$accounts_lines" ]; then accounts_lines="- None"; fi
+            if [ -z "$error_lines" ]; then error_lines="- None"; fi
+
+            summary_output=$(printf "Alias update summary\nPending: %s\nAliases updated: %s\nErrors: %s\nSkipped: %s\n\nUpdated aliases:\n%s\n\nErrors:\n%s\n" \
+              "$pending" "$updated" "$errors" "$skipped" "$accounts_lines" "$error_lines")
+
+            printf "summary<<EOF\n%s\nEOF\n" "$summary_output" >> "$GITHUB_OUTPUT"
+            printf "aliases_updated=%s\nerrors=%s\n" "$updated" "$errors" >> "$GITHUB_OUTPUT"
+            echo "$summary_output"
+
             if [ "$http_status" != "200" ]; then
               echo "Bulk alias update failed with status $http_status" >&2
               exit 1
             fi
-
-            updated=$(echo "$body" | jq -r '.updated // 0')
-            echo "✅ Aliases updated: $updated"
-
-            # Build readable list: old alias -> new alias, plus total
-            if [ "$updated" -gt 0 ]; then
-              accounts_lines=$(echo "$body" | jq -r '.accounts[] | ((.old_alias // "None") + " -> " + .new_alias)')
-              accounts_output=$(printf "%s\nTotal: %s" "$accounts_lines" "$updated")
-            else
-              accounts_output="No aliases were updated."
-            fi
-
-            # Pass list to next job via step output
-            # Write multi-line output without leading spaces on delimiter lines
-            printf "accounts_list<<EOF\n%s\nEOF\n" "$accounts_output" >> "$GITHUB_OUTPUT"
-            echo "$accounts_output"
 
   notify-success:
     needs: update-aliases
@@ -84,9 +91,9 @@ jobs:
           body: |
             The alias update completed successfully.
 
-            Below is the list of aliases updated:
+            Below is the run summary:
 
-            ${{ needs.update-aliases.outputs.accounts }}
+            ${{ needs.update-aliases.outputs.summary }}
             
 
   notify-failure:
@@ -105,4 +112,6 @@ jobs:
           to: cr@agmtechnology.com,aa@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
-            Updating IBKR account aliases failed.  Review workflow logs for details.
+            The alias update run completed with errors. The full run summary follows:
+
+            ${{ needs.update-aliases.outputs.summary }}

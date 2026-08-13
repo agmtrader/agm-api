@@ -244,23 +244,12 @@ def update_account_aliases():
         table_master_account = master_accounts_by_number.get(account_id)
         report_master_account = account.get('Master Account') or None
         master_account = table_master_account or report_master_account or None
-        master_account_source = (
-            'account_table' if table_master_account else
-            'clients_report' if report_master_account else
-            'default_connector_master_account'
-        )
-        logger.info(
-            f"Alias master-account resolution: account_id={account_id!r}, "
-            f"account_table={table_master_account!r}, clients_report={report_master_account!r}, "
-            f"selected={master_account!r}, source={master_account_source}"
-        )
 
         if not account_id or not title:
             skipped_accounts.append({
                 'account_id': account_id or None,
                 'old_alias': old_alias,
                 'master_account': master_account,
-                'master_account_source': master_account_source,
                 'reason': 'Missing Account ID or Title'
             })
             logger.warning(f"Skipping alias update for account_id={account_id!r} title={title!r}")
@@ -279,7 +268,6 @@ def update_account_aliases():
                 'old_alias': old_alias,
                 'new_alias': new_alias,
                 'master_account': master_account,
-                'master_account_source': master_account_source,
             })
             logger.success(f"Updated alias for {account_id}: {old_alias} -> {new_alias}")
         except Exception as e:
@@ -288,7 +276,6 @@ def update_account_aliases():
                 'old_alias': old_alias,
                 'new_alias': new_alias,
                 'master_account': master_account,
-                'master_account_source': master_account_source,
                 'error': str(e)
             }
             if isinstance(e, ServiceError):
