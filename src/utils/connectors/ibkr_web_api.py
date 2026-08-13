@@ -248,6 +248,32 @@ class IBKRWebAPI:
 
             response = requests.get(url, headers=headers)
             if response.status_code != 200:
+                if response.status_code == 403:
+                    # IBKR is reachable, but this credential set is not
+                    # authorized for the requested account. This is a
+                    # dependency authorization result, not an AGM server
+                    # failure; preserve that distinction at the HTTP layer.
+                    try:
+                        ibkr_payload = response.json()
+                    except ValueError:
+                        ibkr_payload = {}
+                    detail = (
+                        ibkr_payload.get('detail')
+                        if isinstance(ibkr_payload, dict)
+                        else None
+                    ) or 'IBKR credentials are not authorized for this account'
+                    logger.warning(
+                        f"IBKR account authorization denied for {account_id}: {detail}"
+                    )
+                    raise ServiceError(
+                        message=detail,
+                        status_code=403,
+                        code='ibkr_account_unauthorized',
+                        details={
+                            'account_id': account_id,
+                            'ibkr_status': response.status_code,
+                        },
+                    )
                 raise Exception(f"Error {response.status_code}: {response.text}")
             
             logger.success(f"Account details fetched successfully")
