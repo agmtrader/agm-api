@@ -1,11 +1,13 @@
 import time
 import uuid
+import os
 
 from flask import Flask, g, jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, verify_jwt_in_request, exceptions, create_access_token
 from dotenv import load_dotenv
 from flask_limiter import Limiter
+from flask_limiter.errors import RateLimitExceeded
 from flask_limiter.util import get_remote_address
 from src.utils.logger import logger
 from datetime import timedelta
@@ -50,13 +52,23 @@ def start_api():
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = DEFAULT_TOKEN_EXPIRES
     jwt = JWTManager(app)
 
+    # Keep the broad API limit moderate, and make the values configurable so
+    # deployments can tune them without changing code.  The default in-memory
+    # backend is suitable for a single local process; production deployments
+    # should set RATELIMIT_STORAGE_URI to a shared backend such as Redis.
+    default_rate_limit = os.getenv('API_RATE_LIMIT', '60 per minute')
+    auth_rate_limit = os.getenv('API_AUTH_RATE_LIMIT', '5 per minute')
+    token_rate_limit = os.getenv('API_TOKEN_RATE_LIMIT', '3 per minute')
+    rate_limit_storage = os.getenv('RATELIMIT_STORAGE_URI', 'memory://')
+
     # Initialize Limiter
     limiter = Limiter(
         get_remote_address,
         app=app,
-        default_limits=["600 per minute"],
-        storage_uri='memory://',
-        strategy="fixed-window"
+        application_limits=[default_rate_limit],
+        storage_uri=rate_limit_storage,
+        strategy=os.getenv('RATELIMIT_STRATEGY', 'fixed-window'),
+        headers_enabled=True,
     )
 
     # Initialize the database explicitly before importing blueprints. This
@@ -149,6 +161,17 @@ def start_api():
             "error_id": getattr(g, 'request_id', None),
         }), 403
 
+    @app.errorhandler(RateLimitExceeded)
+    def rate_limit_error(error):
+        """Return a stable JSON response when a client exceeds a limit."""
+        response = jsonify({
+            "error": "Too many requests",
+            "message": "Rate limit exceeded. Please retry later.",
+            "error_id": getattr(g, 'request_id', None),
+        })
+        response.status_code = 429
+        return response
+
     @app.errorhandler(ServiceError)
     def service_error(error):
         if error.status_code >= 500:
@@ -162,6 +185,7 @@ def start_api():
 
     # JWT Token
     @app.route('/token', methods=['POST'])
+    @limiter.limit(token_rate_limit, override_defaults=True)
     @format_response
     def token():
         """Generate a short-lived API access token for the special local token payload."""
@@ -216,6 +240,17 @@ def start_api():
     app.register_blueprint(management_type_requests.bp, url_prefix='/management_type_requests')
     app.register_blueprint(document_review_emails.bp, url_prefix='/document_review_emails')
     app.register_blueprint(document_review_responsibles.bp, url_prefix='/document_review_responsibles')
+
+    # The login view lives in a blueprint, so apply its stricter public-endpoint
+    # limit after the blueprint is registered.  The application-wide limit still
+    # applies as a separate safety net.
+    login_endpoint = 'users.login'
+    login_view = app.view_functions.get(login_endpoint)
+    if login_view is not None:
+        app.view_functions[login_endpoint] = limiter.limit(
+            auth_rate_limit,
+            override_defaults=True,
+        )(login_view)
 
     
     return app
