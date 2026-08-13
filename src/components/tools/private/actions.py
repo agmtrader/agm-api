@@ -1,6 +1,6 @@
 
 from datetime import date, datetime
-from src.utils.exception import handle_exception
+from src.utils.exception import ServiceError, handle_exception
 from src.components.tools.public.reporting import (
     get_nav_report,
     get_clients_report,
@@ -216,6 +216,23 @@ def update_account_aliases():
         c for c in clients
         if _is_blank(c.get('Alias')) and c.get('Status') not in ('Rejected', 'Closed', 'Funded Pending')
     ]
+
+    # The clients report does not reliably include the master account used by
+    # IBKR. Resolve it from our account table, which is the source of truth for
+    # the credentials associated with each account.
+    from src.components.clients.accounts import read_accounts
+    pending_account_ids = [
+        str(account.get('Account ID') or '').strip()
+        for account in pending_accounts
+        if str(account.get('Account ID') or '').strip()
+    ]
+    account_rows = read_accounts({'ibkr_account_number': pending_account_ids}) if pending_account_ids else []
+    master_accounts_by_number = {
+        str(row.get('ibkr_account_number') or '').strip(): row.get('master_account')
+        for row in account_rows
+        if str(row.get('ibkr_account_number') or '').strip()
+    }
+
     updated_accounts = []
     failed_accounts = []
     skipped_accounts = []
@@ -224,13 +241,26 @@ def update_account_aliases():
         account_id = str(account.get('Account ID') or '').strip()
         title = str(account.get('Title') or '').strip()
         old_alias = account.get('Alias')
-        master_account = account.get('Master Account') or None
+        table_master_account = master_accounts_by_number.get(account_id)
+        report_master_account = account.get('Master Account') or None
+        master_account = table_master_account or report_master_account or None
+        master_account_source = (
+            'account_table' if table_master_account else
+            'clients_report' if report_master_account else
+            'default_connector_master_account'
+        )
+        logger.info(
+            f"Alias master-account resolution: account_id={account_id!r}, "
+            f"account_table={table_master_account!r}, clients_report={report_master_account!r}, "
+            f"selected={master_account!r}, source={master_account_source}"
+        )
 
         if not account_id or not title:
             skipped_accounts.append({
                 'account_id': account_id or None,
                 'old_alias': old_alias,
                 'master_account': master_account,
+                'master_account_source': master_account_source,
                 'reason': 'Missing Account ID or Title'
             })
             logger.warning(f"Skipping alias update for account_id={account_id!r} title={title!r}")
@@ -248,20 +278,26 @@ def update_account_aliases():
                 'account_id': account_id,
                 'old_alias': old_alias,
                 'new_alias': new_alias,
-                'master_account': master_account
+                'master_account': master_account,
+                'master_account_source': master_account_source,
             })
             logger.success(f"Updated alias for {account_id}: {old_alias} -> {new_alias}")
         except Exception as e:
-            failed_accounts.append({
+            failed_account = {
                 'account_id': account_id,
                 'old_alias': old_alias,
                 'new_alias': new_alias,
                 'master_account': master_account,
+                'master_account_source': master_account_source,
                 'error': str(e)
-            })
+            }
+            if isinstance(e, ServiceError):
+                failed_account['error_code'] = e.code
+                failed_account['error_details'] = e.details
+            failed_accounts.append(failed_account)
             logger.error(f"Failed to update alias for {account_id}: {e}")
 
-    return {
+    result = {
         'pending': len(pending_accounts),
         'updated': len(updated_accounts),
         'failed': len(failed_accounts),
@@ -270,6 +306,19 @@ def update_account_aliases():
         'failed_accounts': failed_accounts,
         'skipped_accounts': skipped_accounts
     }
+
+    # Do not stop the batch at the first IBKR rejection. Every pending account
+    # has been attempted by this point; now surface the batch failure to the
+    # caller with the complete per-account results.
+    if failed_accounts:
+        raise ServiceError(
+            message=f"{len(failed_accounts)} account alias update(s) failed",
+            status_code=502,
+            code='ibkr_account_alias_batch_failed',
+            details=result,
+        )
+
+    return result
 
 @handle_exception
 def send_compliance_manual_update_email():

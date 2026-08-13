@@ -386,7 +386,13 @@ class IBKRWebAPI:
         """
         try:
             original_creds = self._apply_credentials(master_account)
-            logger.info(f"Updating alias for account {account_id} to {new_alias}")
+            effective_master_account = str(master_account or 'I6413690').strip().upper()
+            logger.info(
+                f"IBKR alias request: account_id={account_id!r}, "
+                f"requested_master_account={master_account!r}, "
+                f"effective_master_account={effective_master_account!r}, "
+                f"client_id={self.CLIENT_ID!r}, key_id={self.KEY_ID!r}, alias={new_alias!r}"
+            )
 
             url = f"{self.BASE_URL}/gw/api/v1/accounts"
 
@@ -415,8 +421,39 @@ class IBKRWebAPI:
                 logger.error(f"Error {response.status_code}: {response.text}")
                 raise Exception(f"Error {response.status_code}: {response.text}")
 
+            data = response.json()
+            # IBKR can return HTTP 200 for a processed request as well as for
+            # a rejected request. The actual outcome is in the nested
+            # updateAccountAlias status, not in the HTTP status code.
+            alias_result = (
+                data.get('fileData', {}).get('data', {}).get('updateAccountAlias', {})
+                if isinstance(data, dict) else {}
+            )
+            if not alias_result and isinstance(data, dict):
+                alias_result = data.get('data', {}).get('updateAccountAlias', {}) or data.get('updateAccountAlias', {})
+
+            status = str(alias_result.get('status') or '').strip().upper()
+            if status and status not in {'PROCESSED', 'SUCCESS', 'COMPLETED'}:
+                message = alias_result.get('message') or 'IBKR rejected the account alias update'
+                logger.error(
+                    f"IBKR rejected alias update for account {account_id}: "
+                    f"{message} (request_id={alias_result.get('requestId')})"
+                )
+                raise ServiceError(
+                    message=f"IBKR account alias update failed: {message}",
+                    status_code=502,
+                    code='ibkr_account_alias_update_failed',
+                    details={
+                        'account_id': account_id,
+                        'master_account': effective_master_account,
+                        'ibkr_status': status,
+                        'ibkr_request_id': alias_result.get('requestId'),
+                        'ibkr_response': data,
+                    },
+                )
+
             logger.success("Account alias updated successfully")
-            return response.json()
+            return data
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 

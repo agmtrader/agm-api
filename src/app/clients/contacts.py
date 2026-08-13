@@ -69,7 +69,7 @@ def upload_contact_document_route():
     """Upload and attach a document to a contact, including file metadata and optional review fields."""
     payload = request.get_json(force=True)
     return upload_contact_document(
-        account_id=payload.get('account_id'),
+        account_id=payload.get('account_id') or None,
         contact_id=payload.get('contact_id'),
         file_name=payload.get('file_name'),
         file_length=payload.get('file_length'),
