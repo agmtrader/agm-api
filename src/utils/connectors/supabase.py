@@ -163,15 +163,6 @@ class Supabase:
             hierarchy2 = Column(Text, nullable=False)
             name = Column(Text, nullable=False)
 
-        class AdvisorContract(self.Base):
-            __tablename__ = 'advisor_contracts'
-            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-            advisor_id = Column(UUID(as_uuid=True), ForeignKey('advisor.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
-            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
-            doc_id = Column(UUID(as_uuid=True), ForeignKey('document.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
-            date_initialized = Column(Text, nullable=False)
-
         class AdvisorChangeRequest(self.Base):
             __tablename__ = 'advisor_change_request'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -376,7 +367,6 @@ class Supabase:
         self.AccountInstruction = AccountInstruction
         self.AccountComment = AccountComment
         self.Advisor = Advisor
-        self.AdvisorContract = AdvisorContract
         self.AdvisorChangeRequest = AdvisorChangeRequest
         self.Contact = Contact
         self.ContactScreening = ContactScreening
