@@ -164,10 +164,35 @@ def _get_string_field(row: dict, keys: list[str]) -> str:
         value = row.get(key)
         if value is None:
             continue
+        try:
+            if pd.isna(value):
+                continue
+        except (TypeError, ValueError):
+            pass
         text = str(value).strip()
-        if text:
+        if text and text.lower() not in {'nan', 'nat', 'none', 'null'}:
             return text
     return ''
+
+
+def _get_number_field(row: dict, keys: list[str]) -> float | None:
+    for key in keys:
+        value = _to_float_or_none(row.get(key))
+        if value is not None and np.isfinite(value):
+            return float(value)
+    return None
+
+
+def _resolve_asset_metadata(row: dict) -> dict:
+    return {
+        'industry': _get_string_field(row, ['industry', 'Industry', 'sector', 'Sector']),
+        'coupon': _get_number_field(row, ['coupon', 'Coupon']),
+        'years_to_maturity': _get_number_field(
+            row,
+            ['years_to_maturity', 'Years to Maturity', 'yearsToMaturity'],
+        ),
+        'maturity': _get_string_field(row, ['maturity', 'Maturity']),
+    }
 
 def _resolve_market_asset_symbol(row: dict) -> str:
     return _get_string_field(row, ['Symbol', 'symbol', 'Ticker', 'ticker', 'sheet_name'])
@@ -646,7 +671,9 @@ def _prepare_etf_candidates(etfs_df: pd.DataFrame, proposal_equity_df: pd.DataFr
         )
         candidates['Current Yield_x'] = fallback_yield
     candidates['S&P Equivalent_x'] = 'ETF'
-    return candidates[['Ticker', 'Symbol_x', 'Current Yield_x', 'S&P Equivalent_x']]
+    # Keep the source columns so optional proposal metadata such as industry
+    # can be preserved when it exists in the ETF snapshot.
+    return candidates
 
 
 def _distribution_from_risk_archetype(risk_archetype: dict) -> dict:
@@ -804,10 +831,12 @@ def _populate_investment_proposal_from_distribution(
 
         normalized_top_bonds = []
         for _, row in top_bonds.iterrows():
+            row_data = row.to_dict()
             normalized_top_bonds.append({
                 'Symbol_x': row['Symbol_x'],
                 'Current Yield_x': row['Current Yield_x'],
-                'S&P Equivalent_x': _resolve_rating(row.to_dict()) or row['S&P Equivalent_x'],
+                'S&P Equivalent_x': _resolve_rating(row_data) or row['S&P Equivalent_x'],
+                **_resolve_asset_metadata(row_data),
             })
 
         asset_type['bonds'].extend(normalized_top_bonds)
@@ -868,10 +897,12 @@ def _populate_investment_proposal_from_distribution(
             if bucket_needs[bucket['name']] <= 0:
                 continue
 
+            row_data = row.to_dict()
             bucket['bonds'].append({
                 'Symbol_x': row['Symbol_x'],
                 'Current Yield_x': row['Current Yield_x'],
                 'S&P Equivalent_x': row['S&P Equivalent_x'],
+                **_resolve_asset_metadata(row_data),
             })
             used_symbols.add(row['Ticker'])
             bucket_needs[bucket['name']] -= 1
@@ -923,6 +954,7 @@ def _normalize_bond_record(record: dict):
         'symbol': str(record.get('symbol', record.get('Symbol_x', ''))),
         'current_yield': float(record.get('current_yield', record.get('Current Yield_x', 0)) or 0),
         'equivalent': str(record.get('equivalent', record.get('S&P Equivalent_x', ''))),
+        **_resolve_asset_metadata(record),
     }
     if 'percentage' in record:
         normalized['percentage'] = float(record.get('percentage') or 0)
@@ -1174,6 +1206,7 @@ def create_investment_proposal_with_assets(assets: list[dict], risk_profile_id=N
                 'Symbol_x': _resolve_market_asset_display_symbol(matched_row, normalized_symbol),
                 'Current Yield_x': current_yield_pct,
                 'S&P Equivalent_x': str(rating),
+                **_resolve_asset_metadata(matched_row),
                 'ibcid': normalized_symbol,
                 'percentage': float(percentage),
                 'source_bucket': source_bucket,
