@@ -56,6 +56,14 @@ PROPOSAL_BUCKET_KEYS = {
     'etfs': 'etfs',
 }
 
+ASSET_METADATA_FIELDS = (
+    'industry',
+    'coupon',
+    'years_to_maturity',
+    'duration',
+    'maturity',
+)
+
 def _normalize_rating_token(value: str) -> str:
     token = str(value or '').strip().upper().replace(' ', '')
     return token
@@ -191,6 +199,7 @@ def _resolve_asset_metadata(row: dict) -> dict:
             row,
             ['years_to_maturity', 'Years to Maturity', 'yearsToMaturity'],
         ),
+        'duration': _get_number_field(row, ['duration', 'Duration']),
         'maturity': _get_string_field(row, ['maturity', 'Maturity']),
     }
 
@@ -509,6 +518,61 @@ def _assets_from_saved_proposal(proposal: dict) -> dict:
             if isinstance(asset, dict)
         ]
     return legacy_assets
+
+
+def _asset_metadata_value_is_missing(field: str, value) -> bool:
+    if field in {'industry', 'maturity'}:
+        return not str(value or '').strip()
+    numeric_value = _to_float_or_none(value)
+    return numeric_value is None or not np.isfinite(numeric_value)
+
+
+def _assets_need_market_metadata(assets: dict) -> bool:
+    for key in ('treasury', 'aaa_a', 'bbb', 'bb', 'bonds'):
+        for asset in assets.get(key, []) or []:
+            if isinstance(asset, dict) and any(
+                _asset_metadata_value_is_missing(field, asset.get(field))
+                for field in ASSET_METADATA_FIELDS
+            ):
+                return True
+    return False
+
+
+def _enrich_assets_with_market_metadata(assets: dict, context: dict) -> dict:
+    enriched_assets = {**assets}
+    bucket_sources = {
+        'treasury': context['ust_df'],
+        'aaa_a': context['rtd_df'],
+        'bbb': context['rtd_df'],
+        'bb': context['rtd_df'],
+        'bonds': context['rtd_df'],
+    }
+
+    for key, market_df in bucket_sources.items():
+        enriched_bucket = []
+        for asset in assets.get(key, []) or []:
+            if not isinstance(asset, dict):
+                continue
+
+            enriched_asset = {**asset}
+            if any(
+                _asset_metadata_value_is_missing(field, enriched_asset.get(field))
+                for field in ASSET_METADATA_FIELDS
+            ):
+                market_row = _find_matching_market_row(market_df, enriched_asset.get('symbol'))
+                if market_row:
+                    market_metadata = _resolve_asset_metadata(market_row)
+                    for field in ASSET_METADATA_FIELDS:
+                        if (
+                            _asset_metadata_value_is_missing(field, enriched_asset.get(field))
+                            and not _asset_metadata_value_is_missing(field, market_metadata.get(field))
+                        ):
+                            enriched_asset[field] = market_metadata[field]
+
+            enriched_bucket.append(enriched_asset)
+        enriched_assets[key] = enriched_bucket
+
+    return enriched_assets
 
 
 def _distribution_from_saved_assets_payload(assets: dict) -> dict | None:
@@ -1324,4 +1388,27 @@ def preview_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
 @handle_exception
 def read_investment_proposals(query: dict = None):
     investment_proposals = db.read(table='investment_proposal', query=query)
-    return [_normalize_saved_investment_proposal(investment_proposal) for investment_proposal in investment_proposals]
+    normalized_proposals = [
+        _normalize_saved_investment_proposal(investment_proposal)
+        for investment_proposal in investment_proposals
+    ]
+
+    if not any(
+        _assets_need_market_metadata(proposal.get('assets') or {})
+        for proposal in normalized_proposals
+    ):
+        return normalized_proposals
+
+    try:
+        context = _load_investment_proposal_context()
+    except Exception as exc:
+        logger.warning(f'Unable to enrich saved proposal asset metadata: {exc}')
+        return normalized_proposals
+
+    return [
+        {
+            **proposal,
+            'assets': _enrich_assets_with_market_metadata(proposal.get('assets') or {}, context),
+        }
+        for proposal in normalized_proposals
+    ]
