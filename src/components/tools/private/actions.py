@@ -15,6 +15,17 @@ import pandas as pd
 from src.utils.logger import logger
 from src.utils.connectors.gmail import GmailConnector
 
+
+# These contacts have explicitly asked not to receive funding reminders.
+# Keep matching case-insensitive and whitespace-tolerant because contact data
+# can come from manually maintained reporting exports.
+UNFUNDED_EMAIL_EXCLUSIONS = frozenset({
+    'ramirezfumero1995@gmail.com',
+    'andrealeon.aluz@gmail.com',
+    'paulbernavidesr@gmail.com',
+    'esquivelyrodriguez358@gmail.com',
+})
+
 def _screen_created_date(value):
     try:
         return datetime.strptime(str(value), '%Y%m%d%H%M%S').date()
@@ -173,7 +184,15 @@ def send_unfunded_emails():
     contacts_to_email = total_accounts.merge(contacts_df, left_on='contact_id', right_on='id', how='left')
     contacts_to_email = contacts_to_email[['ibkr_account_number', 'email', 'name', 'advisor_email', 'business_days_since_date_opened', 'notice_number']]
 
-    for contact in contacts_to_email.to_dict(orient='records')[1:]:
+    def _normalized_email(value):
+        return value.strip().lower() if isinstance(value, str) else ''
+
+    excluded_mask = contacts_to_email['email'].map(_normalized_email).isin(UNFUNDED_EMAIL_EXCLUSIONS)
+    for excluded_email in contacts_to_email.loc[excluded_mask, 'email'].dropna().tolist():
+        logger.info(f"Skipping funding notification for explicitly excluded email: {excluded_email!r}")
+    contacts_to_email = contacts_to_email.loc[~excluded_mask].copy()
+
+    for contact in contacts_to_email.to_dict(orient='records'):
         client_email = contact.get('email')
         if pd.isna(client_email) or not isinstance(client_email, str) or not client_email.strip():
             logger.info(
