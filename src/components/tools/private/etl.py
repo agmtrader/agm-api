@@ -1,5 +1,6 @@
 from pandas.tseries.offsets import BDay
 from datetime import datetime
+import os
 import pandas as pd
 import base64
 import time
@@ -669,6 +670,7 @@ def _extract_equity_like_snapshot(
     snapshot_type: str,
     config=None,
     upload: bool = True,
+    dev_mode: bool | None = None,
 ):
     api_client = _initialize_ibkr_market_data_client()
     conids = _resolve_snapshot_conids(api_client, tickers, sec_type='STK')
@@ -785,13 +787,26 @@ def _extract_equity_like_snapshot(
             logger.warning(f'Failed fetching 5-year ETF history for conid {conid}: {exc}')
             return None
 
-    if snapshot_type in {'ETF', 'STOCK'}:
+    # Historical prices are only fetched in development mode. Fetching five
+    # years of daily bars for every equity is too slow for the parent ETL
+    # request and can exhaust IBKR's historical-data limits.
+    if dev_mode is None:
+        dev_mode = os.getenv('DEV_MODE', 'false').lower() in ('true', '1', 'yes')
+
+    if snapshot_type in {'ETF', 'STOCK'} and dev_mode:
         historical_yields = []
         for conid in df['Conidex']:
             historical_yields.append(_average_annual_return(conid))
             # Avoid bursting the IBKR historical-data endpoint for the equity list.
             time.sleep(0.1)
         df['Current Yield'] = historical_yields
+    elif snapshot_type in {'ETF', 'STOCK'}:
+        logger.info(
+            f'Skipping historical yield fetch for {snapshot_type} snapshot; '
+            'DEV_MODE is false.'
+        )
+        # Preserve the snapshot schema for consumers that expect this column.
+        df['Current Yield'] = None
 
     rename_map = {
         'Company_name': 'Company Name',
@@ -823,21 +838,27 @@ def _extract_equity_like_snapshot(
         )
     return df
 
-def extract_stock_snapshot(config=None):
+def extract_stock_snapshot(config=None, dev_mode: bool | None = None):
     return _extract_equity_like_snapshot(
         tickers=STOCK_SNAPSHOT_TICKERS,
         config_name='stocks_snapshot',
         snapshot_type='STOCK',
         config=config,
+        dev_mode=dev_mode,
     )
 
-def extract_etf_snapshot(config=None, upload: bool = True):
+def extract_etf_snapshot(
+    config=None,
+    upload: bool = True,
+    dev_mode: bool | None = None,
+):
     return _extract_equity_like_snapshot(
         tickers=ETF_SNAPSHOT_TICKERS,
         config_name='etfs_snapshot',
         snapshot_type='ETF',
         config=config,
         upload=upload,
+        dev_mode=dev_mode,
     )
 
 def _collect_watchlist_bond_conids(api_client, watchlist_id: str, max_retries: int = 5, sleep_seconds: int = 2, target_size: int = 500) -> list:
@@ -1568,6 +1589,13 @@ def process_bonds(df):
         row['Price'],
         row['Frequency']), 
         axis=1)
+
+    duration_failures = int(df['Duration'].isna().sum())
+    if duration_failures:
+        logger.error(
+            f"Bond duration calculation failed for {duration_failures} of {len(df)} rows; "
+            "failed values were left blank."
+        )
     
     # Create new columns for Moody's and S&P ratings
     df['Moodys'], df['SP'] = zip(*df['Ratings'].apply(extract_rating_from_text))
@@ -1931,17 +1959,25 @@ def get_bond_duration(maturity_date, coupon_rate, price, frequency):
         duration: Macaulay Duration in years
     """
 
-    # Default to semi-annual frequency if not provided because it's the most common frequency
-    if frequency is None:
-        frequency = 2
-
-
     try:
-        # Convert maturity_date to datetime.date if it's datetime
-        if isinstance(maturity_date, datetime.datetime):
-            maturity_date = maturity_date.date()
+        # Default to semi-annual frequency if not provided because it's the most common frequency.
+        if frequency is None or pd.isna(frequency) or frequency <= 0:
+            frequency = 2
 
-        today = datetime.date.today()
+        if pd.isna(maturity_date):
+            raise ValueError("maturity_date is missing")
+        if pd.isna(coupon_rate) or pd.isna(price):
+            raise ValueError(
+                f"coupon_rate or price is missing (coupon_rate={coupon_rate!r}, price={price!r})"
+            )
+        if price <= 0:
+            raise ValueError(f"price must be positive, got {price!r}")
+
+        # pandas Timestamp is datetime-compatible, but datetime is imported as
+        # the class (not the datetime module). Normalize all supported inputs
+        # through pandas instead of accessing the nonexistent datetime.datetime.
+        maturity_date = pd.Timestamp(maturity_date).date()
+        today = datetime.now().date()
         
         # Time to maturity in years
         t = (maturity_date - today).days / 360.0
@@ -1966,8 +2002,15 @@ def get_bond_duration(maturity_date, coupon_rate, price, frequency):
         # Macaulay Duration formula
         duration = sum(weighted_pvs) / price
 
-    except Exception as e:
-        return 0
+    except Exception:
+        # Keep the row-level ETL running, but make the failure visible in logs
+        # and preserve it as missing data rather than a valid duration of zero.
+        logger.exception(
+            "Bond duration calculation failed "
+            f"(maturity_date={maturity_date!r}, coupon_rate={coupon_rate!r}, "
+            f"price={price!r}, frequency={frequency!r})"
+        )
+        return None
 
     return duration
 
