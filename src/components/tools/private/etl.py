@@ -368,7 +368,7 @@ def _append_missing_account_details(details: list):
         'U1512073', 'U1224910', 'U1213466', 'U1206083', 'U1192065', 'U1180647', 'U1161945', 'U1139038',
         'U1117382', 'U1114073', 'U7201776', 'U8431354', 'U6061707', 'U4892747', 'U4127415', 'U3320909',
         'U1037726', 'U928543', 'U918392', 'U877620', 'U758608', 'U743013', 'U528111', 'U471311', 'U450281',
-        'U436576', 'U401595', 'U13388281', 'U2573636', 'U7115856', 'U25243779', 'U13321987', 'U6774207',
+        'U436576', 'U401595', 'U13388281', 'U2573636', 'U7115856', 'U13321987', 'U6774207',
         'U6978407', 'U7107190', 'U7130162', 'U7254887', 'U7250030', 'U7442191', 'U7558648', 'U7585547',
         'U7692759', 'U7662396', 'U7761674', 'U7779413', 'U7849662', 'U7762995', 'U7811476', 'U7954199',
         'U7968914', 'U9151583', 'U9074670', 'U9074960', 'U8928849', 'U8944802', 'U8477223', 'U8497149',
@@ -613,19 +613,27 @@ def _initialize_ibkr_market_data_client():
     time.sleep(2)
     return api_client
 
-def _resolve_snapshot_conids(api_client, tickers: list[str], sec_type: str = 'STK') -> list[str]:
+def _resolve_snapshot_conids(
+    api_client,
+    tickers: list[str],
+    sec_type: str = 'STK',
+    return_mapping: bool = False,
+) -> list[str] | tuple[list[str], dict[str, str]]:
     conids = []
+    conid_to_ticker = {}
     seen = set()
+
+    logger.info(f'IBKR {sec_type} resolution started: {len(tickers)} configured tickers')
 
     for ticker in tickers:
         try:
             results = api_client.get_securities_by_symbol(ticker, sec_type)
         except Exception as exc:
-            logger.warning(f'Failed resolving {ticker}: {exc}')
+            logger.warning(f'MARKET_DATA_SYMBOL_FAILED ticker={ticker} stage=resolve error={exc}')
             continue
 
         if not isinstance(results, list):
-            logger.warning(f'Unexpected security search response for {ticker}: {results}')
+            logger.warning(f'MARKET_DATA_SYMBOL_FAILED ticker={ticker} stage=resolve reason=unexpected_response')
             continue
 
         exact_matches = [
@@ -647,22 +655,26 @@ def _resolve_snapshot_conids(api_client, tickers: list[str], sec_type: str = 'ST
                 break
 
         if not selected:
-            logger.warning(f'No {sec_type} contract found for {ticker}')
+            logger.warning(f'MARKET_DATA_SYMBOL_FAILED ticker={ticker} stage=resolve reason=no_{sec_type}_contract')
             continue
 
         conid = selected.get('conid')
         if conid is None:
-            logger.warning(f'No conid returned for {ticker}: {selected}')
+            logger.warning(f'MARKET_DATA_SYMBOL_FAILED ticker={ticker} stage=resolve reason=no_conid')
             continue
 
         conid = str(conid)
         if conid in seen:
+            logger.warning(f'MARKET_DATA_SYMBOL_FAILED ticker={ticker} stage=resolve reason=duplicate_conid conid={conid}')
             continue
 
         seen.add(conid)
         conids.append(conid)
+        conid_to_ticker[conid] = ticker
+        logger.info(f'MARKET_DATA_SYMBOL_RESOLVED ticker={ticker} conid={conid}')
 
-    return conids
+    logger.info(f'IBKR {sec_type} resolution complete: resolved={len(conids)} failed={len(tickers) - len(conids)}')
+    return (conids, conid_to_ticker) if return_mapping else conids
 
 def _extract_equity_like_snapshot(
     tickers: list[str],
@@ -673,7 +685,9 @@ def _extract_equity_like_snapshot(
     dev_mode: bool | None = None,
 ):
     api_client = _initialize_ibkr_market_data_client()
-    conids = _resolve_snapshot_conids(api_client, tickers, sec_type='STK')
+    conids, conid_to_ticker = _resolve_snapshot_conids(
+        api_client, tickers, sec_type='STK', return_mapping=True
+    )
 
     if not conids:
         raise Exception(f'No {snapshot_type} conids resolved from IBKR security search')
@@ -684,7 +698,42 @@ def _extract_equity_like_snapshot(
         chunk_size=75,
         sleep_seconds=0.25
     )
-    df = pd.DataFrame(snapshot)
+    # Keep the identity from the security search through the snapshot call.
+    # IBKR can omit a conid or return an error object for an individual symbol;
+    # those rows must not abort otherwise valid market-data output.
+    valid_snapshot = []
+    returned_conids = set()
+    for item in snapshot or []:
+        if not isinstance(item, dict):
+            logger.warning('MARKET_DATA_SYMBOL_FAILED stage=snapshot reason=non_object_response')
+            continue
+        raw_conid = item.get('conidex') or item.get('conid')
+        conid = str(raw_conid).split('@', 1)[0] if raw_conid is not None else None
+        ticker = conid_to_ticker.get(conid)
+        if item.get('error') or item.get('message'):
+            logger.warning(
+                f'MARKET_DATA_SYMBOL_FAILED ticker={ticker or "unknown"} conid={conid or "unknown"} '
+                f'stage=snapshot reason={item.get("error") or item.get("message")}'
+            )
+            continue
+        if not ticker:
+            logger.warning(f'MARKET_DATA_SYMBOL_FAILED stage=snapshot reason=unmatched_conid conid={conid or "unknown"}')
+            continue
+        if not item.get('symbol') or not item.get('conidex'):
+            logger.warning(f'MARKET_DATA_SYMBOL_FAILED ticker={ticker} conid={conid} stage=snapshot reason=missing_identity_fields')
+            continue
+        returned_conids.add(conid)
+        valid_snapshot.append(item)
+
+    for conid, ticker in conid_to_ticker.items():
+        if conid not in returned_conids:
+            logger.warning(f'MARKET_DATA_SYMBOL_FAILED ticker={ticker} conid={conid} stage=snapshot reason=no_data_returned')
+
+    logger.info(
+        f'MARKET_DATA_SNAPSHOT_SUMMARY type={snapshot_type} requested={len(conids)} '
+        f'returned={len(returned_conids)} failed={len(conids) - len(returned_conids)}'
+    )
+    df = pd.DataFrame(valid_snapshot)
 
     if df.empty:
         raise Exception(f'No {snapshot_type} market data returned from IBKR')
@@ -710,8 +759,9 @@ def _extract_equity_like_snapshot(
     # the latest bar on (or before) each one-year boundary and average the five
     # sequential price returns.  The result is a percentage, matching the
     # Current Yield convention used by the investment proposal code.
-    def _average_annual_return(conid):
+    def _average_annual_return(conid, ticker):
         try:
+            logger.info(f'MARKET_DATA_HISTORY_START ticker={ticker} conid={conid}')
             history = api_client.get_historical_market_data(
                 conid=str(conid),
                 period='5y',
@@ -758,6 +808,10 @@ def _extract_equity_like_snapshot(
                     rows.append((timestamp, float(close)))
 
             if not rows:
+                logger.warning(
+                    f'MARKET_DATA_SYMBOL_FAILED ticker={ticker} conid={conid} '
+                    'stage=history reason=no_valid_bars'
+                )
                 return None
 
             prices = pd.Series(
@@ -773,7 +827,8 @@ def _extract_equity_like_snapshot(
             ]
             if len(anchors) < 6:
                 logger.warning(
-                    f'Only {len(anchors)} annual anchors available for ETF conid {conid}; '
+                    f'MARKET_DATA_SYMBOL_FAILED ticker={ticker} conid={conid} stage=history '
+                    f'reason=insufficient_annual_anchors anchors={len(anchors)}; '
                     f'cannot calculate five-year Current Yield.'
                 )
                 return None
@@ -782,9 +837,11 @@ def _extract_equity_like_snapshot(
                 (anchors[offset] / anchors[offset + 1]) - 1.0
                 for offset in range(5)
             ]
-            return round(sum(annual_returns) / len(annual_returns) * 100, 4)
+            result = round(sum(annual_returns) / len(annual_returns) * 100, 4)
+            logger.info(f'MARKET_DATA_HISTORY_SUCCESS ticker={ticker} conid={conid} current_yield={result}')
+            return result
         except Exception as exc:
-            logger.warning(f'Failed fetching 5-year ETF history for conid {conid}: {exc}')
+            logger.warning(f'MARKET_DATA_SYMBOL_FAILED ticker={ticker} conid={conid} stage=history error={exc}')
             return None
 
     # Historical prices are only fetched in development mode. Fetching five
@@ -795,8 +852,10 @@ def _extract_equity_like_snapshot(
 
     if snapshot_type in {'ETF', 'STOCK'} and dev_mode:
         historical_yields = []
-        for conid in df['Conidex']:
-            historical_yields.append(_average_annual_return(conid))
+        for _, row in df.iterrows():
+            conid = str(row['Conidex']).split('@', 1)[0]
+            ticker = conid_to_ticker.get(conid, row.get('Financial Instrument', 'unknown'))
+            historical_yields.append(_average_annual_return(conid, ticker))
             # Avoid bursting the IBKR historical-data endpoint for the equity list.
             time.sleep(0.1)
         df['Current Yield'] = historical_yields

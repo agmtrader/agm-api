@@ -443,13 +443,26 @@ class IBKRTradingAPI(IBKRWebAPI):
                 params["direction"] = direction
             if exchange:
                 params["exchange"] = exchange
-            logger.info(f"Fetching historical market data for {conid} (period={period}, bar={bar})")
+            logger.info(
+                f"IBKR_HISTORY_REQUEST conid={conid} period={period} bar={bar} "
+                f"start_time={start_time or '-'} direction={direction or '-'}"
+            )
             response = requests.get(url, headers=self._require_sso_headers(None), params=params)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
+                logger.error(
+                    f"IBKR_HISTORY_FAILED conid={conid} status={response.status_code} "
+                    f"response={response.text[:500]}"
+                )
                 raise Exception(f"Error {response.status_code}: {response.text}")
-            logger.success("Historical market data fetched successfully")
-            return response.json()
+            payload = response.json()
+            if isinstance(payload, dict) and (payload.get('error') or payload.get('message')):
+                logger.warning(
+                    f"IBKR_HISTORY_FAILED conid={conid} status={response.status_code} "
+                    f"reason={payload.get('error') or payload.get('message')}"
+                )
+            else:
+                logger.success(f"IBKR_HISTORY_SUCCESS conid={conid}")
+            return payload
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
