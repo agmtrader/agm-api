@@ -699,27 +699,39 @@ def _extract_equity_like_snapshot(
         sleep_seconds=0.25
     )
     # Keep the identity from the security search through the snapshot call.
-    # IBKR can omit a conid or return an error object for an individual symbol;
-    # those rows must not abort otherwise valid market-data output.
+    # Collect row-level failures so the report is marked failed with useful
+    # error details, while extract_data() catches the report error and moves
+    # on to the remaining reports in the pipeline.
     valid_snapshot = []
     returned_conids = set()
+    validation_failures = []
     for item in snapshot or []:
         if not isinstance(item, dict):
             logger.warning('MARKET_DATA_SYMBOL_FAILED stage=snapshot reason=non_object_response')
+            validation_failures.append('non_object_response')
             continue
-        raw_conid = item.get('conidex') or item.get('conid')
+        # IBKR returns the identity key as ``conidEx`` and the connector
+        # translates numeric field 55 to the enum name ``SYMBOL``. Keep the
+        # lowercase variants for compatibility with older connector payloads.
+        raw_conid = item.get('conidEx') or item.get('conidex') or item.get('conid')
         conid = str(raw_conid).split('@', 1)[0] if raw_conid is not None else None
         ticker = conid_to_ticker.get(conid)
+        symbol = item.get('SYMBOL') or item.get('symbol')
         if item.get('error') or item.get('message'):
+            validation_failures.append(
+                f"{ticker or 'unknown'}:{item.get('error') or item.get('message')}"
+            )
             logger.warning(
                 f'MARKET_DATA_SYMBOL_FAILED ticker={ticker or "unknown"} conid={conid or "unknown"} '
                 f'stage=snapshot reason={item.get("error") or item.get("message")}'
             )
             continue
         if not ticker:
+            validation_failures.append(f'unmatched_conid:{conid or "unknown"}')
             logger.warning(f'MARKET_DATA_SYMBOL_FAILED stage=snapshot reason=unmatched_conid conid={conid or "unknown"}')
             continue
-        if not item.get('symbol') or not item.get('conidex'):
+        if not symbol or not raw_conid:
+            validation_failures.append(f'{ticker}:missing_identity_fields')
             logger.warning(f'MARKET_DATA_SYMBOL_FAILED ticker={ticker} conid={conid} stage=snapshot reason=missing_identity_fields')
             continue
         returned_conids.add(conid)
@@ -733,6 +745,14 @@ def _extract_equity_like_snapshot(
         f'MARKET_DATA_SNAPSHOT_SUMMARY type={snapshot_type} requested={len(conids)} '
         f'returned={len(returned_conids)} failed={len(conids) - len(returned_conids)}'
     )
+    if validation_failures:
+        sample = ', '.join(validation_failures[:10])
+        if len(validation_failures) > 10:
+            sample += f', ... (+{len(validation_failures) - 10} more)'
+        raise RuntimeError(
+            f'{snapshot_type} market data validation failed for '
+            f'{len(validation_failures)} item(s): {sample}'
+        )
     df = pd.DataFrame(valid_snapshot)
 
     if df.empty:
