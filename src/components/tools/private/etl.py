@@ -1663,11 +1663,27 @@ def process_bonds(df):
     df['Frequency'] = df['Payment Frequency'].apply(get_payment_frequency_from_text)
     df['Price Cluster'] = df['Price'].apply(get_bond_price_cluster)
     df['Size Preasure'] = df.apply(lambda row: get_size_preasure(row['Ask Size'], row['Bid Size']), axis=1)
-    df['Duration'] = df.apply(lambda row: get_bond_duration(row['Maturity'], 
-        row['Coupon']/100, # Convert coupon percentage to decimal
-        row['Price'],
-        row['Frequency']), 
-        axis=1)
+    def calculate_bond_duration(row):
+        """Calculate duration while preserving enough row context to diagnose failures."""
+        maturity_date = row['Maturity']
+        coupon_rate = row['Coupon'] / 100  # Convert coupon percentage to decimal
+        price = row['Price']
+        frequency = row['Frequency']
+
+        if pd.isna(maturity_date):
+            logger.error(
+                "Bond duration calculation skipped because maturity is missing "
+                f"(symbol={row.get('Symbol')!r}, "
+                f"financial_instrument={row.get('Financial Instrument')!r}, "
+                f"company_name={row.get('Company Name')!r}, "
+                f"coupon={row.get('Coupon')!r}, price={price!r}, "
+                f"payment_frequency={row.get('Payment Frequency')!r}, "
+                f"frequency={frequency!r})"
+            )
+
+        return get_bond_duration(maturity_date, coupon_rate, price, frequency)
+
+    df['Duration'] = df.apply(calculate_bond_duration, axis=1)
 
     duration_failures = int(df['Duration'].isna().sum())
     if duration_failures:
