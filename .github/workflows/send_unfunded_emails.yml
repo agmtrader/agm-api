@@ -41,6 +41,18 @@ jobs:
           if [ "$http_status" != "200" ]; then
             echo "send_unfunded_emails failed with status $http_status" >&2
             echo "$body"
+            {
+              echo "## Unfunded email run"
+              echo
+              echo "| Metric | Value |"
+              echo "| --- | ---: |"
+              echo "| Status | Failed (HTTP $http_status) |"
+              echo "| Total sent | 0 |"
+              echo "| Total failed | 1 |"
+              echo "| Total skipped | — |"
+              echo
+              echo "The endpoint failed before returning a recipient result. Check the API logs for the per-recipient context and exception."
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
 
@@ -57,32 +69,42 @@ jobs:
 
           run_timestamp=$(date -u '+%Y-%m-%d %H:%M UTC')
           total_count=$(echo "$body" | jq 'length')
-          sent_count=$(echo "$body" | jq '[.[] | select((.email // "") | tostring | test("^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$"))] | length')
+          sent_count=$(echo "$body" | jq 'def valid_email: (.email // "") | tostring | test("^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$"); [.[] | select(valid_email)] | length')
           skipped_count=$((total_count - sent_count))
-
-          # Normalize null/NaN values and escape table-breaking characters.
-          clean_jq='def clean:
-            if . == null or (type == "number" and isnan) then "—"
-            else tostring | gsub("[\\r\\n|]"; " ")
-            end;'
+          failed_count=0
 
           {
             echo "## Unfunded email run"
             echo
-            echo "**Completed:** $run_timestamp  "
-            echo "**Recipients emailed:** $sent_count  "
-            echo "**Records skipped:** $skipped_count"
+            echo "**Completed:** $run_timestamp"
+            echo
+            echo "| Metric | Value |"
+            echo "| --- | ---: |"
+            echo "| Status | Succeeded |"
+            echo "| Total sent | $sent_count |"
+            echo "| Total failed | $failed_count |"
+            echo "| Total skipped | $skipped_count |"
+            echo "| Total records | $total_count |"
+            echo
+            echo "A successful API response means the valid-email records completed the send helper; failures abort the endpoint and are reported above."
+            echo
+            echo "<details>"
+            echo "<summary>Recipient details</summary>"
             echo
             echo "### Recipients emailed"
             echo
             if [ "$sent_count" -gt 0 ]; then
               echo '| Client | IBKR account | Email | Advisor | Notice | Business days open |'
               echo '| --- | --- | --- | --- | ---: | ---: |'
-              echo "$body" | jq -r "$clean_jq
+              echo "$body" | jq -r 'def clean:
+                if . == null or (type == "number" and isnan) then "—"
+                else tostring | gsub("[\\r\\n|]"; " ")
+                end;
+                def valid_email: (.email // "") | tostring | test("^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$");
                 .[]
-                | select((.email // \"\") | tostring | test(\"^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$\"))
+                | select(valid_email)
                 | [(.name | clean), (.ibkr_account_number | clean), (.email | clean), (.advisor_email | clean), (.notice_number | clean), (.business_days_since_date_opened | clean)]
-                | \"| \" + join(\" | \") + \" |\""
+                | "| " + join(" | ") + " |"'
             else
               echo "No recipients found."
             fi
@@ -95,10 +117,16 @@ jobs:
               echo
               echo '| Client | IBKR account | Reason |'
               echo '| --- | --- | --- |'
-              echo "$body" | jq -r "$clean_jq
+              echo "$body" | jq -r 'def clean:
+                if . == null or (type == "number" and isnan) then "—"
+                else tostring | gsub("[\\r\\n|]"; " ")
+                end;
+                def valid_email: (.email // "") | tostring | test("^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$");
                 .[]
-                | select(((.email // \"\") | tostring | test(\"^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$\")) | not)
-                | [(.name | clean), (.ibkr_account_number | clean), \"Missing or invalid client email\"]
-                | \"| \" + join(\" | \") + \" |\""
+                | select(valid_email | not)
+                | [(.name | clean), (.ibkr_account_number | clean), "Missing or invalid client email"]
+                | "| " + join(" | ") + " |"'
             fi
+            echo
+            echo "</details>"
           } >> "$GITHUB_STEP_SUMMARY"

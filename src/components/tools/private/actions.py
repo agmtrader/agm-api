@@ -184,19 +184,38 @@ def send_unfunded_emails():
     contacts_to_email = total_accounts.merge(contacts_df, left_on='contact_id', right_on='id', how='left')
     contacts_to_email = contacts_to_email[['ibkr_account_number', 'email', 'name', 'advisor_email', 'business_days_since_date_opened', 'notice_number']]
 
+    with_client_email = int(contacts_to_email['email'].map(lambda value: isinstance(value, str) and bool(value.strip())).sum())
+    without_client_email = int(contacts_to_email['email'].map(lambda value: not isinstance(value, str) or not value.strip()).sum())
+    logger.info(
+        f"Prepared unfunded email batch: candidates={len(contacts_to_email)}, "
+        f"with_client_email={with_client_email}, without_client_email={without_client_email}"
+    )
+
     def _normalized_email(value):
         return value.strip().lower() if isinstance(value, str) else ''
 
     excluded_mask = contacts_to_email['email'].map(_normalized_email).isin(UNFUNDED_EMAIL_EXCLUSIONS)
-    for excluded_email in contacts_to_email.loc[excluded_mask, 'email'].dropna().tolist():
-        logger.info(f"Skipping funding notification for explicitly excluded email: {excluded_email!r}")
+    for excluded in contacts_to_email.loc[excluded_mask].to_dict(orient='records'):
+        logger.info(
+            "Skipping unfunded email (explicit exclusion): account=%r client=%r email=%r "
+            "advisor_email=%r business_days_since_opened=%r notice_number=%r" % (
+                excluded.get('ibkr_account_number'), excluded.get('name'), excluded.get('email'),
+                excluded.get('advisor_email'), excluded.get('business_days_since_date_opened'),
+                excluded.get('notice_number'),
+            )
+        )
     contacts_to_email = contacts_to_email.loc[~excluded_mask].copy()
 
     for contact in contacts_to_email.to_dict(orient='records'):
         client_email = contact.get('email')
         if pd.isna(client_email) or not isinstance(client_email, str) or not client_email.strip():
             logger.info(
-                f"Skipping funding notification for account {contact.get('ibkr_account_number')} due to invalid email: {client_email!r}"
+                "Skipping unfunded email (invalid client email): account=%r client=%r email=%r "
+                "advisor_email=%r business_days_since_opened=%r notice_number=%r" % (
+                    contact.get('ibkr_account_number'), contact.get('name'), client_email,
+                    contact.get('advisor_email'), contact.get('business_days_since_date_opened'),
+                    contact.get('notice_number'),
+                )
             )
             continue
 
@@ -206,14 +225,28 @@ def send_unfunded_emails():
         else:
             advisor_email = advisor_email.strip()
 
-        send_funding_notification_email(
-            content={},
-            client_email=client_email.strip(),
-            lang='es',
-            cc=advisor_email,
-            days_since_opened=contact['business_days_since_date_opened'],
-            notice_number=contact['notice_number']
+        log_context = (
+            "account=%r client=%r email=%r advisor_email=%r "
+            "business_days_since_opened=%r notice_number=%r"
         )
+        log_values = (
+            contact.get('ibkr_account_number'), contact.get('name'), client_email.strip(),
+            advisor_email, contact.get('business_days_since_date_opened'), contact.get('notice_number'),
+        )
+        logger.info("Sending unfunded email: " + (log_context % log_values))
+        try:
+            send_funding_notification_email(
+                content={},
+                client_email=client_email.strip(),
+                lang='es',
+                cc=advisor_email,
+                days_since_opened=contact['business_days_since_date_opened'],
+                notice_number=contact['notice_number']
+            )
+        except Exception:
+            logger.exception("Unfunded email failed: " + (log_context % log_values))
+            raise
+        logger.info("Unfunded email sent successfully: " + (log_context % log_values))
     
     return contacts_to_email.to_dict(orient='records')
     
