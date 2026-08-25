@@ -9,6 +9,7 @@ import re
 import json
 import hashlib
 import pytz
+from collections import Counter
 
 from src.utils.connectors.drive import GoogleDrive
 from src.utils.exception import ServiceError, handle_exception
@@ -203,13 +204,21 @@ def _canonicalize_row(row) -> str:
 def _row_change_summary(today_rows: list, yesterday_rows: list, sample_size: int = 3) -> dict:
     today_map = {_canonicalize_row(row): row for row in (today_rows or [])}
     yesterday_map = {_canonicalize_row(row): row for row in (yesterday_rows or [])}
+    today_counts = Counter(_canonicalize_row(row) for row in (today_rows or []))
+    yesterday_counts = Counter(_canonicalize_row(row) for row in (yesterday_rows or []))
 
-    added_keys = sorted(set(today_map.keys()) - set(yesterday_map.keys()))
-    removed_keys = sorted(set(yesterday_map.keys()) - set(today_map.keys()))
+    added_keys = sorted(
+        key for key, count in (today_counts - yesterday_counts).items()
+        if count > 0
+    )
+    removed_keys = sorted(
+        key for key, count in (yesterday_counts - today_counts).items()
+        if count > 0
+    )
 
     return {
-        'added_count': len(added_keys),
-        'removed_count': len(removed_keys),
+        'added_count': sum((today_counts - yesterday_counts).values()),
+        'removed_count': sum((yesterday_counts - today_counts).values()),
         'added_samples': [today_map[k] for k in added_keys[:sample_size]],
         'removed_samples': [yesterday_map[k] for k in removed_keys[:sample_size]],
     }

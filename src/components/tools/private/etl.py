@@ -127,6 +127,7 @@ def extract_data(etl_config) -> dict:
             preexisting_batch_files = set()
             batch_file_inspection_error = str(e)
 
+    preexisting_steps = []
     for file_config in etl_config.get('files', []):
         step_name = file_config.get('name', 'unknown')
         extract_func = file_config.get('extract_func')
@@ -135,7 +136,7 @@ def extract_data(etl_config) -> dict:
             if preexisting_batch_files is not None and expected_file_name in preexisting_batch_files:
                 steps.append({'name': step_name, 'status': 'skipped'})
             else:
-                steps.append({
+                step = {
                     'name': step_name,
                     'status': 'failed',
                     'error': (
@@ -145,7 +146,9 @@ def extract_data(etl_config) -> dict:
                         else f'Expected pre-existing batch file was not found: '
                         f'{expected_file_name}'
                     )
-                })
+                }
+                steps.append(step)
+                preexisting_steps.append((step, expected_file_name))
             continue
         try:
             extract_func(file_config)
@@ -154,7 +157,24 @@ def extract_data(etl_config) -> dict:
             logger.error(f'Error during {step_name}: {e}')
             steps.append({'name': step_name, 'status': 'failed', 'error': str(e)})
 
-    failed_steps = [step for step in steps if step.get('status') != 'success']
+    # Manually supplied files can arrive while extractor functions are still
+    # running. Reconcile against the final batch state before declaring them
+    # missing; backup and transform already consume this final state.
+    if preexisting_steps:
+        try:
+            final_batch_files = {
+                file.get('name')
+                for file in (Drive.get_files_in_folder(batch_folder_id) or [])
+                if file.get('name')
+            }
+            for step, expected_file_name in preexisting_steps:
+                if expected_file_name in final_batch_files:
+                    step['status'] = 'skipped'
+                    step.pop('error', None)
+        except Exception as e:
+            logger.error(f'Unable to reconcile pre-existing batch files: {e}')
+
+    failed_steps = [step for step in steps if step.get('status') == 'failed']
     overall_status = 'success' if not failed_steps else 'partial'
 
     logger.announcement('Information successfully extracted for reports.', type='success')
@@ -1671,10 +1691,23 @@ def process_bonds(df):
         frequency = row['Frequency']
 
         if pd.isna(maturity_date):
+            instrument = str(row.get('Financial Instrument') or '')
+            # Perpetual bonds have no principal repayment date by definition,
+            # so Macaulay duration is not applicable. Do not turn this expected
+            # source value into an Error Reporting event by calling the dated
+            # bond calculator with a missing maturity.
+            if re.search(r'\bperpetual\b|\bperp\.?\b', instrument, re.IGNORECASE):
+                logger.warning(
+                    "Bond duration not applicable for perpetual instrument "
+                    f"(symbol={row.get('Symbol')!r}, "
+                    f"financial_instrument={instrument!r})"
+                )
+                return None
+
             logger.error(
                 "Bond duration calculation skipped because maturity is missing "
                 f"(symbol={row.get('Symbol')!r}, "
-                f"financial_instrument={row.get('Financial Instrument')!r}, "
+                f"financial_instrument={instrument!r}, "
                 f"company_name={row.get('Company Name')!r}, "
                 f"coupon={row.get('Coupon')!r}, price={price!r}, "
                 f"payment_frequency={row.get('Payment Frequency')!r}, "
@@ -1685,7 +1718,14 @@ def process_bonds(df):
 
     df['Duration'] = df.apply(calculate_bond_duration, axis=1)
 
-    duration_failures = int(df['Duration'].isna().sum())
+    perpetual_rows = (
+        df['Maturity'].isna()
+        & df['Financial Instrument'].astype(str).str.contains(
+            r'\bperpetual\b|\bperp\.?\b', case=False, regex=True, na=False
+        )
+    )
+    duration_not_applicable = int(perpetual_rows.sum())
+    duration_failures = int(df['Duration'].isna().sum()) - duration_not_applicable
     if duration_failures:
         logger.error(
             f"Bond duration calculation failed for {duration_failures} of {len(df)} rows; "

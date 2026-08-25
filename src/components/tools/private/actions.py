@@ -41,6 +41,7 @@ def run_screenings(apply_screenings: bool = True) -> dict:
             'apply_screenings': apply_screenings,
             'screenings_skipped': True,
             'skip_reason': 'OFAC, UK, and UN sanctions lists unchanged vs yesterday',
+            'sanctions_comparison': comparison,
             'contacts_targeted': 0,
             'screenings_executed': 0,
             'screening_errors': [],
@@ -67,6 +68,7 @@ def run_screenings(apply_screenings: bool = True) -> dict:
     result = {
         'apply_screenings': apply_screenings,
         'screenings_skipped': False,
+        'sanctions_comparison': comparison,
         'contacts_targeted': len(contact_ids),
         'screenings_executed': 0,
         'screening_errors': [],

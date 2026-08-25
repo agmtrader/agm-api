@@ -70,6 +70,7 @@ def _is_rejected_status(status):
 
 class IBKRWebAPI:
 
+    DEFAULT_MASTER_ACCOUNT = "I6413690"
     MASTER_ACCOUNT_CREDENTIALS = {
         "F10740574": {"client_id": "AGMTechnology-FA2", "key_id": "prodfa"},
         "I6413690": {"client_id": "AGMTechnology-FD2", "key_id": "prodfd"},
@@ -96,13 +97,19 @@ class IBKRWebAPI:
         """
         original = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         self.CLIENT_PRIVATE_KEY = get_secret("IBKR_ACCOUNT_MANAGEMENT_PRIVATE_KEY")
-        normalized_master_account = str(master_account).strip().upper() if master_account else "I6413690"
-        credentials = self.MASTER_ACCOUNT_CREDENTIALS.get(normalized_master_account)
-        if not credentials:
-            allowed_ids = ", ".join(sorted(self.MASTER_ACCOUNT_CREDENTIALS.keys()))
-            raise Exception(
-                f"Invalid master_account: {master_account}. "
-                f"Expected one of: {allowed_ids}"
+        normalized_master_account = (
+            str(master_account).strip().upper()
+            if master_account
+            else self.DEFAULT_MASTER_ACCOUNT
+        )
+        credentials = self.MASTER_ACCOUNT_CREDENTIALS.get(
+            normalized_master_account,
+            self.MASTER_ACCOUNT_CREDENTIALS[self.DEFAULT_MASTER_ACCOUNT],
+        )
+        if normalized_master_account not in self.MASTER_ACCOUNT_CREDENTIALS:
+            logger.warning(
+                f"Master account {normalized_master_account} has no dedicated "
+                f"credential mapping; using default {self.DEFAULT_MASTER_ACCOUNT} credentials"
             )
 
         self.CLIENT_ID = credentials["client_id"]

@@ -64,14 +64,14 @@ jobs:
           uk_matches=$(echo "$body" | jq -r '.uk_matches // 0')
           un_matches=$(echo "$body" | jq -r '.un_matches // 0')
           summary_messages=$(echo "$body" | jq -r '(.summary_messages // []) | if length == 0 then "None" else join("; ") end')
-          sanctions_available=$(echo "$body" | jq -r '.sanctions_comparison.available // false')
+          sanctions_available=$(echo "$body" | jq -r '.sanctions_comparison.all_available // false')
           sanctions_all_same=$(echo "$body" | jq -r '.sanctions_comparison.all_same // false')
-          ofac_added=$(echo "$body" | jq -r '.sanctions_comparison.lists.ofac.added_count // 0')
-          ofac_removed=$(echo "$body" | jq -r '.sanctions_comparison.lists.ofac.removed_count // 0')
-          uk_added=$(echo "$body" | jq -r '.sanctions_comparison.lists.uk.added_count // 0')
-          uk_removed=$(echo "$body" | jq -r '.sanctions_comparison.lists.uk.removed_count // 0')
-          un_added=$(echo "$body" | jq -r '.sanctions_comparison.lists.un.added_count // 0')
-          un_removed=$(echo "$body" | jq -r '.sanctions_comparison.lists.un.removed_count // 0')
+          ofac_added=$(echo "$body" | jq -r '.sanctions_comparison.ofac.change_summary.added_count // 0')
+          ofac_removed=$(echo "$body" | jq -r '.sanctions_comparison.ofac.change_summary.removed_count // 0')
+          uk_added=$(echo "$body" | jq -r '.sanctions_comparison.uk.change_summary.added_count // 0')
+          uk_removed=$(echo "$body" | jq -r '.sanctions_comparison.uk.change_summary.removed_count // 0')
+          un_added=$(echo "$body" | jq -r '.sanctions_comparison.un.change_summary.added_count // 0')
+          un_removed=$(echo "$body" | jq -r '.sanctions_comparison.un.change_summary.removed_count // 0')
 
           summary=$(cat <<EOF
           Screenings skipped: $screenings_skipped
