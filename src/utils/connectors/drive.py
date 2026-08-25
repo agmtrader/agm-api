@@ -501,7 +501,10 @@ class GoogleDrive:
       return downloaded_file.getvalue()
     else:
       if mime_type == 'text/csv':
-        list_data = pd.read_csv(StringIO(downloaded_file.getvalue().decode('latin1'))).fillna('').to_dict(orient='records')
+        list_data = pd.read_csv(
+            StringIO(downloaded_file.getvalue().decode('latin1')),
+            low_memory=False,
+        ).fillna('').to_dict(orient='records')
       elif mime_type in ('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'):
         # Read all sheets and consolidate them into a single list of records, annotating each row with its sheet name
         sheets_dict = pd.read_excel(BytesIO(downloaded_file.getvalue()), sheet_name=None)
@@ -548,7 +551,10 @@ class GoogleDrive:
       return exported_file.getvalue()
     else:
       if mime_type == 'text/csv':
-        list_data = pd.read_csv(StringIO(exported_file.getvalue().decode('latin1'))).fillna('').to_dict(orient='records')
+        list_data = pd.read_csv(
+            StringIO(exported_file.getvalue().decode('latin1')),
+            low_memory=False,
+        ).fillna('').to_dict(orient='records')
         logger.success("Successfully exported parsed file.")
         return list_data
       elif mime_type in ('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'):

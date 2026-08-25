@@ -849,17 +849,17 @@ class IBKRWebAPI:
 
     @handle_exception
     def close_account(self, account_id: str = None, close_reason: str = None, master_account: str = None) -> dict:
-        """Close an account via IBKR account management PATCH endpoint."""
+        """Submit an account-close request through IBKR's account-close endpoint."""
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Closing account {account_id}")
 
-            url = f"{self.BASE_URL}/gw/api/v1/accounts"
-            
             if not account_id:
                 raise Exception("Account id is required")
             if not close_reason:
                 raise Exception("close_reason is required")
+
+            url = f"{self.BASE_URL}/gw/api/v1/accounts/close"
             body = {
                 "accountManagementRequests": {
                     "accountClose": {
@@ -879,7 +879,7 @@ class IBKRWebAPI:
                 "Content-Type": "application/jwt",
             }
 
-            response = requests.patch(url, headers=headers, data=signed_jwt)
+            response = requests.post(url, headers=headers, data=signed_jwt)
             if response.status_code != 200:
                 logger.error(f"Error {response.status_code}: {response.text}")
                 raise Exception(f"Error {response.status_code}: {response.text}")

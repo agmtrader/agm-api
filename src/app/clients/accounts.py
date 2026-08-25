@@ -2,7 +2,7 @@ from flask import Blueprint, request
 
 from src.components.clients.accounts import create_account, read_accounts, submit_documents, read_instructions, send_to_ibkr, send_account_credentials_email, send_transfer_instructions_email, send_welcome_email, send_funding_notification_email, send_missing_documents_email, link_account_contact, read_account_contacts, update_account_contact, read_account_comments, create_account_comment, update_account_comment, delete_account_comment
 
-from src.components.clients.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, apply_fee_template, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, change_account_holder_external_id, withdraw_funds, get_financial_ranges, get_business_and_occupation, view_active_bank_instructions, view_withdrawable_cash
+from src.components.clients.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, apply_fee_template, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, change_account_holder_external_id, withdraw_funds, get_financial_ranges, get_business_and_occupation, view_active_bank_instructions, view_withdrawable_cash, close_account
 
 from src.components.clients.accounts import get_account_statements
 
@@ -161,6 +161,22 @@ def read_accounts_details_route():
     account_id = request.args.get('account_id', None)
     master_account = request.args.get('master_account', None)
     return read_account_details(account_id=account_id, master_account=master_account)
+
+@bp.route('/ibkr/close_account', methods=['POST'])
+@format_response
+def close_account_route():
+    """Submit a request to close an IBKR account."""
+    payload = request.get_json(force=True) or {}
+    account_id = payload.get('account_id')
+    close_reason = payload.get('close_reason')
+    master_account = payload.get('master_account')
+    if not account_id or not close_reason:
+        return {"error": "Missing account_id or close_reason"}, 400
+    return close_account(
+        account_id=account_id,
+        close_reason=close_reason,
+        master_account=master_account,
+    )
 
 @bp.route('/ibkr/pending_tasks', methods=['GET'])
 @format_response

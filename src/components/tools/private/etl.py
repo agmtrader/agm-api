@@ -241,7 +241,7 @@ def extract_ofac_sdn_list(config=None):
     consolidated_data = requests.get(consolidated_url).content
     csv_data = b'entity_number,name,type,program,title,call_sign,vessel_type,tonnage,gross_registered_tonnage,vessel_flag,vessel_owner,more_info\n' + sdn_data + consolidated_data
 
-    df = pd.read_csv(StringIO(csv_data.decode('utf-8')))
+    df = pd.read_csv(StringIO(csv_data.decode('utf-8')), low_memory=False)
     df['name'] = df['name'].astype(str)
 
     # If the column 1 is Individual or individual, then change the name to be 
@@ -272,7 +272,9 @@ def extract_uk_sanctions_list(config=None):
         raise Exception('Could not find UK sanctions CSV header row.')
 
     csv_text = '\n'.join(lines[header_idx:])
-    df = pd.read_csv(StringIO(csv_text), dtype=str, keep_default_na=False)
+    df = pd.read_csv(
+        StringIO(csv_text), dtype=str, keep_default_na=False, low_memory=False
+    )
     df = df.fillna('')
 
     Drive.upload_file(
@@ -1646,7 +1648,10 @@ def process_bonds(df):
         if column not in df.columns:
             df[column] = ''
 
-    df = df[required_columns]
+    # Selecting columns can return a view; copy before the in-place transforms
+    # below so pandas does not emit SettingWithCopyWarning or silently mutate
+    # a parent frame.
+    df = df[required_columns].copy()
     
     numeric_columns = ['Bid',
             'Ask',

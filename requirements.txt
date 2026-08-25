@@ -15,6 +15,10 @@ Flask_RESTful==0.3.10
 gunicorn==23.0.0
 PyJWT==2.9.0
 Requests==2.32.5
+# Keep Requests' runtime dependency chain deterministic across Cloud Run builds.
+urllib3==2.6.3
+charset-normalizer==3.4.4
+chardet==5.2.0
 requests_cache==1.2.1
 retry_requests==2.0.0
 websocket_client==1.8.0

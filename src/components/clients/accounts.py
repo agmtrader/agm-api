@@ -371,6 +371,15 @@ def update_account_alias(account_id: str = None, new_alias: str = None, master_a
     return ibkr_web_api.update_account_alias(account_id=account_id, new_alias=new_alias, master_account=master_account)
 
 @handle_exception
+def close_account(account_id: str = None, close_reason: str = None, master_account: str = None) -> dict:
+    """Submit an account closure request to IBKR."""
+    return ibkr_web_api.close_account(
+        account_id=account_id,
+        close_reason=close_reason,
+        master_account=master_account,
+    )
+
+@handle_exception
 def change_financial_information(account_id: str = None, new_financial_information: dict = None, master_account: str = None) -> dict:
     """Change account financial information via IBKR API."""
     return ibkr_web_api.change_financial_information(
