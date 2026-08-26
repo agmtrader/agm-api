@@ -66,21 +66,21 @@ jobs:
           summary_messages=$(echo "$body" | jq -r '(.summary_messages // []) | if length == 0 then "None" else join("; ") end')
           sanctions_available=$(echo "$body" | jq -r '.sanctions_comparison.all_available // false')
           sanctions_all_same=$(echo "$body" | jq -r '.sanctions_comparison.all_same // false')
-          ofac_added=$(echo "$body" | jq -r '.sanctions_comparison.ofac.change_summary.added_count // 0')
-          ofac_removed=$(echo "$body" | jq -r '.sanctions_comparison.ofac.change_summary.removed_count // 0')
-          uk_added=$(echo "$body" | jq -r '.sanctions_comparison.uk.change_summary.added_count // 0')
-          uk_removed=$(echo "$body" | jq -r '.sanctions_comparison.uk.change_summary.removed_count // 0')
-          un_added=$(echo "$body" | jq -r '.sanctions_comparison.un.change_summary.added_count // 0')
-          un_removed=$(echo "$body" | jq -r '.sanctions_comparison.un.change_summary.removed_count // 0')
+          ofac_added=$(echo "$body" | jq -r '.sanctions_comparison.lists.ofac.added_count // 0')
+          ofac_removed=$(echo "$body" | jq -r '.sanctions_comparison.lists.ofac.removed_count // 0')
+          uk_added=$(echo "$body" | jq -r '.sanctions_comparison.lists.uk.added_count // 0')
+          uk_removed=$(echo "$body" | jq -r '.sanctions_comparison.lists.uk.removed_count // 0')
+          un_added=$(echo "$body" | jq -r '.sanctions_comparison.lists.un.added_count // 0')
+          un_removed=$(echo "$body" | jq -r '.sanctions_comparison.lists.un.removed_count // 0')
 
           summary=$(cat <<EOF
           Screenings skipped: $screenings_skipped
           Skip reason: ${skip_reason:-N/A}
           Sanctions available: $sanctions_available
           Sanctions all same: $sanctions_all_same
-          OFAC delta: +$ofac_added / -$ofac_removed
-          UK delta: +$uk_added / -$uk_removed
-          UN delta: +$un_added / -$un_removed
+          OFAC delta: -$ofac_removed / +$ofac_added
+          UK delta: -$uk_removed / +$uk_added
+          UN delta: -$un_removed / +$un_added
           Total screenings planned: $total_screenings_planned
           Screenings executed: $screenings_executed
           Contacts targeted: $contacts_targeted

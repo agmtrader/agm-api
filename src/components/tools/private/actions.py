@@ -32,16 +32,33 @@ def _screen_created_date(value):
     except (TypeError, ValueError):
         return None
 
+
+def _compact_sanctions_comparison(comparison: dict) -> dict:
+    """Expose only comparison flags and numeric deltas in API responses."""
+    compact = {
+        'all_available': bool(comparison.get('all_available')),
+        'all_same': bool(comparison.get('all_same')),
+        'lists': {},
+    }
+    for list_name in ('ofac', 'uk', 'un'):
+        change_summary = comparison.get(list_name, {}).get('change_summary') or {}
+        compact['lists'][list_name] = {
+            'added_count': change_summary.get('added_count', 0),
+            'removed_count': change_summary.get('removed_count', 0),
+        }
+    return compact
+
 @handle_exception
 def run_screenings(apply_screenings: bool = True) -> dict:
     """Screen every contact linked to an account using one loaded set of lists."""
     comparison = compare_all_sanctions_today_vs_yesterday() or {}
+    compact_comparison = _compact_sanctions_comparison(comparison)
     if comparison.get('all_available') and comparison.get('all_same'):
         return {
             'apply_screenings': apply_screenings,
             'screenings_skipped': True,
             'skip_reason': 'OFAC, UK, and UN sanctions lists unchanged vs yesterday',
-            'sanctions_comparison': comparison,
+            'sanctions_comparison': compact_comparison,
             'contacts_targeted': 0,
             'screenings_executed': 0,
             'screening_errors': [],
@@ -68,7 +85,7 @@ def run_screenings(apply_screenings: bool = True) -> dict:
     result = {
         'apply_screenings': apply_screenings,
         'screenings_skipped': False,
-        'sanctions_comparison': comparison,
+        'sanctions_comparison': compact_comparison,
         'contacts_targeted': len(contact_ids),
         'screenings_executed': 0,
         'screening_errors': [],

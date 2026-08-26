@@ -22,7 +22,37 @@ from functools import wraps
 from typing import Union
 
 def retry_on_connection_error(max_retries=3, delay=1):
-  """Decorator to retry operations on connection errors"""
+  """Retry transient Drive connection and per-user quota failures.
+
+  ``handle_exception`` is the inner decorator on Drive methods, so an
+  ``HttpError`` may be wrapped in a ``ServiceError`` by the time it reaches
+  this decorator.  Inspect the exception chain instead of relying only on
+  ``str(e)``; otherwise Google's ``userRateLimitExceeded`` reason is lost and
+  quota failures are returned immediately.
+  """
+  def is_rate_limit_error(exc):
+    current = exc
+    seen = set()
+    while current is not None and id(current) not in seen:
+      seen.add(id(current))
+      error_text = ' '.join([
+        str(current),
+        str(getattr(current, 'content', b'')),
+        str(getattr(getattr(current, 'resp', None), 'reason', '')),
+      ]).lower().replace('_', '')
+      if 'userratelimitexceeded' in error_text or 'ratelimitexceeded' in error_text:
+        return True
+      current = getattr(current, '__cause__', None) or getattr(current, '__context__', None)
+    return False
+
+  def is_connection_error(exc):
+    error_msg = str(exc).lower()
+    return any(error_type in error_msg for error_type in [
+      'broken pipe', 'connection reset', 'connection aborted',
+      'connection timeout', 'socket.error', 'httplib.badstatusline',
+      'ssl.sslerror', 'connectionerror', 'timeout'
+    ])
+
   def decorator(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
@@ -34,19 +64,24 @@ def retry_on_connection_error(max_retries=3, delay=1):
           return func(self, *args, **kwargs)
         except Exception as e:
           last_exception = e
-          error_msg = str(e).lower()
-          
-          # Check for connection-related errors
-          if any(error_type in error_msg for error_type in [
-            'broken pipe', 'connection reset', 'connection aborted',
-            'connection timeout', 'socket.error', 'httplib.badstatusline',
-            'ssl.sslerror', 'connectionerror', 'timeout'
-          ]):
-            logger.warning(f"Connection error on attempt {attempt + 1}/{max_retries}: {e}")
+          rate_limit_error = is_rate_limit_error(e)
+
+          # Retry connection failures and Google's transient per-user quota
+          # failures. Other HTTP errors (including ordinary 403s and 404s)
+          # remain fail-fast.
+          if rate_limit_error or is_connection_error(e):
+            if rate_limit_error:
+              logger.warning(
+                f"Google Drive rate limit on attempt {attempt + 1}/{max_retries}: {e}"
+              )
+            else:
+              logger.warning(f"Connection error on attempt {attempt + 1}/{max_retries}: {e}")
             if attempt < max_retries - 1:
-              # Force connection refresh and wait before retry
-              self._force_connection_refresh()
-              time.sleep(delay * (attempt + 1))  # Exponential backoff
+              if not rate_limit_error:
+                # Force connection refresh before retrying transport failures.
+                self._force_connection_refresh()
+              # Exponential backoff gives the Drive quota window time to clear.
+              time.sleep(delay * (2 ** attempt))
               continue
           
           # If it's not a connection error, or we've exhausted retries, re-raise
