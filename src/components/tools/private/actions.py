@@ -16,6 +16,10 @@ from src.utils.logger import logger
 from src.utils.connectors.gmail import GmailConnector
 
 
+# Client subaccount under a master account outside AGM's API credentials.
+DAILY_ALIAS_ACCOUNT_EXCLUSIONS = frozenset({'U27090911'})
+
+
 # These contacts have explicitly asked not to receive funding reminders.
 # Keep matching case-insensitive and whitespace-tolerant because contact data
 # can come from manually maintained reporting exports.
@@ -286,6 +290,7 @@ def update_account_aliases():
     pending_accounts = [
         c for c in clients
         if _is_blank(c.get('Alias')) and c.get('Status') not in ('Rejected', 'Closed', 'Funded Pending')
+        and str(c.get('Account ID') or '').strip() not in DAILY_ALIAS_ACCOUNT_EXCLUSIONS
     ]
 
     # The clients report does not reliably include the master account used by
