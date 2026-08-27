@@ -23,11 +23,10 @@ _ibkr_details_by_account_id_cache = None
 _sanctions_match_indexes_cache = None
 
 WEIGHTS = {
-    'customerRisk': 0.30,
-    'jurisdictionRisk': 0.25,
+    'customerRisk': 0.35,
+    'jurisdictionRisk': 0.35,
     'productRisk': 0.15,
     'deliveryRisk': 0.15,
-    'introducerRisk': 0.15,
 }
 
 EU_COUNTRIES = {
@@ -502,11 +501,6 @@ def _get_customer_risk_score(
 def _get_delivery_channel_risk_score() -> int:
     return 5
 
-
-def _get_introducer_risk_score(advisor_code: str | None) -> int:
-    return 3 if advisor_code else 1
-
-
 def _pick_latest_contact_link(contact_id: str) -> dict | None:
     links = db.read(table='account_contact', query={'contact_id': contact_id}) or []
     if not links:
@@ -776,14 +770,12 @@ def _compute_weighted_holder_risk_score(contact: dict, account_row: dict | None,
     jr = _get_jurisdiction_risk_score(risk_country)
     pr = _get_product_risk_score(accounts if isinstance(accounts, list) else [])
     dr = _get_delivery_channel_risk_score()
-    ir = _get_introducer_risk_score(advisor_code)
 
     weighted = (
         cr * WEIGHTS['customerRisk']
         + jr * WEIGHTS['jurisdictionRisk']
         + pr * WEIGHTS['productRisk']
         + dr * WEIGHTS['deliveryRisk']
-        + ir * WEIGHTS['introducerRisk']
     )
     return _clamp_risk_score(weighted)
 
