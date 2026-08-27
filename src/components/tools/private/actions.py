@@ -52,16 +52,44 @@ def _compact_sanctions_comparison(comparison: dict) -> dict:
         }
     return compact
 
+
+def _has_confirmed_sanctions_delta(comparison: dict) -> bool:
+    """Return true only when a complete list pair proves additions/removals."""
+    for list_name in ('ofac', 'uk', 'un'):
+        change_summary = comparison.get(list_name, {}).get('change_summary') or {}
+        if (change_summary.get('added_count') or 0) > 0 or (change_summary.get('removed_count') or 0) > 0:
+            return True
+    return False
+
 @handle_exception
 def run_screenings(apply_screenings: bool = True) -> dict:
     """Screen every contact linked to an account using one loaded set of lists."""
     comparison = compare_all_sanctions_today_vs_yesterday() or {}
     compact_comparison = _compact_sanctions_comparison(comparison)
+    has_delta = _has_confirmed_sanctions_delta(comparison)
     if comparison.get('all_available') and comparison.get('all_same'):
         return {
             'apply_screenings': apply_screenings,
             'screenings_skipped': True,
             'skip_reason': 'OFAC, UK, and UN sanctions lists unchanged vs yesterday',
+            'sanctions_comparison': compact_comparison,
+            'contacts_targeted': 0,
+            'screenings_executed': 0,
+            'screening_errors': [],
+        }
+    if not has_delta:
+        unavailable = [
+            name.upper()
+            for name in ('ofac', 'uk', 'un')
+            if not comparison.get(name, {}).get('both_available')
+        ]
+        reason = 'No confirmed sanctions-list delta; screening skipped'
+        if unavailable:
+            reason += f" (comparison unavailable for: {', '.join(unavailable)})"
+        return {
+            'apply_screenings': apply_screenings,
+            'screenings_skipped': True,
+            'skip_reason': reason,
             'sanctions_comparison': compact_comparison,
             'contacts_targeted': 0,
             'screenings_executed': 0,
