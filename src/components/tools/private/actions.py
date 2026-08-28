@@ -412,11 +412,15 @@ def update_account_aliases():
     return result
 
 @handle_exception
-def send_compliance_manual_update_email():
+def send_compliance_manual_update_email(content=None):
+    """Notify compliance reviewers and optionally link the related pull request."""
+    content = content if isinstance(content, dict) else {}
+    allowed = {"pr_url", "pr_title", "commit_sha", "repository"}
+    content = {key: value for key, value in content.items() if key in allowed and value}
 
     gmail = GmailConnector()
     message = gmail.send_email(
-        {},
+        content,
         "aa@agmtechnology.com,cr@agmtechnology.com,hc@agmtechnology.com,as@agmtechnology.com",
         'Compliance Manual Update Requires Review',
         'compliance_manual_update',

@@ -43,6 +43,10 @@
         <h1>Compliance Manual Updated</h1>
         <p>There were updates to the compliance manual.</p>
         <p>Please review the latest version and acknowledge the changes.</p>
+        {% if content.pr_url %}
+        <p style="margin: 24px 0;"><a href="{{ content.pr_url }}" style="display: inline-block; background-color: #1A365D; color: #FFFFFF; text-decoration: none; padding: 12px 18px; border-radius: 6px; font-weight: 600;">Review Pull Request</a></p>
+        <p style="font-size: 13px; color: #4A5568;">Pull Request: <a href="{{ content.pr_url }}">{{ content.pr_url }}</a></p>
+        {% endif %}
     </div>
 </body>
 </html>

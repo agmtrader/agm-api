@@ -32,4 +32,5 @@ def run_screenings_route():
 @format_response
 def send_compliance_manual_update_email_route():
     """Send the compliance manual update notification email."""
-    return send_compliance_manual_update_email()
+    payload = request.get_json(silent=True) or {}
+    return send_compliance_manual_update_email(payload)
