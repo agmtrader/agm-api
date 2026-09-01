@@ -4,7 +4,7 @@ import os
 
 from flask import Flask, g, jsonify, request, send_from_directory
 from flask_cors import CORS
-from flask_jwt_extended import JWTManager, verify_jwt_in_request, exceptions, create_access_token
+from flask_jwt_extended import JWTManager, create_access_token
 from dotenv import load_dotenv
 from flask_limiter import Limiter
 from flask_limiter.errors import RateLimitExceeded
@@ -20,17 +20,11 @@ from src.utils.exception import (
     log_service_error,
     wrap_unhandled_exception,
 )
+from src.utils.authz import authenticate_request, enforce_route_scope
 
 load_dotenv()
 
 public_routes = ['docs', 'index', 'token', 'users.login']
-
-def jwt_required_except_login():
-    if request.endpoint not in public_routes:
-        try:
-            verify_jwt_in_request()
-        except exceptions.JWTExtendedException as e:
-            return jsonify({"msg": "Unauthorized"}), 401
  
 def start_api():
 
@@ -48,7 +42,9 @@ def start_api():
     app.config['JWT_SECRET_KEY'] = jwt_secret_key
 
     # Default expiration time (1 hour)
-    DEFAULT_TOKEN_EXPIRES = timedelta(hours=1)
+    # Keep bearer credentials short-lived; callers refresh through their
+    # authenticated user credentials when the cache expires.
+    DEFAULT_TOKEN_EXPIRES = timedelta(minutes=15)
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = DEFAULT_TOKEN_EXPIRES
     jwt = JWTManager(app)
 
@@ -76,13 +72,16 @@ def start_api():
     # component imports free of database side effects.
     initialize_database()
 
-    # Apply JWT authentication to all routes except login
-    app.before_request(jwt_required_except_login)
-
     @app.before_request
     def attach_request_context():
         g.request_id = request.headers.get('X-Request-ID', uuid.uuid4().hex[:12])
         g.request_started_at = time.perf_counter()
+
+    # Authenticate every non-public request and enforce its server-side scope.
+    # Request context is attached first so auth failures receive the same
+    # request ID as the response and audit log.
+    app.before_request(authenticate_request)
+    app.before_request(enforce_route_scope)
 
     @app.after_request
     def attach_response_headers(response):
@@ -97,6 +96,12 @@ def start_api():
                 logger.error(
                     f"HTTP {request.method} {request.path} completed with {response.status_code} "
                     f"in {duration_ms}ms [request_id={request_id}]"
+                )
+            elif response.status_code in (401, 403):
+                principal = getattr(g, 'current_principal_id', 'anonymous')
+                logger.warning(
+                    f"Authorization denied: {request.method} {request.path} -> {response.status_code} "
+                    f"[principal={principal}] [request_id={request_id}]"
                 )
             elif duration_ms >= 3000:
                 logger.warning(
@@ -188,32 +193,41 @@ def start_api():
     @limiter.limit(token_rate_limit, override_defaults=True)
     @format_response
     def token():
-        """Generate a short-lived API access token for the special local token payload."""
+        """Generate a short-lived token for an existing AGM user.
+
+        The former universal ``{"token":"all"}`` credential is deliberately
+        rejected.  Callers must authenticate with an actual AGM user account.
+        """
         logger.announcement('Token request.')
-        payload = request.get_json(force=True)
+        payload = request.get_json(silent=True) or {}
 
-        token_value = payload.get('token')
+        email = payload.get('email')
+        password = payload.get('password')
+        if not email or not password:
+            raise ServiceError("Unauthorized", status_code=401)
 
-        if not token_value:
-            logger.error('Token is missing')
+        from src.components.clients.users import read_users, verify_password
+        users = read_users(query={'email': email}, include_sensitive=True)
+        if len(users) != 1 or not verify_password(password, users[0].get('password_hash')):
+            raise ServiceError("Unauthorized", status_code=401)
+        user = users[0]
+        if user.get('is_active', True) is False:
             raise ServiceError("Unauthorized", status_code=401)
 
         expires_delta = DEFAULT_TOKEN_EXPIRES
-
-        logger.info(f'Generating access token for user.')
-        if token_value == 'all':
-            access_token = create_access_token(
-                identity=token_value,
-                expires_delta=expires_delta
-            )
-            logger.announcement('Authenticated user', 'success')
-            return {
-                "access_token": access_token,
-                "expires_in": int(expires_delta.total_seconds())
-            }
-
-        logger.error(f'Failed to authenticate user.')
-        raise ServiceError("Unauthorized", status_code=401)
+        claims = {}
+        if user.get('token_version') is not None:
+            claims['token_version'] = user['token_version']
+        access_token = create_access_token(
+            identity=str(user['id']),
+            additional_claims=claims,
+            expires_delta=expires_delta,
+        )
+        return {
+            "access_token": access_token,
+            "expires_in": int(expires_delta.total_seconds()),
+            "user_id": str(user['id']),
+        }
 
     # Tools
     from src.app.tools.private import actions, etl
@@ -225,13 +239,14 @@ def start_api():
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
 
     # Clients
-    from src.app.clients import accounts, advisors, contacts, investment_proposals, risk_profiles, users
+    from src.app.clients import accounts, advisors, contacts, investment_proposals, risk_profiles, users, application_providers
     app.register_blueprint(accounts.bp, url_prefix='/accounts')
     app.register_blueprint(advisors.bp, url_prefix='/advisors')
     app.register_blueprint(contacts.bp, url_prefix='/contacts')
     app.register_blueprint(investment_proposals.bp, url_prefix='/investment_proposals')
     app.register_blueprint(risk_profiles.bp, url_prefix='/risk_profiles')
     app.register_blueprint(users.bp, url_prefix='/users')
+    app.register_blueprint(application_providers.bp, url_prefix='/application_providers')
 
     from src.app.clients import management_type_requests, advisor_changes, fee_template_requests, flagged_deposits, document_review_emails, document_review_responsibles
     app.register_blueprint(fee_template_requests.bp, url_prefix='/fee_template_requests')

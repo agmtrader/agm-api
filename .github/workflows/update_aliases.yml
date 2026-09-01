@@ -8,6 +8,9 @@ on:
 jobs:
   update-aliases:
     runs-on: ubuntu-latest
+    env:
+      AGM_API_EMAIL: ${{ secrets.AGM_API_EMAIL }}
+      AGM_API_PASSWORD: ${{ secrets.AGM_API_PASSWORD }}
     outputs:
       summary: ${{ steps.update.outputs.summary }}
       accounts: ${{ steps.update.outputs.summary }}
@@ -22,7 +25,7 @@ jobs:
             # 1. Fetch access token (same as ETL)
             response=$(curl -s -w "\n%{http_code}" -X POST \
               -H "Content-Type: application/json" \
-              -d '{"token":"all"}' \
+              -d "$(jq -n --arg email \"$AGM_API_EMAIL\" --arg password \"$AGM_API_PASSWORD\" '{email: $email, password: $password}')" \
               https://api.agmtechnology.com/token)
 
             http_status=$(echo "$response" | tail -n1)

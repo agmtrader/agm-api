@@ -121,6 +121,13 @@ class Supabase:
             application_json = Column(JSONB, nullable=True)
             estimated_deposit = Column(BIGINT, nullable=True)
 
+        class ApplicationProvider(self.Base):
+            __tablename__ = 'application_provider'
+            id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+            created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+            color_scheme = Column(JSONB, nullable=False, default={})
+
         class AccountContact(self.Base):
             __tablename__ = 'account_contact'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -364,6 +371,7 @@ class Supabase:
 
         self.Account = Account
         self.AccountContact = AccountContact
+        self.ApplicationProvider = ApplicationProvider
         self.AccountInstruction = AccountInstruction
         self.AccountComment = AccountComment
         self.Advisor = Advisor

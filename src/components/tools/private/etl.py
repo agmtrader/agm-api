@@ -9,6 +9,7 @@ import pandas as pd
 import requests
 import re
 import json
+from copy import deepcopy
 import xml.etree.ElementTree as ET
 from io import StringIO
 
@@ -95,6 +96,10 @@ def run_pipeline(pipeline_name_or_config):
         etl_config = _get_etl_config_by_name(pipeline_name_or_config)
         if etl_config is None:
             raise ValueError(f"Pipeline '{pipeline_name_or_config}' not found.")
+    else:
+        # Callers may pass one of the module-level configs. Clone and refresh
+        # it so date-stamped filenames are evaluated for this run.
+        etl_config = _runtime_etl_config(etl_config)
 
     return _run_steps([
         {'name': 'extract', 'fn': lambda: extract_data(etl_config)},
@@ -109,46 +114,32 @@ def extract_data(etl_config) -> dict:
     logger.announcement('Extracting information for reports.', type='info')
 
     steps = []
-    # Some pipeline sources are supplied manually before the ETL starts and
-    # therefore have no extractor. Snapshot the batch folder before running
-    # any extractors so those sources can be validated without counting a
-    # missing pre-existing file as a harmless skip.
-    preexisting_batch_files = None
-    batch_file_inspection_error = None
+    # Manual sources are placed in the batch folder before the ETL starts.
+    # Their extraction status reflects that initial snapshot: present means
+    # successful input, absent means skipped (not an extraction failure).
+    initial_batch_files = set()
     if any(file_config.get('extract_func') is None for file_config in etl_config.get('files', [])):
         try:
-            preexisting_batch_files = {
+            initial_batch_files = {
                 file.get('name')
                 for file in (Drive.get_files_in_folder(batch_folder_id) or [])
                 if file.get('name')
             }
         except Exception as e:
-            logger.error(f'Unable to inspect pre-existing batch files: {e}')
-            preexisting_batch_files = set()
-            batch_file_inspection_error = str(e)
+            logger.error(f'Unable to inspect initial batch files: {e}')
 
-    preexisting_steps = []
     for file_config in etl_config.get('files', []):
         step_name = file_config.get('name', 'unknown')
         extract_func = file_config.get('extract_func')
         if extract_func is None:
-            expected_file_name = file_config.get('backup_name')
-            if preexisting_batch_files is not None and expected_file_name in preexisting_batch_files:
-                steps.append({'name': step_name, 'status': 'skipped'})
-            else:
-                step = {
-                    'name': step_name,
-                    'status': 'failed',
-                    'error': (
-                        f'Unable to verify pre-existing batch file '
-                        f'{expected_file_name}: {batch_file_inspection_error}'
-                        if batch_file_inspection_error
-                        else f'Expected pre-existing batch file was not found: '
-                        f'{expected_file_name}'
-                    )
-                }
-                steps.append(step)
-                preexisting_steps.append((step, expected_file_name))
+            batch_name = file_config.get('batch_name')
+            present = batch_name in initial_batch_files if batch_name else any(
+                file_name.startswith(f'{step_name}.') for file_name in initial_batch_files
+            )
+            steps.append({
+                'name': step_name,
+                'status': 'success' if present else 'skipped'
+            })
             continue
         try:
             extract_func(file_config)
@@ -156,23 +147,6 @@ def extract_data(etl_config) -> dict:
         except Exception as e:
             logger.error(f'Error during {step_name}: {e}')
             steps.append({'name': step_name, 'status': 'failed', 'error': str(e)})
-
-    # Manually supplied files can arrive while extractor functions are still
-    # running. Reconcile against the final batch state before declaring them
-    # missing; backup and transform already consume this final state.
-    if preexisting_steps:
-        try:
-            final_batch_files = {
-                file.get('name')
-                for file in (Drive.get_files_in_folder(batch_folder_id) or [])
-                if file.get('name')
-            }
-            for step, expected_file_name in preexisting_steps:
-                if expected_file_name in final_batch_files:
-                    step['status'] = 'skipped'
-                    step.pop('error', None)
-        except Exception as e:
-            logger.error(f'Unable to reconcile pre-existing batch files: {e}')
 
     failed_steps = [step for step in steps if step.get('status') == 'failed']
     overall_status = 'success' if not failed_steps else 'partial'
@@ -1595,7 +1569,12 @@ def process_open_positions_template(df):
 
     # Concatenate the two dataframes horizontally
     concatenated_df = pd.concat([df, formula_df], axis=1)
-    concatenated_df = concatenated_df.fillna('')
+    # Pandas deprecated implicit object downcasting during fillna. Opt into
+    # the future behavior and make dtype inference explicit so ETL values stay
+    # unchanged while the warning is removed.
+    with pd.option_context('future.no_silent_downcasting', True):
+        concatenated_df = concatenated_df.fillna('')
+    concatenated_df = concatenated_df.infer_objects(copy=False)
 
     rtd = get_bond_report()
     rtd_df = pd.DataFrame(rtd)
@@ -1855,6 +1834,7 @@ clients_report_configs = [
         'backup_folder_id': '1u0IUkD7-lBUy9uhgHD-5xzw3l8OePJdE',
         'flex': False,
         'backup_name': 'tasks_for_subaccounts' + ' ' + today_date + ' ' + 'agmtech212.csv',
+        'batch_name': 'tasks_for_subaccounts.csv',
         'extract_func': None,
         'transform_func': None,
         'output_filename': 'ibkr_tasks_for_subaccounts.csv',
@@ -1865,6 +1845,7 @@ clients_report_configs = [
         'backup_folder_id': '11rmflCuYs7seB2z1xBGo1n51dGB15L6-',
         'flex': False,
         'backup_name': 'ContactListSummary' + ' ' + today_date + ' ' + 'agmtech212.csv',
+        'batch_name': 'ContactListSummary.csv',
         'extract_func': None,
         'transform_func': None,
         'output_filename': 'ibkr_contact_list_summary.csv',
@@ -1875,6 +1856,7 @@ clients_report_configs = [
         'backup_folder_id': '1FNcbWNptK-A5IhmLws-R2Htl85OSFrIn',
         'flex': False,
         'backup_name': 'clients' + ' ' + today_date +  ' ' + 'agmtech212.xls',
+        'batch_name': 'clients.xls',
         'extract_func': None,
         'transform_func': None,
         'output_filename': 'ibkr_clients.csv'
@@ -1974,13 +1956,49 @@ def _resolve_pipeline_reports(etl_config):
         return []
     return etl_config.get('files', [])
 
+
+def _runtime_etl_config(etl_config, now=None):
+    """Return a config with date-based names evaluated at pipeline start.
+
+    The module-level configs are templates.  Previously their dates were
+    calculated during import, so a long-lived API worker reused an old date
+    for later ETL runs and produced duplicate snapshot names.
+    """
+    if etl_config is None:
+        return None
+
+    runtime_config = deepcopy(etl_config)
+    runtime_time = now or datetime.now(cst)
+    runtime_today = runtime_time.strftime('%Y%m%d%H%M')
+    runtime_yesterday = (runtime_time - BDay(1)).strftime('%Y%m%d')
+    runtime_first = runtime_time.replace(day=1).strftime('%Y%m%d')
+
+    for file_config in runtime_config.get('files', []):
+        backup_name = file_config.get('backup_name')
+        if not backup_name:
+            continue
+        # Replace template values through sentinels first.  This avoids a
+        # second substitution rewriting the date portion of a newly generated
+        # value (for example, replacing yesterday's YYYYMMDD inside today's
+        # YYYYMMDDHHMM filename).
+        file_config['backup_name'] = (
+            backup_name
+            .replace(today_date, '__ETL_TODAY__')
+            .replace(yesterday_date, '__ETL_YESTERDAY__')
+            .replace(first_date, '__ETL_FIRST__')
+            .replace('__ETL_TODAY__', runtime_today)
+            .replace('__ETL_YESTERDAY__', runtime_yesterday)
+            .replace('__ETL_FIRST__', runtime_first)
+        )
+    return runtime_config
+
 def _get_etl_config_by_name(pipeline_name, etl_configs=None):
     if etl_configs is None:
         etl_configs = ETL_CONFIGS
 
     for etl_config in etl_configs:
         if etl_config.get('name') == pipeline_name:
-            return etl_config
+            return _runtime_etl_config(etl_config)
 
     return None
 

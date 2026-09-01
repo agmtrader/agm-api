@@ -23,6 +23,7 @@ tmp/
 sandbox.py
 
 *.sql
+!supabase/migrations/*.sql
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

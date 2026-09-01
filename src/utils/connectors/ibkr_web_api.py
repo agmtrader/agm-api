@@ -505,20 +505,66 @@ class IBKRWebAPI:
             }
 
             response = requests.post(url, headers=headers, data=signed_jwt)
-            data = response.json()
+            try:
+                data = response.json()
+            except ValueError:
+                data = None
             if response.status_code != 200:
-                # Extract meaningful error message if available
-                error_message = None
+                # IBKR validation failures are client-correctable errors, not
+                # AGM/server failures. Preserve the upstream status and expose
+                # only structured validation details rather than the full
+                # submitted customer payload.
+                validation_errors = []
                 if isinstance(data, dict):
-                    # IBKR API typically returns { "detail": "..." } on error
-                    error_message = data.get("detail") or data.get("message")
+                    file_data = data.get("fileData")
+                    file_data = file_data if isinstance(file_data, dict) else {}
+                    file_data_data = file_data.get("data")
+                    file_data_data = file_data_data if isinstance(file_data_data, dict) else {}
+                    application = file_data_data.get("application")
+                    application = application if isinstance(application, dict) else {}
+                    errors = application.get("error", [])
+                    errors = errors if isinstance(errors, list) else []
+                    for item in errors:
+                        if isinstance(item, dict) and item.get("value"):
+                            validation_errors.append(str(item["value"]))
 
-                if not error_message:
-                    # Fallback to raw response text
-                    error_message = response.text
-                
-                logger.error(f"Error 505: {error_message}")
-                raise ServiceError(error_message[0:50] + '...', status_code=505)
+                upstream_status = data.get("status", response.status_code) if isinstance(data, dict) else response.status_code
+                try:
+                    normalized_status = int(upstream_status)
+                except (TypeError, ValueError):
+                    normalized_status = response.status_code
+                is_validation = response.status_code == 422 or normalized_status == 422
+                if is_validation:
+                    message = "IBKR rejected the application validation"
+                    details = {
+                        "ibkr_status": normalized_status,
+                        "ibkr_request_id": data.get("requestId") if isinstance(data, dict) else None,
+                        "trace_id": data.get("traceId") if isinstance(data, dict) else None,
+                        "validation_errors": validation_errors,
+                    }
+                    details = {key: value for key, value in details.items() if value not in (None, [], {})}
+                    logger.warning(
+                        f"IBKR application validation rejected [status={upstream_status}, "
+                        f"errors={len(validation_errors)}]"
+                    )
+                    raise ServiceError(
+                        message,
+                        status_code=422,
+                        code="ibkr_validation_error",
+                        details=details,
+                    )
+
+                error_message = (
+                    data.get("detail") or data.get("message")
+                    if isinstance(data, dict)
+                    else None
+                ) or response.text or "IBKR application submission failed"
+                raise ServiceError(
+                    str(error_message)[:200],
+                    status_code=502,
+                    code="ibkr_submission_failed",
+                    details={"ibkr_status": response.status_code},
+                )
 
             logger.success("Application sent to Interactive Brokers successfully")
             return data

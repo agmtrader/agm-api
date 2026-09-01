@@ -3,6 +3,7 @@ from datetime import date, datetime
 from src.utils.exception import ServiceError, handle_exception
 from src.components.tools.public.reporting import (
     get_nav_report,
+    get_ibkr_details,
     get_clients_report,
     get_ofac_sdn_list,
     get_uk_sanctions_list,
@@ -150,6 +151,7 @@ def send_unfunded_emails():
 
     # Base data
     nav_data = get_nav_report()
+    ibkr_details_data = get_ibkr_details() or []
     accounts_data = read_accounts({})
     account_contacts_data = read_account_contacts({})
 
@@ -169,11 +171,36 @@ def send_unfunded_emails():
 
     no_nav_df = nav_df[nav_df['Total'] == 0]
 
+    # A missing NAV row is not sufficient evidence that an account is unfunded:
+    # the account-details backup can still contain a positive equity balance.
+    # Keep zero-equity/missing-equity accounts eligible, but suppress reminders
+    # for accounts whose IBKR details explicitly show positive equity.
+    accounts_with_positive_equity = set()
+    for detail in ibkr_details_data:
+        if not isinstance(detail, dict):
+            continue
+        account = detail.get('account')
+        if not isinstance(account, dict):
+            continue
+        account_id = str(account.get('accountId') or '').strip()
+        if not account_id or 'equity' not in account:
+            continue
+        equity = account.get('equity')
+        try:
+            equity_value = float(equity)
+        except (TypeError, ValueError):
+            continue
+        if equity_value > 0:
+            accounts_with_positive_equity.add(account_id)
+
     # Save all accounts that have no NAV or dont even appear in the NAV report
     accounts_not_in_nav = accounts_df[~accounts_df['ibkr_account_number'].isin(nav_df['ClientAccountID'])]
     accounts_with_no_nav = accounts_df[accounts_df['ibkr_account_number'].isin(no_nav_df['ClientAccountID'])]
     
     total_accounts = pd.concat([accounts_not_in_nav, accounts_with_no_nav])
+    total_accounts = total_accounts.loc[
+        ~total_accounts['ibkr_account_number'].isin(accounts_with_positive_equity)
+    ]
 
     # Filter for only accounts that have Status Open in clients
     clients_with_open_status = clients_df[clients_df['Status'] == 'Open']
