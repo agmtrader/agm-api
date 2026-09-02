@@ -120,6 +120,7 @@ class Supabase:
             date_sent_to_ibkr = Column(Text, nullable=True)
             application_json = Column(JSONB, nullable=True)
             estimated_deposit = Column(BIGINT, nullable=True)
+            application_provider_id = Column(UUID(as_uuid=True), ForeignKey('application_provider.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
 
         class ApplicationProvider(self.Base):
             __tablename__ = 'application_provider'
