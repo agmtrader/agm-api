@@ -19,6 +19,9 @@ jobs:
       - name: Request token and trigger reporting run
         id: reporting
         uses: Wandalen/wretry.action@v2
+        env:
+          AGM_API_EMAIL: ${{ secrets.AGM_API_EMAIL }}
+          AGM_API_PASSWORD: ${{ secrets.AGM_API_PASSWORD }}
         with:
           command: |
             output_file="$RUNNER_TEMP/etl_clients_output.txt"
@@ -26,6 +29,8 @@ jobs:
             publish_output() {
               printf '%s\n' "$1" | tee "$output_file"
             }
+
+            test -n "$AGM_API_EMAIL" && test -n "$AGM_API_PASSWORD" || { publish_output "AGM_API_EMAIL/AGM_API_PASSWORD secrets are missing"; exit 1; }
 
             # Fetch access token
             response=$(curl -s -w "\n%{http_code}" -X POST \

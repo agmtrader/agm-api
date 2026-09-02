@@ -544,8 +544,12 @@ class IBKRWebAPI:
                     }
                     details = {key: value for key, value in details.items() if value not in (None, [], {})}
                     logger.warning(
-                        f"IBKR application validation rejected [status={upstream_status}, "
-                        f"errors={len(validation_errors)}]"
+                        "IBKR application validation rejected "
+                        f"status={upstream_status} errors={len(validation_errors)} "
+                        f"ibkr_status={normalized_status} "
+                        f"ibkr_request_id={details.get('ibkr_request_id', 'n/a')} "
+                        f"trace_id={details.get('trace_id', 'n/a')} "
+                        f"validation_errors={' | '.join(validation_errors) or 'n/a'}"
                     )
                     raise ServiceError(
                         message,

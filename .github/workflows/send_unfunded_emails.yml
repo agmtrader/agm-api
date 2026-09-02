@@ -17,7 +17,11 @@ jobs:
       - name: Request token and call send unfunded emails endpoint
         id: unfunded
         shell: bash
+        env:
+          AGM_API_EMAIL: ${{ secrets.AGM_API_EMAIL }}
+          AGM_API_PASSWORD: ${{ secrets.AGM_API_PASSWORD }}
         run: |
+          test -n "$AGM_API_EMAIL" && test -n "$AGM_API_PASSWORD" || { echo "AGM_API_EMAIL/AGM_API_PASSWORD secrets are missing" >&2; exit 1; }
           response=$(curl -s -w "\n%{http_code}" -X POST \
             -H "Content-Type: application/json" \
             -d "$(jq -n --arg email \"$AGM_API_EMAIL\" --arg password \"$AGM_API_PASSWORD\" '{email: $email, password: $password}')" \

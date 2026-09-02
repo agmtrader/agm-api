@@ -20,7 +20,11 @@ jobs:
       - name: Request token and update aliases
         id: update
         shell: bash
+        env:
+          AGM_API_EMAIL: ${{ secrets.AGM_API_EMAIL }}
+          AGM_API_PASSWORD: ${{ secrets.AGM_API_PASSWORD }}
         run: |
+            test -n "$AGM_API_EMAIL" && test -n "$AGM_API_PASSWORD" || { echo "AGM_API_EMAIL/AGM_API_PASSWORD secrets are missing" >&2; exit 1; }
             # ─────────────────────────────────────────────────────────────
             # 1. Fetch access token (same as ETL)
             response=$(curl -s -w "\n%{http_code}" -X POST \
