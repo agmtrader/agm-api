@@ -23,7 +23,7 @@ def login():
         user = users[0]
         password_hash = user.get('password_hash')
         if verify_password(password, password_hash):
-            expires_delta = current_app.config.get('JWT_ACCESS_TOKEN_EXPIRES', timedelta(minutes=15))
+            expires_delta = current_app.config.get('JWT_ACCESS_TOKEN_EXPIRES', timedelta(hours=8))
             claims = {}
             if user.get('token_version') is not None:
                 claims['token_version'] = user['token_version']

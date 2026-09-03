@@ -41,10 +41,18 @@ def start_api():
     # Add JWT configuration
     app.config['JWT_SECRET_KEY'] = jwt_secret_key
 
-    # Default expiration time (1 hour)
-    # Keep bearer credentials short-lived; callers refresh through their
-    # authenticated user credentials when the cache expires.
-    DEFAULT_TOKEN_EXPIRES = timedelta(minutes=15)
+    # Keep API bearer tokens bounded to a work session while avoiding forced
+    # re-authentication every few minutes.  Deployments can tune this without
+    # changing code; the 8-hour default matches a normal workday.  The
+    # Dashboard session is configured to the same lifetime.
+    try:
+        token_expiry_minutes = int(os.getenv('API_TOKEN_EXPIRES_MINUTES', '480'))
+        if not 5 <= token_expiry_minutes <= 1440:
+            raise ValueError
+    except ValueError:
+        logger.warning('Invalid API_TOKEN_EXPIRES_MINUTES; using 480 minutes')
+        token_expiry_minutes = 480
+    DEFAULT_TOKEN_EXPIRES = timedelta(minutes=token_expiry_minutes)
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = DEFAULT_TOKEN_EXPIRES
     jwt = JWTManager(app)
 
