@@ -13,9 +13,23 @@ from flask import g, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, verify_jwt_in_request
 
 from src.utils.connectors.supabase import db
+from src.utils.logger import logger
 
 
 PUBLIC_ENDPOINTS = {"index", "docs", "token", "users.login", "application_providers.read_route"}
+
+
+def _authorization_denied(status: int, message: str, reason: str, required_scope: str | None = None):
+    """Return a client-safe denial and emit a searchable security event."""
+    request_id = getattr(g, "request_id", None)
+    principal = getattr(g, "current_principal_id", "anonymous")
+    scope_text = f" [required_scope={required_scope}]" if required_scope else ""
+    logger.error(
+        f"AUTHORIZATION_DENIED status={status} method={request.method} path={request.path} "
+        f"principal={principal} reason={reason}{scope_text} request_id={request_id}"
+    )
+    g.authorization_denial_logged = True
+    return jsonify({"error": "Unauthorized" if status == 401 else "Forbidden", "message": message}), status
 
 
 def _normalise_scopes(value: object) -> set[str]:
@@ -53,18 +67,18 @@ def authenticate_request() -> tuple[dict | None, tuple] | None:
 
     try:
         verify_jwt_in_request()
-    except Exception:
-        return jsonify({"error": "Unauthorized", "message": "Authentication required"}), 401
+    except Exception as exc:
+        return _authorization_denied(401, "Authentication required", f"jwt_verification_failed:{type(exc).__name__}")
 
     claims = get_jwt()
     user = _load_user(get_jwt_identity())
     if user is None:
-        return jsonify({"error": "Unauthorized", "message": "Unknown or inactive user"}), 401
+        return _authorization_denied(401, "Unknown or inactive user", "unknown_or_inactive_user")
 
     token_version = claims.get("token_version")
     current_version = user.get("token_version")
     if token_version is not None and current_version is not None and token_version != current_version:
-        return jsonify({"error": "Unauthorized", "message": "Token revoked"}), 401
+        return _authorization_denied(401, "Token revoked", "token_revoked")
 
     g.current_user = user
     g.current_user_scopes = _normalise_scopes(user.get("scopes"))
@@ -132,7 +146,7 @@ def require_scope(required_scope: str | Iterable[str]):
         @wraps(view)
         def wrapped(*args, **kwargs):
             if not has_scope(required_scope):
-                return jsonify({"error": "Forbidden", "message": "Insufficient scope"}), 403
+                return _authorization_denied(403, "Insufficient scope", "missing_scope", str(required_scope))
             return view(*args, **kwargs)
 
         return wrapped
@@ -169,4 +183,4 @@ def enforce_route_scope():
     required = required_scope_for_path(request.path, request.method)
     if required is None or has_scope(required):
         return None
-    return jsonify({"error": "Forbidden", "message": f"Scope required: {required}"}), 403
+    return _authorization_denied(403, f"Scope required: {required}", "missing_scope", required)

@@ -105,11 +105,12 @@ def start_api():
                     f"HTTP {request.method} {request.path} completed with {response.status_code} "
                     f"in {duration_ms}ms [request_id={request_id}]"
                 )
-            elif response.status_code in (401, 403):
+            elif response.status_code in (401, 403) and not getattr(g, 'authorization_denial_logged', False):
                 principal = getattr(g, 'current_principal_id', 'anonymous')
-                logger.warning(
-                    f"Authorization denied: {request.method} {request.path} -> {response.status_code} "
-                    f"[principal={principal}] [request_id={request_id}]"
+                logger.error(
+                    f"AUTHORIZATION_DENIED status={response.status_code} method={request.method} "
+                    f"path={request.path} principal={principal} reason=authorization_response "
+                    f"request_id={request_id}"
                 )
             elif duration_ms >= 3000:
                 logger.warning(
