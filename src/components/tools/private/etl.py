@@ -580,7 +580,7 @@ def extract_bond_snapshot(config=None):
         raise Exception(f'Error extracting bond snapshot: {e}')
 
 STOCK_SNAPSHOT_TICKERS = [
-    'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'GOOG', 'META', 'TSLA', 'AVGO', 'BRK.B',
+    'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'GOOG', 'META', 'TSLA', 'AVGO',
     'LLY', 'JPM', 'V', 'XOM', 'UNH', 'MA', 'COST', 'PG', 'WMT', 'HD',
     'NFLX', 'JNJ', 'BAC', 'ABBV', 'CRM', 'ORCL', 'KO', 'MRK', 'CVX', 'WFC',
     'CSCO', 'AMD', 'PEP', 'ACN', 'MCD', 'LIN', 'TMO', 'ADBE', 'ABT', 'DIS',
