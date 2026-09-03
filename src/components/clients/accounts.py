@@ -414,9 +414,12 @@ def withdraw_funds(master_account: str = None, instruction: dict = None, account
     return ibkr_web_api.withdraw_funds(master_account=master_account, instruction=instruction)
 
 @handle_exception
-def get_status_of_instruction(client_instruction_id: str = None) -> dict:
+def get_status_of_instruction(client_instruction_id: str = None, master_account: str = None) -> dict:
     """Get the status of a banking instruction via IBKR API."""
-    return ibkr_web_api.get_status_of_instruction(client_instruction_id=client_instruction_id)
+    return ibkr_web_api.get_status_of_instruction(
+        client_instruction_id=client_instruction_id,
+        master_account=master_account,
+    )
     
 @handle_exception
 def view_withdrawable_cash(master_account: str = None, account_id: str = None, client_instruction_id: str = None) -> dict:

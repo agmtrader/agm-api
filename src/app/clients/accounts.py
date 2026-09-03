@@ -287,9 +287,15 @@ def withdraw_funds_route():
 def get_status_of_instruction_route():
     """Read the current status of an IBKR cash instruction."""
     client_instruction_id = request.args.get('client_instruction_id', None)
+    master_account = request.args.get('master_account', None)
     if not client_instruction_id:
         return {"error": "Missing client_instruction_id"}, 400
-    return get_status_of_instruction(client_instruction_id=client_instruction_id)
+    if not master_account:
+        return {"error": "Missing master_account"}, 400
+    return get_status_of_instruction(
+        client_instruction_id=client_instruction_id,
+        master_account=master_account,
+    )
 
 @bp.route('/ibkr/active_bank_instructions', methods=['POST'])
 @format_response

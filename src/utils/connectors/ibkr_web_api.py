@@ -1064,10 +1064,10 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def get_status_of_instruction(self, client_instruction_id: str):
+    def get_status_of_instruction(self, client_instruction_id: str, master_account: str):
         """Get the status of an instruction via IBKR API."""
         try:
-            original_creds = self._apply_credentials('I6413690')
+            original_creds = self._apply_credentials(master_account)
             logger.info(f"Getting status of instruction for client instruction {client_instruction_id}")
             url = f"{self.BASE_URL}/gw/api/v1/client-instructions/{client_instruction_id}"
             token = self.get_bearer_token()
@@ -1077,7 +1077,9 @@ class IBKRWebAPI:
                 "Authorization": f"Bearer {token}"
             }
             response = requests.get(url, headers=headers)
-            if response.status_code != 200:
+            # IBKR uses 208 for some successfully processed instruction-query
+            # responses. The response body contains the authoritative result.
+            if response.status_code not in (200, 208):
                 logger.error(f"Error {response.status_code}: {response.text}")
                 raise Exception(f"Error {response.status_code}: {response.text}")
             logger.success(f"Status of instruction fetched successfully")
