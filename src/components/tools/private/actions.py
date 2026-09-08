@@ -31,6 +31,9 @@ UNFUNDED_EMAIL_EXCLUSIONS = frozenset({
     'esquivelyrodriguez358@gmail.com',
 })
 
+# Accounts that must never receive an unfunded funding reminder.
+UNFUNDED_ACCOUNT_EXCLUSIONS = frozenset({'U24289762'})
+
 def _screen_created_date(value):
     try:
         return datetime.strptime(str(value), '%Y%m%d%H%M%S').date()
@@ -200,6 +203,9 @@ def send_unfunded_emails():
     total_accounts = pd.concat([accounts_not_in_nav, accounts_with_no_nav])
     total_accounts = total_accounts.loc[
         ~total_accounts['ibkr_account_number'].isin(accounts_with_positive_equity)
+    ]
+    total_accounts = total_accounts.loc[
+        ~total_accounts['ibkr_account_number'].astype('string').str.strip().isin(UNFUNDED_ACCOUNT_EXCLUSIONS)
     ]
 
     # Filter for only accounts that have Status Open in clients
