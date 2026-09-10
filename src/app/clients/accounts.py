@@ -2,7 +2,7 @@ from flask import Blueprint, request
 
 from src.components.clients.accounts import create_account, read_accounts, submit_documents, read_instructions, send_to_ibkr, send_account_credentials_email, send_transfer_instructions_email, send_welcome_email, send_funding_notification_email, send_missing_documents_email, link_account_contact, read_account_contacts, update_account_contact, read_account_comments, create_account_comment, update_account_comment, delete_account_comment
 
-from src.components.clients.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, apply_fee_template, add_trading_permissions, get_product_country_bundles, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, change_account_holder_external_id, withdraw_funds, get_financial_ranges, get_business_and_occupation, view_active_bank_instructions, view_withdrawable_cash, close_account
+from src.components.clients.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, apply_fee_template, add_trading_permissions, get_product_country_bundles, get_complex_asset_transfer_brokers, read_ibkr_account_positions, transfer_positions_externally_complex, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, change_account_holder_external_id, withdraw_funds, get_financial_ranges, get_business_and_occupation, view_active_bank_instructions, view_withdrawable_cash, close_account
 
 from src.components.clients.accounts import get_account_statements
 
@@ -388,6 +388,48 @@ def get_forms_route():
 def get_product_country_bundles_route():
     """Download the IBKR enum list of product-country bundles such as stocks or bonds by market."""
     return get_product_country_bundles()
+
+@bp.route('/ibkr/complex_asset_transfer_brokers', methods=['GET'])
+@format_response
+def get_complex_asset_transfer_brokers_route():
+    """Read IBKR's accepted broker/custodian names for Basic FOP transfers."""
+    return get_complex_asset_transfer_brokers()
+
+@bp.route('/ibkr/positions', methods=['GET'])
+@format_response
+def read_ibkr_account_positions_route():
+    """Read current positions for an IBKR account through the trading API."""
+    account_id = request.args.get('account_id')
+    credential = request.args.get('credential') or 'aguiagm2024'
+    if not account_id:
+        return {"error": "account_id is required"}, 400
+    return read_ibkr_account_positions(account_id=account_id, credential=credential)
+
+@bp.route('/ibkr/external_asset_transfer', methods=['POST'])
+@format_response
+def transfer_positions_externally_complex_route():
+    """Submit a COMPLEX_ASSET_TRANSFER request to IBKR."""
+    payload = request.get_json(force=True) or {}
+    account_id = payload.get('account_id')
+    master_account = payload.get('master_account')
+    positions = payload.get('positions')
+    contra_broker_info = payload.get('contra_broker_info')
+    currency = payload.get('currency')
+    trade_date = payload.get('trade_date')
+    settle_date = payload.get('settle_date')
+    if not account_id or not master_account or not positions or not contra_broker_info or not currency or not trade_date or not settle_date:
+        return {
+            'error': 'account_id, master_account, positions, contra_broker_info, currency, trade_date, and settle_date are required'
+        }, 400
+    return transfer_positions_externally_complex(
+        account_id=account_id,
+        master_account=master_account,
+        positions=positions,
+        contra_broker_info=contra_broker_info,
+        currency=currency,
+        trade_date=trade_date,
+        settle_date=settle_date,
+    )
 
 @bp.route('/ibkr/financial_ranges', methods=['GET'])
 @format_response

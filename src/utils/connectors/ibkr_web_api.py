@@ -2,6 +2,7 @@ import jwt
 import time
 import requests
 import json
+from datetime import date
 from src.utils.managers.secret_manager import get_secret
 from src.utils.exception import handle_exception, ServiceError
 from src.utils.logger import logger
@@ -735,6 +736,108 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
+    def transfer_positions_externally_complex(
+        self,
+        account_id: str,
+        positions: list,
+        contra_broker_info: dict,
+        currency: str,
+        trade_date: str,
+        settle_date: str,
+        master_account: str = None,
+        client_instruction_id: int | None = None,
+    ) -> dict:
+        """Submit a COMPLEX_ASSET_TRANSFER / Basic FOP request to IBKR."""
+        if not account_id or not positions or not contra_broker_info or not currency or not trade_date or not settle_date:
+            raise ValueError("account_id, positions, contra_broker_info, currency, trade_date, and settle_date are required")
+
+        try:
+            parsed_trade_date = date.fromisoformat(trade_date)
+            parsed_settle_date = date.fromisoformat(settle_date)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("trade_date and settle_date must use YYYY-MM-DD") from exc
+        if parsed_settle_date < parsed_trade_date:
+            raise ValueError("settle_date cannot be earlier than trade_date")
+
+        required_broker_fields = (
+            "accountType",
+            "brokerName",
+            "brokerAccountId",
+            "country",
+            "contactEmail",
+            "contactPhone",
+        )
+        missing_fields = [field for field in required_broker_fields if not contra_broker_info.get(field)]
+        if missing_fields:
+            raise ValueError(f"Missing contraBrokerInfo fields: {', '.join(missing_fields)}")
+
+        field_limits = {
+            "accountType": 32,
+            "brokerName": 128,
+            "brokerAccountId": 64,
+            "country": 64,
+            "contactEmail": 64,
+            "contactPhone": 16,
+            "depositoryId": 64,
+            "contactName": 64,
+        }
+        oversized_fields = [
+            field for field, limit in field_limits.items()
+            if contra_broker_info.get(field) is not None and len(str(contra_broker_info[field])) > limit
+        ]
+        if oversized_fields:
+            raise ValueError(f"contraBrokerInfo fields exceed IBKR limits: {', '.join(oversized_fields)}")
+        if len(str(account_id)) > 32 or len(str(currency)) > 3:
+            raise ValueError("account_id or currency exceeds IBKR limits")
+
+        normalized_positions = []
+        for position in positions:
+            if not position.get("conid") or position.get("quantity") is None:
+                raise ValueError("Each position requires conid and quantity")
+            normalized_positions.append({
+                "conid": position["conid"],
+                "quantity": position["quantity"],
+            })
+
+        try:
+            original_creds = self._apply_credentials(master_account)
+            instruction_id = client_instruction_id or int(time.time() * 1000)
+            body = {
+                "instructionType": "COMPLEX_ASSET_TRANSFER",
+                "instruction": {
+                    "clientInstructionId": instruction_id,
+                    "direction": "OUT",
+                    "accountId": account_id,
+                    "currency": currency,
+                    "positions": normalized_positions,
+                    "contraBrokerInfo": {
+                        **contra_broker_info,
+                    },
+                    "nonDisclosedDetail": {
+                        "tradeDate": trade_date,
+                        "settleDate": settle_date,
+                    },
+                },
+            }
+            url = f"{self.BASE_URL}/gw/api/v2/external-asset-transfers"
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+            signed_jwt = self.sign_request(body)
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt",
+            }
+            response = requests.post(url, headers=headers, data=signed_jwt)
+            if response.status_code != 202:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            logger.success("Complex asset transfer submitted successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
     def change_financial_information(self, account_id: str, new_financial_information: dict = None, master_account: str = None):
         """Change financial information for a given account."""
         try:
@@ -1301,6 +1404,26 @@ class IBKRWebAPI:
             return response.json()
         except Exception as e:
             logger.error(f"Error fetching product country bundles: {response.text}")
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def get_complex_asset_transfer_brokers(self):
+        """Retrieve IBKR's accepted broker/custodian names for Basic FOP transfers."""
+        original_creds = self._apply_credentials('I6413690')
+        try:
+            url = f"{self.BASE_URL}/gw/api/v1/enumerations/complex-asset-transfer"
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            response = requests.get(url, headers={"Authorization": f"Bearer {token}"})
+            if response.status_code != 200:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+
+            logger.success("Complex asset transfer broker enumeration fetched successfully")
+            return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 

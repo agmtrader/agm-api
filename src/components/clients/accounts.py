@@ -3,12 +3,13 @@ from src.utils.connectors.gmail import GmailConnector
 from src.utils.connectors.supabase import db
 from src.utils.logger import logger
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
+from src.utils.connectors.ibkr_trading_api import IBKRTradingAPI
 from sqlalchemy import text
-import re
 import uuid
 
 logger.announcement('Initializing Accounts Service', type='info')
 ibkr_web_api = IBKRWebAPI()
+ibkr_trading_api = IBKRTradingAPI()
 logger.announcement('Initialized Accounts Service', type='success')
 
 table = 'account'
@@ -441,6 +442,40 @@ def get_wire_instructions(master_account: str = None, account_id: str = None, cu
 def get_product_country_bundles() -> dict:
     """Get product country bundles enumeration via IBKR API."""
     return ibkr_web_api.get_product_country_bundles()
+
+@handle_exception
+def get_complex_asset_transfer_brokers() -> dict:
+    """Get accepted broker/custodian names for IBKR Basic FOP transfers."""
+    return ibkr_web_api.get_complex_asset_transfer_brokers()
+
+@handle_exception
+def read_ibkr_account_positions(account_id: str, credential: str = 'aguiagm2024') -> list:
+    """Read current IBKR positions through a short-lived authenticated session."""
+    return ibkr_trading_api.read_account_positions(
+        account_id=account_id,
+        credential=credential or 'aguiagm2024',
+    )
+
+@handle_exception
+def transfer_positions_externally_complex(
+    account_id: str,
+    master_account: str,
+    positions: list,
+    contra_broker_info: dict,
+    currency: str,
+    trade_date: str,
+    settle_date: str,
+) -> dict:
+    """Submit a Treasury bill Basic FOP request through IBKR."""
+    return ibkr_web_api.transfer_positions_externally_complex(
+        account_id=account_id,
+        master_account=master_account,
+        positions=positions,
+        contra_broker_info=contra_broker_info,
+        currency=currency,
+        trade_date=trade_date,
+        settle_date=settle_date,
+    )
 
 @handle_exception
 def get_forms(forms: list = None, master_account: str = None) -> dict:

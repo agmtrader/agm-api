@@ -17,6 +17,14 @@ from src.utils.logger import logger
 
 
 PUBLIC_ENDPOINTS = {"index", "docs", "token", "users.login", "application_providers.read_route"}
+ADVISOR_SELF_SCOPES = {
+    "advisors/me/accounts",
+    "advisors/me/open_positions",
+    "advisors/me/nav",
+    "advisors/me/account_contacts",
+    "advisors/me/account_proposals",
+    "advisors/me/account_statement",
+}
 
 
 def _authorization_denied(status: int, message: str, reason: str, required_scope: str | None = None):
@@ -55,6 +63,34 @@ def _load_user(identity: object) -> dict | None:
     return user
 
 
+def get_current_advisor() -> dict | None:
+    """Resolve the advisor record owned by the authenticated user.
+
+    Advisor-scoped endpoints must derive ownership from the authenticated
+    principal rather than accepting an advisor id/code from the client.
+    Ambiguous ownership fails closed.
+    """
+    cached = getattr(g, "current_advisor", None)
+    if cached is not None:
+        return cached
+
+    current_email = (getattr(g, "current_user", {}) or {}).get("email")
+    if not current_email:
+        g.current_advisor = None
+        return None
+
+    try:
+        contacts = db.read(table="contact", query={"email": current_email}) or []
+        if len(contacts) != 1 or not contacts[0].get("id"):
+            g.current_advisor = None
+            return None
+        advisors = db.read(table="advisor", query={"contact_id": contacts[0]["id"]}) or []
+        g.current_advisor = advisors[0] if len(advisors) == 1 else None
+    except Exception:
+        g.current_advisor = None
+    return g.current_advisor
+
+
 def authenticate_request() -> tuple[dict | None, tuple] | None:
     """Authenticate the request and attach the current AGM user to ``g``.
 
@@ -89,7 +125,14 @@ def authenticate_request() -> tuple[dict | None, tuple] | None:
 def has_scope(required_scope: str | Iterable[str]) -> bool:
     scopes = getattr(g, "current_user_scopes", set())
     required = {required_scope} if isinstance(required_scope, str) else set(required_scope)
-    if "all" in scopes or scopes.intersection(required):
+    # Advisor self-service routes always re-check ownership, even if a token
+    # happens to carry an exact route scope.  A scope string alone is not an
+    # ownership proof.
+    if required.intersection(ADVISOR_SELF_SCOPES):
+        return "advisor" in scopes and get_current_advisor() is not None
+    if "all" in scopes:
+        return True
+    if scopes.intersection(required):
         return True
     # Preserve compatibility with the existing coarse scopes (for example
     # ``trade_tickets``) while new users can receive exact route scopes such

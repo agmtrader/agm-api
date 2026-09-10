@@ -23,9 +23,11 @@ class IBKRTradingAPI(IBKRWebAPI):
         return headers
 
     @handle_exception
-    def create_sso_session(self, credential: str, ip: str) -> dict:
+    def create_sso_session(self, credential: str = "aguiagm2024", ip: str | None = None) -> dict:
         try:
             original_creds = self._apply_credentials("I6413690")
+            if not ip:
+                ip = requests.get("https://api.ipify.org", timeout=10).text.strip()
             logger.info(f"Creating SSO browser session for credential: {credential}, ip: {ip}")
             url = f"{self.BASE_URL}/gw/api/v1/sso-sessions"
             token = self.get_bearer_token()
@@ -54,6 +56,24 @@ class IBKRTradingAPI(IBKRWebAPI):
             return data
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
+    def read_account_positions(self, account_id: str, credential: str = "aguiagm2024") -> dict:
+        """Open a short-lived IBKR session and read positions for one account."""
+        if not account_id:
+            raise ValueError("account_id is required")
+
+        self.create_sso_session(credential=credential)
+        self.initialize_brokerage_session()
+        try:
+            # IBKR requires this request before /portfolio2/{accountId}/positions.
+            self.get_portfolio_accounts()
+            return self.get_portfolio_positions(account_id=account_id)
+        finally:
+            try:
+                self.logout_of_brokerage_session()
+            except Exception as logout_error:
+                logger.warning(f"Unable to close IBKR brokerage session: {logout_error}")
 
     @handle_exception
     def initialize_brokerage_session(self) -> dict:
@@ -583,6 +603,7 @@ class IBKRTradingAPI(IBKRWebAPI):
 
 for _method_name in [
     "create_sso_session",
+    "read_account_positions",
     "initialize_brokerage_session",
     "logout_of_brokerage_session",
     "get_brokerage_accounts",
