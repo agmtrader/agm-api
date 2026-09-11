@@ -936,7 +936,44 @@ class IBKRWebAPI:
             response = requests.patch(url, headers=headers, data=signed_jwt)
             if response.status_code != 200:
                 logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                try:
+                    ibkr_payload = response.json()
+                except ValueError:
+                    ibkr_payload = {}
+
+                permission_result = (
+                    ibkr_payload.get('fileData', {}).get('data', {}).get('addTradingPermissions', {})
+                    if isinstance(ibkr_payload, dict) else {}
+                )
+                ibkr_errors = permission_result.get('error', []) if isinstance(permission_result, dict) else []
+                validation_errors = [
+                    error.get('value')
+                    for error in ibkr_errors
+                    if isinstance(error, dict) and isinstance(error.get('value'), str) and error.get('value').strip()
+                ]
+
+                if response.status_code in (400, 422) and validation_errors:
+                    raise ServiceError(
+                        message='IBKR rejected the trading permissions request.',
+                        status_code=response.status_code,
+                        code='ibkr_trading_permissions_rejected',
+                        details={
+                            'account_id': account_id,
+                            'ibkr_status': permission_result.get('status'),
+                            'ibkr_request_id': permission_result.get('requestId') or ibkr_payload.get('requestId'),
+                            'validation_errors': validation_errors,
+                        },
+                    )
+
+                raise ServiceError(
+                    message=f'IBKR trading permissions request failed ({response.status_code}).',
+                    status_code=502,
+                    code='ibkr_trading_permissions_failed',
+                    details={
+                        'account_id': account_id,
+                        'ibkr_status': response.status_code,
+                    },
+                )
 
             logger.success("Trading permissions added successfully")
             data = response.json()
