@@ -191,6 +191,7 @@ class Supabase:
             name = Column(Text, nullable=False)
             phone = Column(Text, nullable=True)
             email = Column(Text, nullable=True)
+            met_place = Column(Text, nullable=True)
 
         class ContactDocument(self.Base):
             __tablename__ = 'contact_document'

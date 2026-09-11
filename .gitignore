@@ -14,6 +14,7 @@ dev/
 dev/*
 !dev/contact_document_category_analysis.py
 !dev/backfill_risk_profile_contacts.py
+!dev/generate_qr.py
 contact_document_category_analysis/
 *.csv
 !id_expiry_update_evidence/

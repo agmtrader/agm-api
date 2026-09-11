@@ -63,6 +63,9 @@ langchain-community ==0.4
 bs4==0.0.2
 langchain_google_genai==3.0.0
 
+# QR code generation
+qrcode[pil]==8.2
+
 # PDF Generation
 reportlab==4.1.0
 pypdfium2==5.11.0
