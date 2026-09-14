@@ -32,7 +32,7 @@ UNFUNDED_EMAIL_EXCLUSIONS = frozenset({
 })
 
 # Accounts that must never receive an unfunded funding reminder.
-UNFUNDED_ACCOUNT_EXCLUSIONS = frozenset({'U24289762'})
+UNFUNDED_ACCOUNT_EXCLUSIONS = frozenset({'U24289762', 'U26306704'})
 
 def _screen_created_date(value):
     try:
@@ -172,13 +172,25 @@ def send_unfunded_emails():
     contacts_df = pd.DataFrame(contacts_data)
     advisors_df = pd.DataFrame(advisors_data)
 
+    # Applications without an IBKR account number cannot be evaluated against
+    # NAV or IBKR account equity and must not enter the unfunded-email batch.
+    account_numbers = accounts_df['ibkr_account_number'].astype('string').str.strip()
+    has_ibkr_account_number = (
+        account_numbers.notna()
+        & account_numbers.ne('')
+        & account_numbers.ne('-')
+    )
+    accounts_df = accounts_df.loc[has_ibkr_account_number].copy()
+
     no_nav_df = nav_df[nav_df['Total'] == 0]
 
     # A missing NAV row is not sufficient evidence that an account is unfunded:
     # the account-details backup can still contain a positive equity balance.
-    # Keep zero-equity/missing-equity accounts eligible, but suppress reminders
-    # for accounts whose IBKR details explicitly show positive equity.
+    # Conversely, an account can be absent from the NAV report while its account
+    # details explicitly show zero/missing equity. Use both sources, then let a
+    # positive equity balance suppress the reminder.
     accounts_with_positive_equity = set()
+    accounts_with_zero_or_missing_equity = set()
     for detail in ibkr_details_data:
         if not isinstance(detail, dict):
             continue
@@ -186,26 +198,39 @@ def send_unfunded_emails():
         if not isinstance(account, dict):
             continue
         account_id = str(account.get('accountId') or '').strip()
-        if not account_id or 'equity' not in account:
+        if not account_id:
+            continue
+        if 'equity' not in account or account.get('equity') is None:
+            accounts_with_zero_or_missing_equity.add(account_id)
             continue
         equity = account.get('equity')
+        if isinstance(equity, str) and not equity.strip():
+            accounts_with_zero_or_missing_equity.add(account_id)
+            continue
         try:
             equity_value = float(equity)
         except (TypeError, ValueError):
             continue
-        if equity_value > 0:
+        if pd.isna(equity_value) or equity_value <= 0:
+            accounts_with_zero_or_missing_equity.add(account_id)
+        else:
             accounts_with_positive_equity.add(account_id)
 
-    # Save all accounts that have no NAV or dont even appear in the NAV report
-    accounts_not_in_nav = accounts_df[~accounts_df['ibkr_account_number'].isin(nav_df['ClientAccountID'])]
-    accounts_with_no_nav = accounts_df[accounts_df['ibkr_account_number'].isin(no_nav_df['ClientAccountID'])]
-    
-    total_accounts = pd.concat([accounts_not_in_nav, accounts_with_no_nav])
+    nav_account_ids = set(nav_df['ClientAccountID'].dropna().astype(str).str.strip())
+    nav_zero_account_ids = set(no_nav_df['ClientAccountID'].dropna().astype(str).str.strip())
+    accounts_missing_nav = set(
+        accounts_df['ibkr_account_number'].dropna().astype(str).str.strip()
+    ) - nav_account_ids
+    unfunded_candidate_ids = (
+        accounts_missing_nav
+        | nav_zero_account_ids
+        | accounts_with_zero_or_missing_equity
+    ) - accounts_with_positive_equity
+
+    account_numbers = accounts_df['ibkr_account_number'].astype('string').str.strip()
+    total_accounts = accounts_df.loc[account_numbers.isin(unfunded_candidate_ids)].copy()
     total_accounts = total_accounts.loc[
-        ~total_accounts['ibkr_account_number'].isin(accounts_with_positive_equity)
-    ]
-    total_accounts = total_accounts.loc[
-        ~total_accounts['ibkr_account_number'].astype('string').str.strip().isin(UNFUNDED_ACCOUNT_EXCLUSIONS)
+        ~account_numbers.loc[total_accounts.index].isin(UNFUNDED_ACCOUNT_EXCLUSIONS)
     ]
 
     # Filter for only accounts that have Status Open in clients
