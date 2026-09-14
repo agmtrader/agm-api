@@ -1,5 +1,6 @@
 import json
 import time
+from contextlib import contextmanager
 
 import requests
 
@@ -93,6 +94,32 @@ class IBKRTradingAPI(IBKRWebAPI):
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @contextmanager
+    def market_data_session(self, credential: str = "agmtech212", ip: str | None = None):
+        """Run market-data calls inside one complete IBKR brokerage lifecycle.
+
+        IBKR's ``iserver`` endpoints require the account bootstrap request after
+        SSO/session initialization.  Keeping that bootstrap and logout in one
+        context prevents callers from using a half-ready session or leaking a
+        brokerage session when an ETL step fails.
+        """
+        try:
+            self.create_sso_session(credential=credential, ip=ip)
+            self.initialize_brokerage_session()
+            accounts = self.get_brokerage_accounts()
+            logger.info(
+                f"IBKR market-data session ready: selected_account={accounts.get('selectedAccount')}"
+            )
+            yield self
+        finally:
+            if self.sso_token:
+                try:
+                    self.logout_of_brokerage_session()
+                except Exception as logout_error:
+                    logger.warning(f"Unable to close IBKR market-data session: {logout_error}")
+                finally:
+                    self.sso_token = None
 
     @handle_exception
     def logout_of_brokerage_session(self) -> dict:

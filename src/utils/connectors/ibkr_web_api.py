@@ -69,6 +69,18 @@ def _is_rejected_status(status):
     normalized = str(status or "").strip().lower()
     return normalized not in ("", "accepted", "submitted", "processed", "success")
 
+
+def _normalize_trading_permission_countries(trading_permissions: list) -> list:
+    """Normalize IBKR's wildcard country enum without changing other values."""
+    normalized_permissions = []
+    for permission in trading_permissions:
+        normalized_permission = {**permission}
+        country = permission.get("country")
+        if country is not None and str(country).strip().upper() == "ALL":
+            normalized_permission["country"] = "All"
+        normalized_permissions.append(normalized_permission)
+    return normalized_permissions
+
 class IBKRWebAPI:
 
     DEFAULT_MASTER_ACCOUNT = "I6413690"
@@ -908,6 +920,10 @@ class IBKRWebAPI:
 
             if not trading_permissions:
                 raise Exception("Trading permissions are required")
+
+            # IBKR's wildcard country enum is title-cased exactly as ``All``.
+            # Preserve ordinary ISO/name values supplied by callers.
+            trading_permissions = _normalize_trading_permission_countries(trading_permissions)
 
             url = f"{self.BASE_URL}/gw/api/v1/accounts"
 

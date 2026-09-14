@@ -5,7 +5,7 @@ from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 from google.auth.exceptions import RefreshError
 
 from src.utils.logger import logger
-from src.utils.exception import handle_exception
+from src.utils.exception import ServiceError, handle_exception
 from src.utils.managers.secret_manager import get_secret
 
 from datetime import datetime
@@ -71,23 +71,31 @@ def retry_on_connection_error(max_retries=3, delay=1):
           # remain fail-fast.
           if rate_limit_error or is_connection_error(e):
             if rate_limit_error:
-              logger.warning(
-                f"Google Drive rate limit on attempt {attempt + 1}/{max_retries}: {e}"
-              )
+              logger.warning("Google Drive Rate Limit Reached, Retrying...")
+              if attempt < max_retries - 1:
+                time.sleep(delay * (2 ** attempt))
+                continue
+              # Let the controlled error below replace Google's raw payload.
+              break
             else:
               logger.warning(f"Connection error on attempt {attempt + 1}/{max_retries}: {e}")
-            if attempt < max_retries - 1:
-              if not rate_limit_error:
+              if attempt < max_retries - 1:
                 # Force connection refresh before retrying transport failures.
                 self._force_connection_refresh()
-              # Exponential backoff gives the Drive quota window time to clear.
-              time.sleep(delay * (2 ** attempt))
-              continue
+                # Exponential backoff gives the Drive quota window time to clear.
+                time.sleep(delay * (2 ** attempt))
+                continue
           
           # If it's not a connection error, or we've exhausted retries, re-raise
           raise e
       
       # If we get here, all retries failed
+      if is_rate_limit_error(last_exception):
+        raise ServiceError(
+          "Google Drive Rate Limit Reached after retries",
+          status_code=503,
+          code="google_drive_rate_limit",
+        ) from last_exception
       raise last_exception
     return wrapper
   return decorator

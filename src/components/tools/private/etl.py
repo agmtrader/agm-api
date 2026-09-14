@@ -9,6 +9,7 @@ import pandas as pd
 import requests
 import re
 import json
+from functools import wraps
 from copy import deepcopy
 import xml.etree.ElementTree as ET
 from io import StringIO
@@ -23,6 +24,15 @@ from src.utils.logger import logger
 logger.announcement('Initializing Reporting Service', type='info')
 Drive = GoogleDrive()
 ibkr_trading_api = IBKRTradingAPI()
+
+
+def _with_ibkr_market_data_session(func):
+    """Wrap one market-data extract in the complete IBKR session lifecycle."""
+    @wraps(func)
+    def wrapped(*args, **kwargs):
+        with ibkr_trading_api.market_data_session():
+            return func(*args, **kwargs)
+    return wrapped
 
 batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
 resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
@@ -462,6 +472,7 @@ def extract_account_details_backup(config=None):
     return {'status': 'success', 'processed_file': most_recent_file.get('name'), 'saved_file': file_name}
 
 # Market data
+@_with_ibkr_market_data_session
 def extract_bond_snapshot(config=None):
     """
     Extract the bond snapshot.
@@ -469,11 +480,6 @@ def extract_bond_snapshot(config=None):
     :return: Response object with bond snapshot or error message
     """
     try:
-        ip = requests.get('https://api.ipify.org').content.decode('utf8')
-        ibkr_trading_api.create_sso_session('agmtech212', ip)
-        ibkr_trading_api.initialize_brokerage_session()
-        time.sleep(2)
-
         retry_count = 0
         conids = []
 
@@ -602,12 +608,9 @@ ETF_SNAPSHOT_TICKERS = [
 ]
 
 def _initialize_ibkr_market_data_client():
-    api_client = IBKRTradingAPI()
-    ip = requests.get('https://api.ipify.org').content.decode('utf8')
-    api_client.create_sso_session('agmtech212', ip)
-    api_client.initialize_brokerage_session()
-    time.sleep(2)
-    return api_client
+    # The caller is wrapped by _with_ibkr_market_data_session, so this client
+    # has already completed SSO, brokerage initialization, and /iserver/accounts.
+    return ibkr_trading_api
 
 def _resolve_snapshot_conids(
     api_client,
@@ -913,6 +916,7 @@ def _extract_equity_like_snapshot(
         )
     return df
 
+@_with_ibkr_market_data_session
 def extract_stock_snapshot(config=None, dev_mode: bool | None = None):
     return _extract_equity_like_snapshot(
         tickers=STOCK_SNAPSHOT_TICKERS,
@@ -922,6 +926,7 @@ def extract_stock_snapshot(config=None, dev_mode: bool | None = None):
         dev_mode=dev_mode,
     )
 
+@_with_ibkr_market_data_session
 def extract_etf_snapshot(
     config=None,
     upload: bool = True,
@@ -988,15 +993,12 @@ def _get_market_data_snapshot_in_chunks(api_client, conids: list, chunk_size: in
 
     return snapshots
 
+@_with_ibkr_market_data_session
 def extract_ust_bond_snapshot(config=None):
     
     from src.utils.connectors.drive import GoogleDrive
     drive = GoogleDrive()
-    ibkr_trading_api = IBKRTradingAPI()
-    ip = requests.get('https://api.ipify.org').content.decode('utf8')
-    ibkr_trading_api.create_sso_session('agmtech212', ip)
-    ibkr_trading_api.initialize_brokerage_session()
-    time.sleep(2)
+    ibkr_trading_api = _initialize_ibkr_market_data_client()
 
     ust_conids = _collect_watchlist_bond_conids(
         api_client=ibkr_trading_api,
@@ -1075,15 +1077,12 @@ def extract_ust_bond_snapshot(config=None):
     )
     return df
 
+@_with_ibkr_market_data_session
 def extract_sovereign_bond_snapshot():
     
     from src.utils.connectors.drive import GoogleDrive
     drive = GoogleDrive()
-    ibkr_trading_api = IBKRTradingAPI()
-    ip = requests.get('https://api.ipify.org').content.decode('utf8')
-    ibkr_trading_api.create_sso_session('agmtech212', ip)
-    ibkr_trading_api.initialize_brokerage_session()
-    time.sleep(2)
+    ibkr_trading_api = _initialize_ibkr_market_data_client()
 
     retry_count = 0
 
