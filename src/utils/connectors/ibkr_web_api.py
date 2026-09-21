@@ -1244,6 +1244,60 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
+    def get_recent_instructions(
+        self,
+        account_id: str,
+        client_instruction_id: str,
+        days_to_go_back: int = 7,
+        transaction_type: str = None,
+        master_account: str = None,
+    ) -> dict:
+        """Query recent account transactions without submitting a transaction.
+
+        IBKR documents this endpoint as ``QUERY_RECENT_INSTRUCTIONS`` and limits
+        ``daysToGoBack`` to seven days. ``client_instruction_id`` identifies the
+        read-only query request itself; it does not create or modify an instruction.
+        """
+        if not account_id:
+            raise ValueError("account_id is required")
+        if not client_instruction_id:
+            raise ValueError("client_instruction_id is required")
+        if not 1 <= int(days_to_go_back) <= 7:
+            raise ValueError("days_to_go_back must be between 1 and 7")
+
+        try:
+            original_creds = self._apply_credentials(master_account)
+            url = f"{self.BASE_URL}/gw/api/v1/instructions/query"
+            instruction = {
+                "clientInstructionId": str(client_instruction_id),
+                "accountId": account_id,
+                "transactionHistory": {"daysToGoBack": int(days_to_go_back)},
+            }
+            if transaction_type:
+                instruction["transactionType"] = transaction_type
+
+            body = {
+                "instructionType": "QUERY_RECENT_INSTRUCTIONS",
+                "instruction": instruction,
+            }
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+
+            signed_jwt = self.sign_request(body)
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/jwt",
+            }
+            response = requests.post(url, headers=headers, data=signed_jwt)
+            if response.status_code < 200 or response.status_code >= 300:
+                logger.error(f"Error {response.status_code}: {response.text}")
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @handle_exception
     def get_account_statements(
         self,
         account_id: str,
