@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import xlwt
+from io import BytesIO
 from src.utils.logger import logger
 from src.utils.exception import handle_exception
 import re
@@ -27,6 +29,160 @@ def list_trade_tickets(query: dict):
 def read(query_id):
     trades = getFlexQuery(query_id)
     return trades
+
+
+IMPROSA_HEADERS = {
+    1: 'NUMERO DE CONTRATO',
+    2: 'N/A',
+    3: 'FECHA OPERACIÓN ',
+    5: 'FECHA DE LIQUIDACION ',
+    6: 'EMISION',
+    7: 'SERIE',
+    8: 'FACIAL',
+    10: 'PRECIO BRUTO (PRECIO)',
+    11: 'REND BRUTO (YIELD/ N.A. EN AGM)',
+    12: 'INTERESES ACUMULADOS(ACCRUED / N.A. EN AGM)',
+    13: 'VALOR TRANSADO\n(NET - TOTAL / PRODUCTO) ',
+    14: 'N/A',
+    15: 'N/A',
+    16: 'N/A',
+    17: 'N/A',
+    18: 'MONEDA',
+    19: 'DIAS AL VENCIMIENTO',
+    20: 'FECHA DE VENCIMIENTO',
+    21: 'N/A',
+    22: 'N/A',
+    23: 'N/A',
+    24: 'BOLSA',
+    25: 'MERCADO',
+    26: 'TIPO DE TRANSACION',
+    27: 'COMISION DE BOLSA EN CASO DE QUE APLIQUE',
+}
+
+
+def _first_value(row, *keys):
+    for key in keys:
+        value = row.get(key)
+        if value not in (None, ''):
+            return value
+    return ''
+
+
+def _number(value):
+    if value in (None, ''):
+        return ''
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return ''
+
+
+def _date(value):
+    if value in (None, ''):
+        return None
+    parsed = pd.to_datetime(value, errors='coerce')
+    if pd.isna(parsed):
+        return None
+    return parsed.to_pydatetime()
+
+
+def _improsa_row(row):
+    operation_date = _date(_first_value(row, 'TradeDate', 'Date/Time', 'OrigTradeDate'))
+    maturity_date = _date(_first_value(row, 'Maturity', 'Expiry', 'MaturityDate'))
+    if maturity_date is None:
+        details = extract_bond_details(str(row.get('Description', '')))
+        maturity_date = _date(details.get('maturity'))
+    days_to_maturity = ''
+    if operation_date and maturity_date:
+        days_to_maturity = (maturity_date.date() - operation_date.date()).days
+
+    commission = 0.0
+    commission_found = False
+    for key in (
+        'Commission',
+        'BrokerClearingCommission',
+        'BrokerExecutionCommission',
+        'ThirdPartyClearingCommission',
+        'ThirdPartyExecutionCommission',
+        'ThirdPartyRegulatoryCommission',
+        'OtherCommission',
+    ):
+        value = _number(row.get(key))
+        if value != '':
+            commission += abs(value)
+            commission_found = True
+
+    return {
+        0: _first_value(row, 'ClientAccountID', 'AccountAlias'),
+        3: operation_date,
+        5: _date(_first_value(row, 'SettleDate', 'SettlementDate')),
+        6: _first_value(row, 'ISIN', 'SecurityID'),
+        7: _first_value(row, 'ISIN', 'SecurityID'),
+        8: _number(_first_value(row, 'Quantity', 'FaceValue')),
+        10: _number(_first_value(row, 'Price')),
+        11: _number(_first_value(row, 'Yield', 'Yield (Price + Interest)', 'YTM')),
+        12: _number(_first_value(row, 'AccruedInterest')),
+        13: _number(_first_value(row, 'NetCash', 'Amount')),
+        18: _first_value(row, 'CurrencyPrimary', 'Currency'),
+        19: days_to_maturity,
+        20: maturity_date,
+        24: _first_value(row, 'Exchange', 'ListingExchange'),
+        25: _first_value(row, 'Market', 'ListingExchange'),
+        26: _first_value(row, 'TransactionType', 'Buy/Sell'),
+        27: commission if commission_found else '',
+    }
+
+
+def generate_improsa_xls(flex_query_dict, indices):
+    """Build the legacy Excel workbook required by the Improsa export."""
+    rows = pd.DataFrame(flex_query_dict).iloc[indices].to_dict(orient='records')
+    if not rows:
+        raise ValueError('At least one execution must be selected.')
+
+    workbook = xlwt.Workbook()
+    worksheet = workbook.add_sheet('ExportacionDatos_0')
+    header_style = xlwt.easyxf('align: wrap on, vert centre;')
+    na_header_style = xlwt.easyxf('align: wrap on, vert centre; pattern: pattern solid, fore_colour yellow;')
+    price_header_style = xlwt.easyxf('align: wrap on, vert centre; pattern: pattern solid, fore_colour gray25;')
+    text_style = xlwt.easyxf('align: wrap on, horiz centre, vert centre;')
+    date_style = xlwt.easyxf(num_format_str='DD/MM/YYYY')
+    number_style = xlwt.easyxf(num_format_str='#,##0.00')
+    integer_style = xlwt.easyxf(num_format_str='#,##0')
+
+    widths = {0: 1800, 1: 1800, 2: 1400, 3: 2600, 5: 3300, 6: 2200, 7: 2200, 8: 1700, 10: 1900, 11: 1900, 12: 3600, 13: 2800, 18: 1800, 19: 3000, 20: 3300, 24: 1500, 25: 1900, 26: 3000, 27: 6000}
+    for column, width in widths.items():
+        worksheet.col(column).width = width
+
+    worksheet.row(0).height = 750
+    for column, label in IMPROSA_HEADERS.items():
+        style = na_header_style if column == 2 else price_header_style if column == 10 else header_style
+        worksheet.write(0, column, label, style)
+
+    for row_number, source_row in enumerate(rows, start=1):
+        values = _improsa_row(source_row)
+        required_columns = {
+            0: 'contract number',
+            3: 'operation date',
+            5: 'settlement date',
+            6: 'issue',
+            8: 'face value',
+            10: 'gross price',
+            13: 'transaction value',
+            18: 'currency',
+        }
+        missing = [label for column, label in required_columns.items() if values[column] in (None, '')]
+        if missing:
+            raise ValueError(f'Missing required Improsa fields: {", ".join(missing)}')
+        worksheet.write_merge(row_number, row_number, 0, 1, values[0], text_style)
+        for column, value in values.items():
+            if column in (0, 1):
+                continue
+            style = date_style if isinstance(value, datetime) else number_style if column in (8, 10, 11, 12, 13, 27) else integer_style if column == 19 else xlwt.Style.default_style
+            worksheet.write(row_number, column, value, style)
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    return output
 
 @handle_exception
 def generate(flex_query_dict, indices):

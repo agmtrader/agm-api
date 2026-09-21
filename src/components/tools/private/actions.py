@@ -3,7 +3,6 @@ from datetime import date, datetime
 from src.utils.exception import ServiceError, handle_exception
 from src.components.tools.public.reporting import (
     get_nav_report,
-    get_ibkr_details,
     get_clients_report,
     get_ofac_sdn_list,
     get_uk_sanctions_list,
@@ -33,6 +32,10 @@ UNFUNDED_EMAIL_EXCLUSIONS = frozenset({
 
 # Accounts that must never receive an unfunded funding reminder.
 UNFUNDED_ACCOUNT_EXCLUSIONS = frozenset({'U24289762', 'U26306704'})
+
+# Accounts page rounds NAV to whole currency units. Treat values below half a
+# unit (including tiny negative fee balances) as displayed zero as well.
+NAV_ZERO_DISPLAY_THRESHOLD = 0.5
 
 def _screen_created_date(value):
     try:
@@ -143,8 +146,8 @@ def run_screenings(apply_screenings: bool = True) -> dict:
 @handle_exception
 def send_unfunded_emails():
     """
-    Cross-references the NAV report with the accounts table to find
-    accounts that have zero NAV (not funded).
+    Cross-references the same NAV report used by the Accounts page with the
+    accounts table to find accounts that have zero NAV (not funded).
     """
     from src.components.clients.accounts import read_accounts
     from src.components.clients.accounts import read_account_contacts
@@ -154,7 +157,6 @@ def send_unfunded_emails():
 
     # Base data
     nav_data = get_nav_report()
-    ibkr_details_data = get_ibkr_details() or []
     accounts_data = read_accounts({})
     account_contacts_data = read_account_contacts({})
 
@@ -182,50 +184,15 @@ def send_unfunded_emails():
     )
     accounts_df = accounts_df.loc[has_ibkr_account_number].copy()
 
-    no_nav_df = nav_df[nav_df['Total'] == 0]
-
-    # A missing NAV row is not sufficient evidence that an account is unfunded:
-    # the account-details backup can still contain a positive equity balance.
-    # Conversely, an account can be absent from the NAV report while its account
-    # details explicitly show zero/missing equity. Use both sources, then let a
-    # positive equity balance suppress the reminder.
-    accounts_with_positive_equity = set()
-    accounts_with_zero_or_missing_equity = set()
-    for detail in ibkr_details_data:
-        if not isinstance(detail, dict):
-            continue
-        account = detail.get('account')
-        if not isinstance(account, dict):
-            continue
-        account_id = str(account.get('accountId') or '').strip()
-        if not account_id:
-            continue
-        if 'equity' not in account or account.get('equity') is None:
-            accounts_with_zero_or_missing_equity.add(account_id)
-            continue
-        equity = account.get('equity')
-        if isinstance(equity, str) and not equity.strip():
-            accounts_with_zero_or_missing_equity.add(account_id)
-            continue
-        try:
-            equity_value = float(equity)
-        except (TypeError, ValueError):
-            continue
-        if pd.isna(equity_value) or equity_value <= 0:
-            accounts_with_zero_or_missing_equity.add(account_id)
-        else:
-            accounts_with_positive_equity.add(account_id)
+    nav_totals = pd.to_numeric(nav_df['Total'], errors='coerce')
+    no_nav_df = nav_df[nav_totals < NAV_ZERO_DISPLAY_THRESHOLD]
 
     nav_account_ids = set(nav_df['ClientAccountID'].dropna().astype(str).str.strip())
     nav_zero_account_ids = set(no_nav_df['ClientAccountID'].dropna().astype(str).str.strip())
     accounts_missing_nav = set(
         accounts_df['ibkr_account_number'].dropna().astype(str).str.strip()
     ) - nav_account_ids
-    unfunded_candidate_ids = (
-        accounts_missing_nav
-        | nav_zero_account_ids
-        | accounts_with_zero_or_missing_equity
-    ) - accounts_with_positive_equity
+    unfunded_candidate_ids = accounts_missing_nav | nav_zero_account_ids
 
     account_numbers = accounts_df['ibkr_account_number'].astype('string').str.strip()
     total_accounts = accounts_df.loc[account_numbers.isin(unfunded_candidate_ids)].copy()
@@ -234,8 +201,22 @@ def send_unfunded_emails():
     ]
 
     # Filter for only accounts that have Status Open in clients
-    clients_with_open_status = clients_df[clients_df['Status'] == 'Open']
-    total_accounts = total_accounts[total_accounts['ibkr_account_number'].isin(clients_with_open_status['Account ID'])]
+    open_status = (
+        clients_df['Status']
+        .astype('string')
+        .str.strip()
+        .str.casefold()
+        .eq('open')
+    )
+    clients_with_open_status = clients_df.loc[open_status].copy()
+    open_account_ids = (
+        clients_with_open_status['Account ID']
+        .astype('string')
+        .str.strip()
+    )
+    total_accounts = total_accounts[
+        total_accounts['ibkr_account_number'].isin(open_account_ids)
+    ]
 
     # Parse date opened to enrich email context fields
     clients_df['Date Opened'] = pd.to_datetime(clients_df['Date Opened'], errors='coerce')
