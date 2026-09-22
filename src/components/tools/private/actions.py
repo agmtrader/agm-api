@@ -30,8 +30,26 @@ UNFUNDED_EMAIL_EXCLUSIONS = frozenset({
     'esquivelyrodriguez358@gmail.com',
 })
 
-# Accounts that must never receive an unfunded funding reminder.
-UNFUNDED_ACCOUNT_EXCLUSIONS = frozenset({'U24289762', 'U26306704'})
+# Accounts that must never receive an unfunded funding reminder. The accounts
+# below were marked red in the 2026-09-22 candidate review workbook and are
+# intentionally excluded even when their NAV is zero or missing.
+UNFUNDED_ACCOUNT_EXCLUSIONS = frozenset({
+    'U24289762',
+    'U26306704',
+    'U2421560',
+    'U27640959',
+    'U8458872',
+    'U20351921',
+    'U20405882',
+    'U20613112',
+    'U22335324',
+    'U7115856',
+    'U11438607',
+    'U12443091',
+    'U19565575',
+    'U2580655',
+    'U6170355',
+})
 
 # Accounts page rounds NAV to whole currency units. Treat values below half a
 # unit (including tiny negative fee balances) as displayed zero as well.
