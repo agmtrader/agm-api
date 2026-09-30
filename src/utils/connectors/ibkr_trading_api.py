@@ -6,8 +6,9 @@ import requests
 
 from src.lib.ibkr_trading_api import MarketDataField
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI, retry_on_connection_error
-from src.utils.exception import handle_exception
+from src.utils.exception import ServiceError, handle_exception
 from src.utils.logger import logger
+from src.utils.ibkr_errors import raise_ibkr_response_error
 
 
 class IBKRTradingAPI(IBKRWebAPI):
@@ -17,7 +18,7 @@ class IBKRTradingAPI(IBKRWebAPI):
 
     def _require_sso_headers(self, content_type: str | None = "application/json") -> dict:
         if not self.sso_token:
-            raise Exception("No SSO token found")
+            raise ServiceError("Connect to IBKR before continuing.", status_code=409, code="ibkr_session_required")
         headers = {"Authorization": f"Bearer {self.sso_token}"}
         if content_type:
             headers["Content-Type"] = content_type
@@ -33,8 +34,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             url = f"{self.BASE_URL}/gw/api/v1/sso-sessions"
             token = self.get_bearer_token()
             if not token:
-                logger.error("No token found for SSO session creation")
-                return None
+                raise ServiceError("IBKR service authentication failed.", status_code=502, code="ibkr_authentication_failed")
 
             headers = {
                 "Authorization": f"Bearer {token}",
@@ -48,8 +48,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             signed_jwt = self.sign_request(payload)
             response = requests.post(url, data=signed_jwt, headers=headers)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, validation=False)
             data = response.json()
             if "access_token" not in data:
                 raise Exception(f"No access token found in response: {data}")
@@ -62,7 +61,7 @@ class IBKRTradingAPI(IBKRWebAPI):
     def read_account_positions(self, account_id: str, credential: str = "aguiagm2024") -> dict:
         """Open a short-lived IBKR session and read positions for one account."""
         if not account_id:
-            raise ValueError("account_id is required")
+            raise ServiceError("account_id is required", status_code=400, code="validation_error")
 
         self.create_sso_session(credential=credential)
         self.initialize_brokerage_session()
@@ -89,8 +88,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             }
             response = requests.post(url, data=json.dumps(payload), headers=headers)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, trading_session=True, account_access=True)
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
@@ -128,8 +126,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             url = f"{self.BASE_URL}/v1/api/logout"
             response = requests.post(url, headers=self._require_sso_headers())
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, trading_session=True, account_access=True)
             logger.success("Logged out of brokerage session successfully")
             return response.json()
         finally:
@@ -146,7 +143,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             for attempt in range(1, 4):
                 response = requests.get(url, headers=headers)
                 if response.status_code != 200:
-                    raise Exception(f"Error {response.status_code}: {response.text}")
+                    raise_ibkr_response_error(response, trading_session=True, account_access=True)
 
                 payload = response.json()
                 has_accounts_shape = (
@@ -199,7 +196,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             response = requests.request(method, url, headers=headers, **kwargs)
 
         if response.status_code != 200:
-            raise Exception(f"Error {response.status_code}: {response.text}")
+            raise_ibkr_response_error(response, trading_session=True, account_access=True)
         return response.json()
 
     @handle_exception
@@ -219,7 +216,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             }
             response = requests.post(url, headers=self._require_sso_headers(), data=json.dumps(payload))
             if response.status_code != 200:
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, trading_session=True, account_access=True)
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
@@ -248,7 +245,7 @@ class IBKRTradingAPI(IBKRWebAPI):
 
             response = requests.post(url, headers=self._require_sso_headers(), data=json.dumps(payload))
             if response.status_code != 200:
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, trading_session=True, account_access=True)
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
@@ -274,7 +271,7 @@ class IBKRTradingAPI(IBKRWebAPI):
 
             response = requests.post(url, headers=self._require_sso_headers(), data=json.dumps(payload))
             if response.status_code != 200:
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, trading_session=True, account_access=True)
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
@@ -383,15 +380,13 @@ class IBKRTradingAPI(IBKRWebAPI):
 
             response = requests.get(f"{url}&fields={fields_str}", headers=headers)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, trading_session=True, account_access=True)
 
             logger.info("Waiting for market data snapshot to be ready")
             time.sleep(10)
             response = requests.get(url, headers=headers)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, trading_session=True, account_access=True)
 
             raw_data = response.json()
 
@@ -496,11 +491,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             )
             response = requests.get(url, headers=self._require_sso_headers(None), params=params)
             if response.status_code != 200:
-                logger.error(
-                    f"IBKR_HISTORY_FAILED conid={conid} status={response.status_code} "
-                    f"response={response.text[:500]}"
-                )
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, trading_session=True, account_access=True)
             payload = response.json()
             if isinstance(payload, dict) and (payload.get('error') or payload.get('message')):
                 logger.warning(
@@ -524,8 +515,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             }
             response = requests.post(url, headers=self._require_sso_headers(), data=json.dumps(payload))
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, trading_session=True, account_access=True)
             logger.success("Bonds searched successfully")
             return response.json()
         finally:
@@ -538,8 +528,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             url = f"{self.BASE_URL}/v1/api/iserver/secdef/info?issuerId={issuer_id}&secType={sec_type}"
             response = requests.get(url, headers=self._require_sso_headers())
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, trading_session=True, account_access=True)
             logger.success("Security info fetched successfully")
             return response.json()
         finally:
@@ -552,8 +541,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             url = f"{self.BASE_URL}/v1/api/trsrv/all-conids?exchange={exchange}"
             response = requests.get(url, headers=self._require_sso_headers(None))
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, trading_session=True, account_access=True)
             logger.success("Conids fetched successfully")
             return response.json()
         finally:
@@ -566,8 +554,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             url = f"{self.BASE_URL}/v1/api/iserver/contract/{conid}/info"
             response = requests.get(url, headers=self._require_sso_headers())
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, trading_session=True, account_access=True)
             logger.success(f"Contract info fetched for conid {conid}")
             return response.json()
         finally:
@@ -582,7 +569,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             response = requests.post(url, headers=self._require_sso_headers(), data=json.dumps(payload))
             logger.info(f"Place order response [{response.status_code}]: {response.text}")
             if response.status_code != 200:
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, trading_session=True, account_access=True)
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
@@ -596,7 +583,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             response = requests.post(url, headers=self._require_sso_headers(), data=json.dumps(payload))
             logger.info(f"Reply response [{response.status_code}]: {response.text}")
             if response.status_code != 200:
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, trading_session=True, account_access=True)
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
@@ -609,7 +596,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             response = requests.delete(url, headers=self._require_sso_headers())
             logger.info(f"Cancel order response [{response.status_code}]: {response.text}")
             if response.status_code != 200:
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, trading_session=True, account_access=True)
             logger.success(f"Order {order_id} cancelled successfully")
             return response.json()
         finally:

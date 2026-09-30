@@ -163,7 +163,7 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: "✅ Unfunded Emails Workflow SUCCEEDED"
-          to: cr@agmtechnology.com,aa@agmtechnology.com
+          to: cr@agmtechnology.com,as@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
             ${{ needs.send-unfunded-emails.outputs.summary }}
@@ -184,7 +184,7 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: "🚨 Unfunded Emails Workflow FAILED"
-          to: cr@agmtechnology.com,aa@agmtechnology.com
+          to: cr@agmtechnology.com,as@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
             The unfunded emails workflow failed. Review the workflow logs and API logs for details:

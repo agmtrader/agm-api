@@ -6,6 +6,7 @@ from datetime import date
 from src.utils.managers.secret_manager import get_secret
 from src.utils.exception import handle_exception, ServiceError
 from src.utils.logger import logger
+from src.utils.ibkr_errors import raise_ibkr_response_error
 from functools import wraps
 
 logger.announcement('Initializing Interactive Brokers Web API Service', type='info')
@@ -245,7 +246,7 @@ class IBKRWebAPI:
             }
             response = requests.get(url, headers=headers)
             if response.status_code != 200:
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
             
             logger.success(f"Accounts fetched successfully")
             return response.json()
@@ -294,7 +295,7 @@ class IBKRWebAPI:
                             'ibkr_status': response.status_code,
                         },
                     )
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
             
             logger.success(f"Account details fetched successfully")
             return response.json()
@@ -315,7 +316,7 @@ class IBKRWebAPI:
             }
             response = requests.get(url, headers=headers)
             if response.status_code != 200:
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
             logger.success(f"Registration tasks fetched successfully")
             return response.json()
         finally:
@@ -336,7 +337,7 @@ class IBKRWebAPI:
             }
             response = requests.get(url, headers=headers)
             if response.status_code != 200:
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
             logger.success(f"Pending tasks fetched successfully")
             return response.json()
         finally:
@@ -366,7 +367,7 @@ class IBKRWebAPI:
             }
             response = requests.patch(url, headers=headers, data=document_submission)
             if response.status_code != 200:
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
             logger.success(f"Documents submitted successfully")
             return response.json()
         finally:
@@ -411,8 +412,7 @@ class IBKRWebAPI:
 
             response = requests.patch(url, headers=headers, data=signed_jwt)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
 
             data = response.json()
             return data
@@ -458,8 +458,7 @@ class IBKRWebAPI:
 
             response = requests.patch(url, headers=headers, data=signed_jwt)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
 
             data = response.json()
             # IBKR can return HTTP 200 for a processed request as well as for
@@ -475,20 +474,15 @@ class IBKRWebAPI:
             status = str(alias_result.get('status') or '').strip().upper()
             if status and status not in {'PROCESSED', 'SUCCESS', 'COMPLETED'}:
                 message = alias_result.get('message') or 'IBKR rejected the account alias update'
-                logger.error(
-                    f"IBKR rejected alias update for account {account_id}: "
-                    f"{message} (request_id={alias_result.get('requestId')})"
-                )
                 raise ServiceError(
                     message=f"IBKR account alias update failed: {message}",
-                    status_code=502,
+                    status_code=422 if status == 'REJECTED' else 502,
                     code='ibkr_account_alias_update_failed',
                     details={
                         'account_id': account_id,
                         'master_account': master_account,
                         'ibkr_status': status,
                         'ibkr_request_id': alias_result.get('requestId'),
-                        'ibkr_response': data,
                     },
                 )
 
@@ -624,8 +618,7 @@ class IBKRWebAPI:
 
             response = requests.post(url, headers=headers, data=signed_jwt)
             if response.status_code != 202:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
 
             logger.success("Deposit instruction submitted successfully")
             return response.json()
@@ -660,8 +653,7 @@ class IBKRWebAPI:
 
             response = requests.post(url, headers=headers, data=signed_jwt)
             if response.status_code != 202:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
 
             logger.success("Withdrawal instruction submitted successfully")
             return response.json()
@@ -699,8 +691,7 @@ class IBKRWebAPI:
             }
             response = requests.patch(url, headers=headers, data=signed_jwt)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
             logger.success("Position transferred internally successfully")
             return response.json()
         finally:
@@ -740,8 +731,7 @@ class IBKRWebAPI:
             }
             response = requests.get(url, headers=headers, data=signed_jwt)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
             logger.success("Position by conid fetched successfully")
             return response.json()
         finally:
@@ -842,8 +832,7 @@ class IBKRWebAPI:
             }
             response = requests.post(url, headers=headers, data=signed_jwt)
             if response.status_code != 202:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
             logger.success("Complex asset transfer submitted successfully")
             return response.json()
         finally:
@@ -868,7 +857,7 @@ class IBKRWebAPI:
             }
 
             if not body["accountManagementRequests"]["changeFinancialInformation"]["newFinancialInformation"]:
-                raise Exception("At least one financial information field is required")
+                raise ServiceError("At least one financial information field is required", status_code=400, code="validation_error")
 
             token = self.get_bearer_token()
             if not token:
@@ -883,8 +872,7 @@ class IBKRWebAPI:
 
             response = requests.patch(url, headers=headers, data=signed_jwt)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
 
             logger.success("Financial information changed successfully")
             data = response.json()
@@ -919,7 +907,7 @@ class IBKRWebAPI:
             logger.info(f"Adding trading permissions for account {account_id}")
 
             if not trading_permissions:
-                raise Exception("Trading permissions are required")
+                raise ServiceError("Trading permissions are required", status_code=400, code="validation_error")
 
             # IBKR's wildcard country enum is title-cased exactly as ``All``.
             # Preserve ordinary ISO/name values supplied by callers.
@@ -951,7 +939,6 @@ class IBKRWebAPI:
 
             response = requests.patch(url, headers=headers, data=signed_jwt)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
                 try:
                     ibkr_payload = response.json()
                 except ValueError:
@@ -981,15 +968,7 @@ class IBKRWebAPI:
                         },
                     )
 
-                raise ServiceError(
-                    message=f'IBKR trading permissions request failed ({response.status_code}).',
-                    status_code=502,
-                    code='ibkr_trading_permissions_failed',
-                    details={
-                        'account_id': account_id,
-                        'ibkr_status': response.status_code,
-                    },
-                )
+                raise_ibkr_response_error(response, account_access=True)
 
             logger.success("Trading permissions added successfully")
             data = response.json()
@@ -1008,14 +987,12 @@ class IBKRWebAPI:
         Returns:
             dict: API response from IBKR.
         """
+        if not document_submission:
+            raise ServiceError("Document submission is required", status_code=400, code="validation_error")
+
+        self.submit_documents(document_submission=document_submission, master_account=master_account)
+        original_creds = self._apply_credentials(master_account)
         try:
-
-            if not document_submission:
-                raise Exception("Document submission is required")
-
-            self.submit_documents(document_submission=document_submission, master_account=master_account)
-
-            original_creds = self._apply_credentials(master_account)
             logger.info(f"Adding CLP capability for account {account_id}")
 
             url = f"{self.BASE_URL}/gw/api/v1/accounts"
@@ -1043,8 +1020,7 @@ class IBKRWebAPI:
 
             response = requests.patch(url, headers=headers, data=signed_jwt)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
 
             logger.success("Trading permissions added successfully")
             data = response.json()
@@ -1061,9 +1037,9 @@ class IBKRWebAPI:
             logger.info(f"Closing account {account_id}")
 
             if not account_id:
-                raise Exception("Account id is required")
+                raise ServiceError("Account id is required", status_code=400, code="validation_error")
             if not close_reason:
-                raise Exception("close_reason is required")
+                raise ServiceError("close_reason is required", status_code=400, code="validation_error")
 
             url = f"{self.BASE_URL}/gw/api/v1/accounts"
             body = {
@@ -1087,8 +1063,7 @@ class IBKRWebAPI:
 
             response = requests.patch(url, headers=headers, data=signed_jwt)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
 
             logger.success("Account close submitted successfully")
             return response.json()
@@ -1103,11 +1078,11 @@ class IBKRWebAPI:
             logger.info("Changing account holder external id")
 
             if not accountId:
-                raise Exception("Account id is required")
+                raise ServiceError("Account id is required", status_code=400, code="validation_error")
             if not entityId:
-                raise Exception("Entity id is required")
+                raise ServiceError("Entity id is required", status_code=400, code="validation_error")
             if not external_id:
-                raise Exception("External id is required")
+                raise ServiceError("External id is required", status_code=400, code="validation_error")
 
             url = f"{self.BASE_URL}/gw/api/v1/accounts"
 
@@ -1138,8 +1113,7 @@ class IBKRWebAPI:
 
             response = requests.patch(url, headers=headers, data=signed_jwt)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
 
             logger.success("Account holder external id changed successfully")
             return response.json()
@@ -1178,7 +1152,7 @@ class IBKRWebAPI:
             signed_jwt = self.sign_request(body)
             response = requests.post(url, headers=headers, data=signed_jwt)
             if response.status_code < 200 or response.status_code >= 300:
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
@@ -1236,8 +1210,7 @@ class IBKRWebAPI:
             # IBKR uses 208 for some successfully processed instruction-query
             # responses. The response body contains the authoritative result.
             if response.status_code not in (200, 208):
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
             logger.success(f"Status of instruction fetched successfully")
             return response.json()
         finally:
@@ -1291,8 +1264,7 @@ class IBKRWebAPI:
             }
             response = requests.post(url, headers=headers, data=signed_jwt)
             if response.status_code < 200 or response.status_code >= 300:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
@@ -1337,8 +1309,7 @@ class IBKRWebAPI:
             response = requests.post(url, headers=headers, data=signed_jwt)
             
             if response.status_code != 200:
-                 logger.error(f"Error {response.status_code}: {response.text}")
-                 raise Exception(f"Error {response.status_code}: {response.text}")
+                 raise_ibkr_response_error(response, account_access="/accounts" in url)
 
             logger.success("Statements fetched successfully")
             
@@ -1383,8 +1354,7 @@ class IBKRWebAPI:
             response = requests.get(url, headers=headers)
             
             if response.status_code != 200:
-                 logger.error(f"Error {response.status_code}: {response.text}")
-                 raise Exception(f"Error {response.status_code}: {response.text}")
+                 raise_ibkr_response_error(response, account_access="/accounts" in url)
 
             logger.success("Available statements fetched successfully")
             return response.json()
@@ -1415,7 +1385,7 @@ class IBKRWebAPI:
 
             response = requests.get(url, headers=headers)
             if response.status_code != 200:
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
             logger.success(f"Form fetched successfully")
             result = response.json()
 
@@ -1479,8 +1449,7 @@ class IBKRWebAPI:
 
             response = requests.get(url, headers=headers)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
 
             logger.success("Security questions fetched successfully")
             return response.json()
@@ -1504,13 +1473,10 @@ class IBKRWebAPI:
 
             response = requests.get(url, headers=headers)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
 
             logger.success("Product country bundles fetched successfully")
             return response.json()
-        except Exception as e:
-            logger.error(f"Error fetching product country bundles: {response.text}")
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
@@ -1526,8 +1492,7 @@ class IBKRWebAPI:
 
             response = requests.get(url, headers={"Authorization": f"Bearer {token}"})
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
 
             logger.success("Complex asset transfer broker enumeration fetched successfully")
             return response.json()
@@ -1559,8 +1524,7 @@ class IBKRWebAPI:
 
             response = requests.get(url, headers=headers)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
 
             logger.success("Wire instructions fetched successfully")
             return response.json()
@@ -1586,8 +1550,7 @@ class IBKRWebAPI:
             }
             response = requests.get(url, headers=headers)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
             logger.success("Financial ranges fetched successfully")
             return response.json()
         finally:
@@ -1610,8 +1573,7 @@ class IBKRWebAPI:
             }
             response = requests.get(url, headers=headers)
             if response.status_code != 200:
-                logger.error(f"Error {response.status_code}: {response.text}")
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
             logger.success("Business and occupation fetched successfully")
             return response.json()
         finally:
@@ -1840,11 +1802,7 @@ class IBKRWebAPI:
             response = requests.post(url, headers=headers, data=signed_request)
 
             if response.status_code != 200:
-                logger.error(
-                    f"submit_all_agreements failed status={response.status_code} "
-                    f"response={response.text}"
-                )
-                raise Exception(f"Error {response.status_code}: {response.text}")
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
 
             ibkr_response = response.json()
             logger.info(

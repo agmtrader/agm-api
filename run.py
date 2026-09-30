@@ -150,7 +150,7 @@ def start_api():
 
     @app.errorhandler(400)
     def bad_request_error(error):
-        app.logger.error(f'Bad request: {error}')
+        app.logger.warning(f'Bad request: {error}')
         return jsonify({
             "error": "Bad request",
             "message": str(error),
@@ -159,7 +159,7 @@ def start_api():
 
     @app.errorhandler(401)
     def unauthorized_error(error):
-        app.logger.error(f'Unauthorized access attempt: {error}')
+        app.logger.warning(f'Unauthorized access attempt: {error}')
         return jsonify({
             "error": "Unauthorized",
             "message": "Authentication required",
@@ -168,7 +168,7 @@ def start_api():
 
     @app.errorhandler(403)
     def forbidden_error(error):
-        app.logger.error(f'Forbidden access attempt: {error}')
+        app.logger.warning(f'Forbidden access attempt: {error}')
         return jsonify({
             "error": "Forbidden",
             "message": "You don't have permission to access this resource",

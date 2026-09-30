@@ -1,5 +1,4 @@
 import functools
-import traceback
 import uuid
 
 from flask import g, has_request_context, request
@@ -23,6 +22,7 @@ class ServiceError(Exception):
         self.code = code
         self.details = details or {}
         self.error_id = error_id
+        self._logged = False
 
 
 def ensure_error_id(err: ServiceError) -> str:
@@ -64,12 +64,17 @@ def build_error_payload(err: ServiceError) -> dict:
 
 
 def log_service_error(err: ServiceError, source: str) -> None:
+    # A single failure can cross several decorated components and a route.
+    # Expected request failures never need an exception report.
+    if err.status_code < 500 or err._logged:
+        return
     error_id = ensure_error_id(err)
     context = get_request_context()
-    logger.error(
+    logger.exception(
         f"{source} failed [error_id={error_id}, status={err.status_code}, code={err.code or 'n/a'}]: {err}. "
         f"context={context} details={err.details}"
     )
+    err._logged = True
 
 
 def wrap_unhandled_exception(exc: Exception, source: str) -> ServiceError:
@@ -77,14 +82,16 @@ def wrap_unhandled_exception(exc: Exception, source: str) -> ServiceError:
     context = get_request_context()
     logger.exception(
         f"Unhandled error in {source} [error_id={error_id}]: {exc}. "
-        f"context={context}\nTraceback:\n{traceback.format_exc()}"
+        f"context={context}"
     )
-    return ServiceError(
+    err = ServiceError(
         message="Internal server error",
         status_code=500,
         code="internal_error",
         error_id=error_id,
     )
+    err._logged = True
+    return err
 
 
 def handle_exception(func):

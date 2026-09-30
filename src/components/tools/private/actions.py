@@ -1,6 +1,6 @@
 
 from datetime import date, datetime
-from src.utils.exception import ServiceError, handle_exception
+from src.utils.exception import ServiceError, handle_exception, log_service_error
 from src.components.tools.public.reporting import (
     get_nav_report,
     get_clients_report,
@@ -443,7 +443,13 @@ def update_account_aliases():
                 failed_account['error_code'] = e.code
                 failed_account['error_details'] = e.details
             failed_accounts.append(failed_account)
-            logger.error(f"Failed to update alias for {account_id}: {e}")
+            if isinstance(e, ServiceError):
+                if e.status_code < 500:
+                    logger.warning(f"Alias update rejected for {account_id}: {e}")
+                else:
+                    log_service_error(e, 'update_pending_alias')
+            else:
+                logger.exception(f"Failed to update alias for {account_id}: {e}")
 
     result = {
         'pending': len(pending_accounts),

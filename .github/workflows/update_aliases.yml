@@ -93,7 +93,7 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: "✅ Alias Update Workflow SUCCEEDED"
-          to: cr@agmtechnology.com,aa@agmtechnology.com
+          to: cr@agmtechnology.com,as@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
             The alias update completed successfully.
@@ -116,7 +116,7 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: "🚨 Alias Update Workflow FAILED"
-          to: cr@agmtechnology.com,aa@agmtechnology.com
+          to: cr@agmtechnology.com,as@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
             The alias update run completed with errors. The full run summary follows:
