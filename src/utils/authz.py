@@ -21,6 +21,7 @@ ADVISOR_SELF_SCOPES = {
     "advisors/me/accounts",
     "advisors/me/open_positions",
     "advisors/me/nav",
+    "advisors/me/latest_nav",
     "advisors/me/account_contacts",
     "advisors/me/account_proposals",
     "advisors/me/account_statement",

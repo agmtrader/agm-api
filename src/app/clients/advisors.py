@@ -7,6 +7,7 @@ from src.components.clients.advisors import (
     read_current_advisor_account_statement,
     read_current_advisor_accounts,
     read_current_advisor_nav,
+    read_current_advisor_latest_nav,
     read_current_advisor_open_positions,
     update_advisor,
 )
@@ -72,6 +73,13 @@ def current_advisor_nav_route():
     years = [year.strip() for year in years if year.strip()]
     months = [month.strip() for month in months if month.strip()]
     return read_current_advisor_nav(years, months)
+
+
+@bp.route('/me/latest_nav', methods=['GET'])
+@format_response
+def current_advisor_latest_nav_route():
+    """Read the latest NAV values for the authenticated advisor's accounts."""
+    return read_current_advisor_latest_nav()
 
 
 @bp.route('/me/account_contacts', methods=['GET'])

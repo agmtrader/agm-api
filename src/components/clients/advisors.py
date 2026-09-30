@@ -4,7 +4,7 @@ from src.utils.logger import logger
 from src.utils.authz import get_current_advisor
 from src.components.clients.accounts import get_account_statements, read_account_contacts, read_accounts
 from src.components.clients.investment_proposals import read_investment_proposals
-from src.components.tools.public.reporting import get_clients_report, get_nav_report_monthly, get_open_positions_report
+from src.components.tools.public.reporting import get_clients_report, get_nav_report, get_nav_report_monthly, get_open_positions_report
 
 logger.announcement('Initializing Advisors Service', type='info')
 logger.announcement('Initialized Advisors Service', type='success')
@@ -61,13 +61,17 @@ def read_current_advisor_accounts() -> list:
         clients = get_clients_report() or []
     except Exception:
         clients = []
-    titles = {
-        str(client.get('Account ID')).strip(): client.get('Title') or '-'
+    clients_by_id = {
+        str(client.get('Account ID')).strip(): client
         for client in clients
         if client.get('Account ID') is not None
     }
     return [
-        {**account, 'title': titles.get(str(account.get('ibkr_account_number') or '').strip(), '-')}
+        {
+            **account,
+            'title': (clients_by_id.get(str(account.get('ibkr_account_number') or '').strip()) or {}).get('Title') or '-',
+            'client_status': (clients_by_id.get(str(account.get('ibkr_account_number') or '').strip()) or {}).get('Status'),
+        }
         for account in accounts
     ]
 
@@ -107,6 +111,27 @@ def read_current_advisor_nav(years: list, months: list) -> list:
             or row.get('account_id')
             or ''
         ).strip() in account_ids
+    ]
+
+
+@handle_exception
+def read_current_advisor_latest_nav() -> list:
+    """Return only the latest NAV values for accounts owned by the authenticated advisor."""
+    account_ids = {
+        str(account.get('ibkr_account_number') or '').strip()
+        for account in _current_advisor_accounts()
+        if str(account.get('ibkr_account_number') or '').strip()
+    }
+    if not account_ids:
+        return []
+    return [
+        {
+            'ClientAccountID': row.get('ClientAccountID'),
+            'Total': row.get('Total'),
+            'ReportDate': row.get('ReportDate'),
+        }
+        for row in (get_nav_report() or [])
+        if str(row.get('ClientAccountID') or '').strip() in account_ids
     ]
 
 
