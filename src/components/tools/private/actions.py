@@ -461,17 +461,8 @@ def update_account_aliases():
         'skipped_accounts': skipped_accounts
     }
 
-    # Do not stop the batch at the first IBKR rejection. Every pending account
-    # has been attempted by this point; now surface the batch failure to the
-    # caller with the complete per-account results.
-    if failed_accounts:
-        raise ServiceError(
-            message=f"{len(failed_accounts)} account alias update(s) failed",
-            status_code=502,
-            code='ibkr_account_alias_batch_failed',
-            details=result,
-        )
-
+    # Per-account errors are already logged and included in the result. The
+    # batch completed after attempting every eligible account.
     return result
 
 @handle_exception

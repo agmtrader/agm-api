@@ -75,6 +75,10 @@ jobs:
             printf "aliases_updated=%s\nerrors=%s\n" "$updated" "$errors" >> "$GITHUB_OUTPUT"
             echo "$summary_output"
 
+            if [ "$http_status" = "200" ] && [ "$errors" -gt 0 ]; then
+              echo "::warning::Alias update completed with $errors account error(s); see the per-account errors above"
+            fi
+
             if [ "$http_status" != "200" ]; then
               echo "Bulk alias update failed with status $http_status" >&2
               exit 1
@@ -92,11 +96,11 @@ jobs:
           server_port: 465
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "✅ Alias Update Workflow SUCCEEDED"
+          subject: "✅ Alias Update Workflow COMPLETED"
           to: cr@agmtechnology.com,as@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
-            The alias update completed successfully.
+            The alias update run completed. Check the Errors count and account details below.
 
             Below is the run summary:
 
