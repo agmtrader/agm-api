@@ -1,8 +1,7 @@
-"""OCR contact documents missing text_extraction rows into CSV and the database.
+"""OCR contact documents missing completed text-extraction rows.
 
-The script retries prior CSV failures, chunks oversized PDFs through the shared
-OCR provider, writes successful text extraction results into
-``document_processing``, and still appends every attempt to the resumable CSV.
+The database is the only source of truth for eligibility. The CSV is retained
+as an output log, but is never read to decide which documents to process.
 """
 
 from __future__ import annotations
@@ -41,21 +40,9 @@ initialize_database()
 
 
 PROCESS_TYPE = "text_extraction"
-TARGET_COUNT = 100
 GOOGLE_DOCUMENT_AI_PAGE_LIMIT = 15
 OUTPUT_CSV_PATH = REPO_ROOT / "new_documents_ocr_extractions.csv"
 PREVIEW_LENGTH = 300
-
-TERMINAL_FAILURE_PREFIXES = (
-    "Unsupported OCR mime type:",
-    "Failed to load document (PDFium: Incorrect password error)",
-    "Failed to load document (PDFium: Data format error)",
-    "Failed to open image for OCR:",
-    "document data is empty",
-    "document data is not valid base64",
-    "document not found:",
-    "contact_document has no document_id",
-)
 
 CSV_FIELDS = [
     "contact_document_id",
@@ -99,19 +86,6 @@ def configure_csv_field_limit() -> None:
 configure_csv_field_limit()
 
 
-def load_existing_rows() -> list[dict]:
-    if not OUTPUT_CSV_PATH.exists() or OUTPUT_CSV_PATH.stat().st_size == 0:
-        return []
-    with OUTPUT_CSV_PATH.open(newline="", encoding="utf-8-sig") as source_file:
-        reader = csv.DictReader(source_file)
-        if reader.fieldnames != CSV_FIELDS:
-            raise RuntimeError(
-                f"{OUTPUT_CSV_PATH.name} has an incompatible header. "
-                "Move or rename it before running a new extraction."
-            )
-        return list(reader)
-
-
 def append_row(row: dict) -> None:
     write_header = not OUTPUT_CSV_PATH.exists() or OUTPUT_CSV_PATH.stat().st_size == 0
     with OUTPUT_CSV_PATH.open("a", newline="", encoding="utf-8") as output_file:
@@ -121,48 +95,14 @@ def append_row(row: dict) -> None:
         writer.writerow(row)
 
 
-def failure_is_terminal(row: dict) -> bool:
-    if str(row.get("status") or "").strip().lower() != "failed":
-        return False
-    error = str(row.get("error") or "").strip()
-    return any(error.startswith(prefix) for prefix in TERMINAL_FAILURE_PREFIXES)
-
-
 def read_unprocessed_contact_documents(
-    existing_rows: list[dict],
+    _existing_rows: list[dict] | None = None,
 ) -> tuple[list[dict], dict[str, int]]:
-    completed_contact_document_ids = {
-        str(row.get("contact_document_id") or "").strip()
-        for row in existing_rows
-        if str(row.get("contact_document_id") or "").strip()
-        and str(row.get("status") or "").strip().lower() == "completed"
-    }
-    completed_document_ids_from_csv = {
-        str(row.get("document_id") or "").strip()
-        for row in existing_rows
-        if str(row.get("document_id") or "").strip()
-        and str(row.get("status") or "").strip().lower() == "completed"
-    }
-    terminal_contact_document_ids = {
-        str(row.get("contact_document_id") or "").strip()
-        for row in existing_rows
-        if str(row.get("contact_document_id") or "").strip()
-        and failure_is_terminal(row)
-    }
-    terminal_document_ids = {
-        str(row.get("document_id") or "").strip()
-        for row in existing_rows
-        if str(row.get("document_id") or "").strip()
-        and failure_is_terminal(row)
-    }
-    terminal_missing_document_contact_ids = {
-        str(row.get("contact_document_id") or "").strip()
-        for row in existing_rows
-        if str(row.get("contact_document_id") or "").strip()
-        and not str(row.get("document_id") or "").strip()
-        and failure_is_terminal(row)
-    }
+    """Return every unique database document lacking completed OCR text.
 
+    ``_existing_rows`` is accepted for compatibility with older callers but is
+    intentionally ignored; CSV history is not an eligibility filter.
+    """
     metadata = MetaData()
     contact_document = Table(
         "contact_document",
@@ -214,21 +154,12 @@ def read_unprocessed_contact_documents(
         missing_document_id_rows = 0
 
         for row in session.execute(query).mappings().yield_per(500):
-            contact_document_id = str(row.get("id") or "").strip()
             document_id = str(row.get("document_id") or "").strip()
             has_processing = row.get("processed_document_id") is not None
 
-            if contact_document_id in terminal_contact_document_ids:
-                continue
-            if document_id and document_id in terminal_document_ids:
-                continue
-
             if not document_id:
                 missing_document_id_rows += 1
-                if contact_document_id not in completed_contact_document_ids:
-                    selected.append(row)
-                    if len(selected) == TARGET_COUNT:
-                        break
+                selected.append(row)
                 continue
 
             if has_processing:
@@ -238,17 +169,11 @@ def read_unprocessed_contact_documents(
             eligible_contact_document_rows += 1
             eligible_unique_documents.add(document_id)
 
-            if contact_document_id in completed_contact_document_ids:
-                continue
-            if document_id in completed_document_ids_from_csv:
-                continue
             if document_id in selected_document_ids:
                 continue
 
             selected.append(row)
             selected_document_ids.add(document_id)
-            if len(selected) == TARGET_COUNT:
-                break
 
         return selected, {
             "eligible_contact_document_rows": eligible_contact_document_rows,
@@ -257,8 +182,6 @@ def read_unprocessed_contact_documents(
                 already_processed_unique_documents
             ),
             "missing_document_id_rows": missing_document_id_rows,
-            "terminal_failures_skipped": len(terminal_document_ids)
-            + len(terminal_missing_document_contact_ids),
         }
 
     return _read()
@@ -497,12 +420,15 @@ def write_completed_processing_row(
 
 
 def main() -> None:
-    existing_rows = load_existing_rows()
-    contact_documents, population = read_unprocessed_contact_documents(existing_rows)
+    contact_documents, population = read_unprocessed_contact_documents()
     print(population)
+    print(
+        f"Dry run: {len(contact_documents)} contact documents would be OCR'd "
+        "based on database state."
+    )
     if not contact_documents:
         print("No contact documents remain without document_processing text extraction.")
-        print({"existing_rows": len(existing_rows), "database_writes": 0})
+        print({"database_writes": 0})
         return
 
     validate_ocr_provider_configuration(GOOGLE_DOCUMENT_AI_PROVIDER)
@@ -510,8 +436,6 @@ def main() -> None:
         {
             "process_type": PROCESS_TYPE,
             **population,
-            "previously_processed_in_csv": len(existing_rows),
-            "batch_requested": TARGET_COUNT,
             "selected": len(contact_documents),
             "output_csv": OUTPUT_CSV_PATH.name,
             "database_writes": 0,
@@ -596,11 +520,9 @@ def main() -> None:
 
     print(
         {
-            "batch_requested": TARGET_COUNT,
             "selected": len(contact_documents),
             "completed": completed,
             "failed": failed,
-            "cumulative_rows": len(existing_rows) + len(contact_documents),
             "output_csv": OUTPUT_CSV_PATH.name,
             "database_writes": database_writes,
         }
