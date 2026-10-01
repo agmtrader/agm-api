@@ -1,8 +1,15 @@
 from flask import Blueprint, request
-from src.components.tools.public.reporting import get_clients_report, get_client_fees_report, get_nav_report, get_nav_report_monthly, get_bond_report, get_stocks_report, get_etfs_report, get_ust_bond_report, get_proposals_equity_report, get_open_positions_report, get_deposits_withdrawals, get_monthly_deposits_withdrawals, get_trades_report, get_brokerage_commissions, get_management_commissions, get_ending_balances_from_statements, get_ibkr_details
+from src.components.tools.public.reporting import get_clients_report, get_client_fees_report, get_nav_report, get_nav_report_monthly, get_bond_report, get_stocks_report, get_etfs_report, get_ust_bond_report, get_proposals_equity_report, get_open_positions_report, get_deposits_withdrawals, get_monthly_deposits_withdrawals, get_trades_report, get_brokerage_commissions, get_management_commissions, get_ending_balances_from_statements, get_ibkr_details, get_ibkr_statement_summary, get_ibkr_statement_transactions
 from src.utils.response import format_response
+from src.components.tools.public.trade_confirmations import get_trade_confirmations_report
 
 bp = Blueprint('reporting', __name__)
+
+@bp.route('/trade_confirmations', methods=['GET'])
+@format_response
+def get_trade_confirmations_route():
+    """Read the grouped all-account trade confirmations from Flex Query 1215183."""
+    return get_trade_confirmations_report()
 
 # Clients
 @bp.route('/clients', methods=['GET'])
@@ -130,3 +137,21 @@ def get_management_commissions_route():
 def get_ending_balances_from_statements_route():
     """Read ending balances derived from account statements."""
     return get_ending_balances_from_statements()
+
+@bp.route('/ibkr_statement_summary', methods=['GET'])
+@format_response
+def get_ibkr_statement_summary_route():
+    """Read monthly IBKR account-value summaries from Drive statements."""
+    accounts = [value.strip() for value in request.args.get('accounts', request.args.get('account', '')).split(',') if value.strip()]
+    years = [value.strip() for value in request.args.get('years', request.args.get('year', '')).split(',') if value.strip()]
+    months = [value.strip() for value in request.args.get('months', request.args.get('month', '')).split(',') if value.strip()]
+    return get_ibkr_statement_summary(accounts, years, months)
+
+@bp.route('/ibkr_statement_transactions', methods=['GET'])
+@format_response
+def get_ibkr_statement_transactions_route():
+    """Read IBKR Base Currency Summary transactions from Drive statements."""
+    accounts = [value.strip() for value in request.args.get('accounts', request.args.get('account', '')).split(',') if value.strip()]
+    years = [value.strip() for value in request.args.get('years', request.args.get('year', '')).split(',') if value.strip()]
+    months = [value.strip() for value in request.args.get('months', request.args.get('month', '')).split(',') if value.strip()]
+    return get_ibkr_statement_transactions(accounts, years, months)

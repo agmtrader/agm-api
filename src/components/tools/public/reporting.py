@@ -1,6 +1,7 @@
 from datetime import datetime, date, timedelta
 from src.utils.logger import logger
 import csv
+import calendar
 import io
 import threading
 import pandas as pd
@@ -21,6 +22,8 @@ ibkr_web_api = IBKRWebAPI()
 _ending_balances_cache = {'key': None, 'rows': None}
 _activity_statement_file_cache = {}
 _ending_balances_cache_lock = threading.Lock()
+_ibkr_statement_rows_cache = {}
+_ibkr_statement_rows_cache_lock = threading.Lock()
 
 activity_statement_folders = {
     'I6413690': '1qJhG-9F_YteWY-hCP1EaIhbJQ1DW71_h',
@@ -957,6 +960,207 @@ def get_ending_balances_from_statements():
 
     logger.info(f'Ending balances from statements report loaded with {len(ending_balances)} rows')
     return ending_balances
+
+
+@handle_exception
+def get_ibkr_statement_summary(accounts=None, years=None, months=None):
+    """Read monthly IBKR account-value summaries directly from Drive CSVs."""
+    account_filter = set(accounts or activity_statement_folders)
+    year_filter = {str(value) for value in (years or [])}
+    month_filter = {str(value).zfill(2) for value in (months or [])}
+    summaries = []
+
+    for account, folder_id in activity_statement_folders.items():
+        if account not in account_filter:
+            continue
+        files = Drive.get_files_in_folder(folder_id) or []
+        pattern = re.compile(rf'{re.escape(account)}_(\d{{4}})(\d{{2}})\.(csv|pdf)', re.IGNORECASE)
+        months_in_folder = {}
+        for file_info in files:
+            match = pattern.fullmatch(file_info.get('name', ''))
+            if not match or (year_filter and match.group(1) not in year_filter) or (month_filter and match.group(2) not in month_filter):
+                continue
+            month_files = months_in_folder.setdefault((match.group(1), match.group(2)), {})
+            file_type = match.group(3).lower()
+            if file_type in month_files:
+                raise ServiceError(f'Duplicate {file_type.upper()} statement for {account} {match.group(1)}-{match.group(2)}', status_code=500)
+            month_files[file_type] = file_info
+
+        for (year, month), month_files in months_in_folder.items():
+            csv_file = month_files.get('csv')
+            pdf_file = month_files.get('pdf')
+            eom = f'{year}-{month}-{calendar.monthrange(int(year), int(month))[1]:02d}'
+            if csv_file is None:
+                summaries.append({
+                    'account': account, 'year': int(year), 'month': int(month), 'eom': eom,
+                    'starting_value': None, 'deposits_withdrawals': None, 'dividends': None,
+                    'interest': None, 'other_fees': None, 'ending_value': None,
+                    'credits': None, 'debits': None, 'cash_opening_balance': None,
+                    'cash_closing_balance': None, 'cash_reconciliation_difference': None,
+                    'cash_reconciled': False, 'source_file_id': None,
+                    'source_file_name': None, 'pdf_file_id': pdf_file['id'],
+                    'pdf_file_name': pdf_file.get('name'), 'statement_complete': False,
+                })
+                continue
+
+            rows = _read_statement_csv(csv_file['id'], csv_file.get('modifiedTime'))
+            _validate_statement_account(rows, account, year, month)
+            sections = {
+                row[2].strip(): _parse_amount(row[3], account, year, month, row[2])
+                for row in rows
+                if len(row) >= 4 and row[0].strip() == 'Change in NAV' and row[1].strip() == 'Data' and row[2].strip()
+            }
+            if 'Starting Value' not in sections or 'Ending Value' not in sections:
+                raise ServiceError(f'Change in NAV summary not found for {account} {year}-{month}', status_code=500)
+
+            credits = 0.0
+            debits = 0.0
+            cash_opening_balance = None
+            cash_closing_balance = None
+            for row, columns in _base_currency_funds_rows(rows, account, year, month):
+                description = row[columns['Description']].strip()
+                if description == 'Opening Balance':
+                    cash_opening_balance = _parse_amount(row[columns['Balance']], account, year, month, description)
+                elif description == 'Closing Balance':
+                    cash_closing_balance = _parse_amount(row[columns['Balance']], account, year, month, description)
+                else:
+                    debits += _parse_amount(row[columns['Debit']], account, year, month, description, allow_blank=True) or 0
+                    credits += _parse_amount(row[columns['Credit']], account, year, month, description, allow_blank=True) or 0
+
+            cash_difference = None
+            if cash_opening_balance is not None and cash_closing_balance is not None:
+                cash_difference = cash_opening_balance + credits + debits - cash_closing_balance
+
+            summaries.append({
+                'account': account,
+                'year': int(year),
+                'month': int(month),
+                'starting_value': sections['Starting Value'],
+                'deposits_withdrawals': sections.get('Deposits & Withdrawals'),
+                'dividends': sections.get('Dividends'),
+                'interest': sections.get('Interest'),
+                'other_fees': sections.get('Other Fees'),
+                'ending_value': sections['Ending Value'],
+                'credits': credits,
+                'debits': debits,
+                'cash_opening_balance': cash_opening_balance,
+                'cash_closing_balance': cash_closing_balance,
+                'cash_reconciliation_difference': cash_difference,
+                'cash_reconciled': cash_difference is not None and abs(cash_difference) < 0.01,
+                'eom': eom,
+                'source_file_id': csv_file['id'],
+                'source_file_name': csv_file.get('name'),
+                'pdf_file_id': pdf_file.get('id') if pdf_file else None,
+                'pdf_file_name': pdf_file.get('name') if pdf_file else None,
+                'statement_complete': pdf_file is not None,
+            })
+
+    return sorted(summaries, key=lambda row: (row['year'], row['month'], row['account']))
+
+
+@handle_exception
+def get_ibkr_statement_transactions(accounts=None, years=None, months=None):
+    """Read IBKR Base Currency Summary transactions directly from Drive CSVs."""
+    account_filter = set(accounts or activity_statement_folders)
+    year_filter = {str(value) for value in (years or [])}
+    month_filter = {str(value).zfill(2) for value in (months or [])}
+    transactions = []
+
+    for account, folder_id in activity_statement_folders.items():
+        if account not in account_filter:
+            continue
+        files = Drive.get_files_in_folder(folder_id) or []
+        pattern = re.compile(rf'{re.escape(account)}_(\d{{4}})(\d{{2}})\.csv', re.IGNORECASE)
+
+        for file_info in files:
+            match = pattern.fullmatch(file_info.get('name', ''))
+            if not match or (year_filter and match.group(1) not in year_filter) or (month_filter and match.group(2) not in month_filter):
+                continue
+
+            rows = _read_statement_csv(file_info['id'], file_info.get('modifiedTime'))
+            _validate_statement_account(rows, account, match.group(1), match.group(2))
+            for row, columns in _base_currency_funds_rows(rows, account, match.group(1), match.group(2)):
+                description = row[columns['Description']].strip()
+                if description in {'Opening Balance', 'Closing Balance'}:
+                    continue
+                debit = _parse_amount(row[columns['Debit']], account, match.group(1), match.group(2), description, allow_blank=True)
+                credit = _parse_amount(row[columns['Credit']], account, match.group(1), match.group(2), description, allow_blank=True)
+                if debit is None and credit is None:
+                    continue
+                transactions.append({
+                    'account': account,
+                    'year': int(match.group(1)),
+                    'month': int(match.group(2)),
+                    'transaction_date': row[columns['Report Date']].strip() or None,
+                    'settlement_date': row[columns['Activity Date']].strip() or None,
+                    'description': description,
+                    'transaction_reference': None,
+                    'transaction_code': None,
+                    'debit': debit or 0,
+                    'credit': credit or 0,
+                    'amount': (credit or 0) + (debit or 0),
+                    'running_balance': _parse_amount(row[columns['Balance']], account, match.group(1), match.group(2), description),
+                    'eom': f"{match.group(1)}-{match.group(2)}-{calendar.monthrange(int(match.group(1)), int(match.group(2)))[1]:02d}",
+                    'source_file_id': file_info['id'],
+                    'source_file_name': file_info.get('name'),
+                })
+
+    return sorted(transactions, key=lambda row: (row['transaction_date'] or '', row['account'], row['description']))
+
+
+def _read_statement_csv(file_id, modified_time=None):
+    cache_key = (file_id, modified_time)
+    if modified_time is not None:
+        with _ibkr_statement_rows_cache_lock:
+            cached_rows = _ibkr_statement_rows_cache.get(cache_key)
+            if cached_rows is not None:
+                return cached_rows
+    statement_bytes = Drive.download_file(file_id=file_id, parse=False)
+    try:
+        statement_text = statement_bytes.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        statement_text = statement_bytes.decode('latin1')
+    rows = list(csv.reader(io.StringIO(statement_text)))
+    if modified_time is not None:
+        with _ibkr_statement_rows_cache_lock:
+            if len(_ibkr_statement_rows_cache) >= 128:
+                _ibkr_statement_rows_cache.pop(next(iter(_ibkr_statement_rows_cache)))
+            _ibkr_statement_rows_cache[cache_key] = rows
+    return rows
+
+
+def _base_currency_funds_rows(rows, account, year, month):
+    header = next((row for row in rows if len(row) >= 3 and row[0].strip() == 'Statement of Funds'
+                   and row[1].strip() == 'Header'), None)
+    required = {'Report Date', 'Activity Date', 'Description', 'Debit', 'Credit', 'Balance'}
+    columns = {name.strip(): index for index, name in enumerate(header or [])}
+    if not required.issubset(columns):
+        raise ServiceError(f'Statement of Funds columns missing for {account} {year}-{month}', status_code=500)
+    last_column = max(columns[name] for name in required)
+    for row in rows:
+        if len(row) > last_column and row[0].strip() == 'Statement of Funds' \
+                and row[1].strip() == 'Data' and row[2].strip() == 'Base Currency Summary':
+            yield row, columns
+
+
+def _validate_statement_account(rows, expected_account, year, month):
+    account = next((row[3].strip().split()[0] for row in rows
+                    if len(row) >= 4 and row[0].strip() == 'Account Information'
+                    and row[1].strip() == 'Data' and row[2].strip() == 'Account'), None)
+    if account != expected_account:
+        raise ServiceError(f'Statement account mismatch for {expected_account} {year}-{month}: {account or "missing"}', status_code=500)
+
+
+def _parse_amount(raw_value, account, year, month, label, allow_blank=False):
+    value = (raw_value or '').strip().replace(',', '')
+    if not value or value == '-':
+        if allow_blank:
+            return None
+        raise ServiceError(f'Missing amount for {account} {year}-{month} {label}', status_code=500)
+    try:
+        return float(value)
+    except ValueError as exc:
+        raise ServiceError(f'Invalid amount for {account} {year}-{month} {label}: {raw_value}', status_code=500) from exc
 
 def _extract_change_in_nav_rows(statement_bytes, expected_account, year, month):
     """Normalize one account's Change in NAV section from an IBKR statement."""
