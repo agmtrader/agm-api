@@ -2,7 +2,7 @@ name: Market Data ETL Pipeline
 
 on:
   schedule:
-    - cron: '00 10 * * *'   # Every day at 10:00 AM UTC (4:00 AM CST)
+    - cron: '0 1 * * *'   # Every day at 01:00 UTC (7:00 PM the previous day in Costa Rica)
   workflow_dispatch:
 
 jobs:
