@@ -31,8 +31,9 @@ UNFUNDED_EMAIL_EXCLUSIONS = frozenset({
 })
 
 # Accounts that must never receive an unfunded funding reminder. The accounts
-# below were marked red in the 2026-09-22 candidate review workbook and are
-# intentionally excluded even when their NAV is zero or missing.
+# initial exclusions were marked red in the 2026-09-22 candidate review
+# workbook. U26450466 and U26540841 were added by request on 2026-10-01.
+# All are excluded even when their NAV is zero or missing.
 UNFUNDED_ACCOUNT_EXCLUSIONS = frozenset({
     'U24289762',
     'U26306704',
@@ -49,6 +50,8 @@ UNFUNDED_ACCOUNT_EXCLUSIONS = frozenset({
     'U19565575',
     'U2580655',
     'U6170355',
+    'U26450466',
+    'U26540841',
 })
 
 # Accounts page rounds NAV to whole currency units. Treat values below half a
