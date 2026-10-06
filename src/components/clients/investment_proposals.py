@@ -10,7 +10,7 @@ from src.components.tools.public.reporting import (
 )
 from src.components.clients.risk_profiles import risk_archetypes, get_risk_archetype_for_score
 from src.utils.connectors.supabase import db
-from src.utils.exception import handle_exception
+from src.utils.exception import ServiceError, handle_exception
 from src.utils.logger import logger
 import numpy as np
 import re
@@ -705,8 +705,9 @@ def _prepare_bucket_candidates(
 def _prepare_etf_candidates(etfs_df: pd.DataFrame, proposal_equity_df: pd.DataFrame | None = None) -> pd.DataFrame:
     """Adapt the ETF report to the common candidate schema.
 
-    ETF selection must use the historical-performance Current Yield produced
-    by the market-data ETL, rather than the legacy SPY-only estimate.
+    Prefer historical-performance Current Yield. Production snapshots leave
+    this column empty, so missing values use the existing proposal-equity
+    median estimate until historical data is available.
     """
     if etfs_df.empty:
         return pd.DataFrame(columns=['Ticker', 'Symbol_x', 'Current Yield_x', 'S&P Equivalent_x'])
@@ -719,21 +720,22 @@ def _prepare_etf_candidates(etfs_df: pd.DataFrame, proposal_equity_df: pd.DataFr
     )
     candidates['Ticker'] = display_symbol
     candidates['Symbol_x'] = display_symbol
-    if 'Current Yield' in candidates.columns:
-        candidates['Current Yield_x'] = candidates['Current Yield'].apply(
-            lambda value: _normalize_yield_percent(_to_float_or_none(value))
-        )
-    else:
+    raw_yields = candidates.get('Current Yield', pd.Series(None, index=candidates.index, dtype=object))
+    parsed_yields = raw_yields.apply(_to_float_or_none)
+    missing_yields = parsed_yields.apply(lambda value: value is None or not np.isfinite(value))
+    candidates['Current Yield_x'] = parsed_yields.apply(_normalize_yield_percent)
+    if missing_yields.any():
         fallback_yield = _median_equity_yield_percent(
             proposal_equity_df.to_dict(orient='records')
             if proposal_equity_df is not None and not proposal_equity_df.empty
             else []
         )
         logger.warning(
-            'ETF snapshot is missing Current Yield; using proposal-equity median fallback '
+            f'ETF snapshot has {int(missing_yields.sum())} missing Current Yield value(s); '
+            'using proposal-equity median fallback '
             f'of {fallback_yield:.4f}% until the ETL snapshot is refreshed.'
         )
-        candidates['Current Yield_x'] = fallback_yield
+        candidates.loc[missing_yields, 'Current Yield_x'] = fallback_yield
     candidates['S&P Equivalent_x'] = 'ETF'
     # Keep the source columns so optional proposal metadata such as industry
     # can be preserved when it exists in the ETF snapshot.
@@ -846,6 +848,11 @@ def _initialize_used_symbols(bonds_df_no_duplicates: pd.DataFrame) -> set[str]:
     return used_symbols
 
 
+def _asset_count_for_weight(weight: float) -> int:
+    # Every requested sleeve needs at least one security, even below 2.5%.
+    return max(1, int(round(TOTAL_ASSETS * weight))) if weight > 0 else 0
+
+
 def _populate_investment_proposal_from_distribution(
     investment_proposal: list[dict],
     distribution: dict,
@@ -864,7 +871,7 @@ def _populate_investment_proposal_from_distribution(
 
     for asset_type in investment_proposal:
         percentage = float(normalized_distribution.get(asset_type['name'], 0) or 0)
-        assets_to_invest = int(round(TOTAL_ASSETS * percentage))
+        assets_to_invest = _asset_count_for_weight(percentage)
 
         logger.info(f"--- Processing bucket: {asset_type['name']} ---")
         logger.info(f"Distribution percentage: {percentage}")
@@ -912,7 +919,7 @@ def _populate_investment_proposal_from_distribution(
             rating_to_bucket[equiv.replace('+', '').replace('-', '')] = bucket
 
     bucket_needs = {
-        bucket['name']: max(0, int(round(TOTAL_ASSETS * float(normalized_distribution.get(bucket['name'], 0) or 0))) - len(bucket['bonds']))
+        bucket['name']: max(0, _asset_count_for_weight(float(normalized_distribution.get(bucket['name'], 0) or 0)) - len(bucket['bonds']))
         for bucket in investment_proposal
     }
 
@@ -972,7 +979,26 @@ def _populate_investment_proposal_from_distribution(
             bucket_needs[bucket['name']] -= 1
             remaining_needed -= 1
 
+    missing_buckets = [
+        bucket['name'] for bucket in investment_proposal
+        if normalized_distribution.get(bucket['name'], 0) > 0 and not bucket['bonds']
+    ]
+    if missing_buckets or not any(bucket['bonds'] for bucket in investment_proposal):
+        missing_names = ', '.join(missing_buckets) or 'all requested asset classes'
+        raise ServiceError(
+            f'Unable to generate investment proposal: no eligible assets for {missing_names}. '
+            'Refresh the market data and yield estimates before trying again.',
+            status_code=422,
+            code='proposal_assets_unavailable',
+            details={'missing_buckets': missing_buckets},
+        )
+
     for asset_type in investment_proposal:
+        weight = float(normalized_distribution.get(asset_type['name'], 0) or 0)
+        # Available securities may be fewer than the target. Persist weights
+        # rather than silently changing the allocation to match their counts.
+        for asset in asset_type['bonds']:
+            asset['percentage'] = weight / len(asset_type['bonds'])
         logger.announcement(f'Asset Type: {asset_type["name"]}')
         logger.announcement(f'Percentage: {normalized_distribution.get(asset_type["name"], 0)}')
         logger.announcement(f'Assets to invest: {len(asset_type["bonds"])}')
@@ -1317,6 +1343,8 @@ def create_investment_proposal_with_risk_profile(risk_profile: dict, starting_am
             context=context,
         )
 
+    except ServiceError:
+        raise
     except Exception as exc:
         logger.error(f'Failed creating investment proposal: {exc}')
         raise Exception(f'Failed creating investment proposal: {exc}')
@@ -1343,6 +1371,8 @@ def create_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
             context=context,
         )
 
+    except ServiceError:
+        raise
     except Exception as exc:
         logger.error(f'Failed creating investment proposal from plan: {exc}')
         raise Exception(f'Failed creating investment proposal from plan: {exc}')
@@ -1374,6 +1404,8 @@ def preview_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
             distribution=distribution,
             context=context,
         )
+    except ServiceError:
+        raise
     except Exception as exc:
         logger.error(f'Failed previewing investment proposal from plan: {exc}')
         raise Exception(f'Failed previewing investment proposal from plan: {exc}')
