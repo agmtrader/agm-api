@@ -83,7 +83,15 @@ def read_route():
         query['user_id'] = user_id
     if code:
         query['advisor_code'] = code
-    return read_accounts(query=query)
+    if 'limit' not in request.args and 'offset' not in request.args:
+        return read_accounts(query=query)
+    from src.utils.exception import ServiceError
+    try:
+        limit = int(request.args.get('limit', '50'))
+        offset = int(request.args.get('offset', '0'))
+    except ValueError:
+        raise ServiceError('limit and offset must be integers', status_code=400)
+    return read_accounts(query=query, limit=limit, offset=offset)
 
 
 @bp.route('/update', methods=['POST'])

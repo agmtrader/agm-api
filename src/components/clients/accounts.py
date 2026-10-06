@@ -186,9 +186,13 @@ def create_account(account: dict = None) -> dict:
     return {'id': account_id}
 
 @handle_exception
-def read_accounts(query: dict = None) -> list:
-    accounts = db.read(table=table, query=query)
-    return _sanitize_accounts(accounts)
+def read_accounts(query: dict = None, limit: int = None, offset: int = 0):
+    if limit is None:
+        return _sanitize_accounts(db.read(table=table, query=query))
+    if not 1 <= limit <= 200 or offset < 0:
+        raise ServiceError('limit must be between 1 and 200 and offset must be non-negative', status_code=400)
+    accounts = db.read(table=table, query=query, limit=limit + 1, offset=offset, order_by=('created', 'id'))
+    return {'accounts': _sanitize_accounts(accounts[:limit]), 'has_more': len(accounts) > limit}
 
 @handle_exception
 def read_instructions(query: dict = None) -> list:

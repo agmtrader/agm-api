@@ -419,7 +419,7 @@ class DatabaseManager:
 
         return _create_many(table, data, batch_size)
 
-    def read(self, table: str, query: dict = None, exclude_columns: list = None) -> list:
+    def read(self, table: str, query: dict = None, exclude_columns: list = None, limit: int = None, offset: int = 0, order_by: tuple = ()) -> list:
         @self.with_session(commit=False)
         def _read(session, table: str, query: dict = None, exclude_columns: list = None):
 
@@ -462,6 +462,10 @@ class DatabaseManager:
                 dialect=self.engine.dialect
             )
             
+            for column_name in order_by:
+                sql_query = sql_query.order_by(tbl.c[column_name].desc())
+            if limit is not None:
+                sql_query = sql_query.offset(offset).limit(limit)
             results = sql_query.all()
 
             serialized_results = [row._asdict() for row in results]
