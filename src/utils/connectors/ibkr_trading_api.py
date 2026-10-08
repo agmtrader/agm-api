@@ -10,7 +10,6 @@ from src.utils.exception import ServiceError, handle_exception
 from src.utils.logger import logger
 from src.utils.ibkr_errors import raise_ibkr_response_error
 
-
 class IBKRTradingAPI(IBKRWebAPI):
     def __init__(self):
         super().__init__()
