@@ -103,20 +103,29 @@ def test_lazy_client_constructs_once_when_concurrent_callers_arrive():
 
 
 @pytest.mark.parametrize('fail', [False, True])
-def test_deployment_uses_same_digest_and_gates_service_update(tmp_path, fail):
+@pytest.mark.parametrize('image_kind', ['tag', 'digest', 'untagged'])
+def test_deployment_uses_same_digest_and_gates_service_update(tmp_path, fail, image_kind):
     fake = tmp_path / 'gcloud'
     fake.write_text('''#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$CALL_LOG"
 case "$*" in
-  "artifacts docker images describe"*) printf '%s\\n' 'registry/api@sha256:abcdef' ;;
+  "artifacts docker tags list"*) printf '%s\\n' "sha256:$(printf 'a%.0s' {1..64})" ;;
   "run jobs execute"*) if [[ "$FAIL_PREFLIGHT" == '1' ]]; then exit 1; fi ;;
 esac
 ''')
     fake.chmod(0o700)
     log = tmp_path / 'calls'
-    result = subprocess.run(['bash', 'dev/deploy_api.sh', 'registry/api:tag', 'commit'], env={**os.environ, 'PATH': f'{tmp_path}:{os.environ["PATH"]}', 'CALL_LOG': str(log), 'FAIL_PREFLIGHT': '1' if fail else '0'}, capture_output=True, text=True)
+    digest = 'registry/api@sha256:' + 'a' * 64
+    image = {'digest': digest, 'tag': 'registry/api:tag', 'untagged': 'registry/api'}[image_kind]
+    result = subprocess.run(['bash', 'dev/deploy_api.sh', image, 'commit'], env={**os.environ, 'PATH': f'{tmp_path}:{os.environ["PATH"]}', 'CALL_LOG': str(log), 'FAIL_PREFLIGHT': '1' if fail else '0'}, capture_output=True, text=True)
     calls = log.read_text().splitlines()
-    assert any('run jobs deploy' in call and '--command=python --args=-m,dev.schema_preflight' in call and '--image=registry/api@sha256:abcdef' in call for call in calls)
+    lookups = [call for call in calls if call.startswith('artifacts ')]
+    assert len(lookups) == (0 if image_kind == 'digest' else 1)
+    if lookups:
+        assert lookups[0].startswith('artifacts docker tags list registry/api ')
+        expected_tag = 'latest' if image_kind == 'untagged' else 'tag'
+        assert f'--filter=tag.basename()={expected_tag}' in lookups[0]
+    assert any('run jobs deploy' in call and '--command=python --args=-m,dev.schema_preflight' in call and f'--image={digest}' in call for call in calls)
     assert any('run jobs delete' in call for call in calls)
     updates = [call for call in calls if 'run services update' in call]
     if fail:
@@ -125,4 +134,28 @@ esac
     else:
         assert result.returncode == 0, result.stderr
         assert len(updates) == 1
-        assert '--image=registry/api@sha256:abcdef' in updates[0]
+        assert f'--image={digest}' in updates[0]
+
+
+@pytest.mark.parametrize('resolution', ['missing', 'malformed', 'multiple', 'denied'])
+def test_failed_digest_resolution_never_creates_job_or_updates_service(tmp_path, resolution):
+    fake = tmp_path / 'gcloud'
+    fake.write_text('''#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$CALL_LOG"
+case "$RESOLUTION" in
+  missing) exit 0 ;;
+  malformed) echo 'sha256:not-a-digest' ;;
+  multiple) printf 'sha256:%s\\n' "$(printf 'a%.0s' {1..64})" "$(printf 'b%.0s' {1..64})" ;;
+  denied) echo 'Artifact Registry permission denied' >&2; exit 1 ;;
+esac
+''')
+    fake.chmod(0o700)
+    log = tmp_path / 'calls'
+    result = subprocess.run(['bash', 'dev/deploy_api.sh', 'registry/api:tag'], env={**os.environ, 'PATH': f'{tmp_path}:{os.environ["PATH"]}', 'CALL_LOG': str(log), 'RESOLUTION': resolution}, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert len(log.read_text().splitlines()) == 1
+    assert 'run ' not in log.read_text()
+    if resolution == 'denied':
+        assert 'Artifact Registry permission denied' in result.stderr
+    else:
+        assert 'Could not resolve an immutable candidate image digest' in result.stderr

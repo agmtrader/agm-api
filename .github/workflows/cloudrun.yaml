@@ -26,7 +26,10 @@ jobs:
 
       - name: Validate schema and refresh the current image
         run: |
-          candidate_image=$(gcloud run services describe agm-api \
+          active_revision=$(gcloud run services describe agm-api \
             --project=agm-datalake --region=us-central1 \
-            --format 'value(spec.template.spec.containers[0].image)')
+            --format 'value(status.traffic[0].revisionName)')
+          candidate_image=$(gcloud run revisions describe "$active_revision" \
+            --project=agm-datalake --region=us-central1 \
+            --format 'value(status.imageDigest)')
           bash dev/deploy_api.sh "$candidate_image"

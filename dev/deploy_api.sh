@@ -4,11 +4,20 @@ set -euo pipefail
 
 task_image=${1:?Usage: bash dev/deploy_api.sh IMAGE [COMMIT]}
 task_commit=${2:-}
-if [[ "$task_image" != *@sha256:* ]]; then
-  task_image=$(gcloud artifacts docker images describe "$task_image" \
-    --project=agm-datalake --format='value(image_summary.fully_qualified_digest)')
+if [[ "$task_image" != *@* ]]; then
+  # Read only the registry tag mapping. `images describe` also queries
+  # Container Analysis metadata, which is unrelated to deployment identity.
+  task_tag=latest
+  if [[ "${task_image##*/}" == *:* ]]; then
+    task_tag=${task_image##*:}
+    task_image=${task_image%:*}
+  fi
+  task_digest=$(gcloud artifacts docker tags list "$task_image" \
+    --project=agm-datalake --filter="tag.basename()=$task_tag" \
+    --format='value(version.basename())')
+  task_image="$task_image@$task_digest"
 fi
-if [[ "$task_image" != *@sha256:* ]]; then
+if [[ ! "$task_image" =~ ^[^[:space:]@]+@sha256:[a-f0-9]{64}$ ]]; then
   echo 'Could not resolve an immutable candidate image digest' >&2
   exit 1
 fi
