@@ -423,13 +423,7 @@ db = DatabaseProxy()
 
 
 def initialize_database():
-    """Initialize and validate the database exactly once.
-
-    ``DatabaseManager`` retains the existing behavior: schema validation is
-    skipped when ``DEV_MODE=true`` and performed otherwise. The important
-    change is that this work happens from an explicit startup call instead of
-    as a side effect of importing this module.
-    """
+    """Initialize declared runtime metadata once; validation is deployment work."""
     global _supabase_instance
 
     if _supabase_instance is None:

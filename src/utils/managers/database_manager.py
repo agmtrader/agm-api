@@ -26,46 +26,28 @@ class DatabaseManager:
         self.engine = engine
         self.base = base
         self.engine_factory = engine_factory
-        
-        # First get all tables from the database
+        # Runtime metadata is declared locally. Clone it without Python-side
+        # defaults to preserve the previous reflected Core write behavior.
+        self.metadata = MetaData()
+        for table in self.base.metadata.tables.values():
+            cloned = table.to_metadata(self.metadata)
+            for column in cloned.columns:
+                column.default = None
+                column.onupdate = None
+        logger.success('Database manager initialized from declared metadata')
+
+    def validate_schema(self):
+        """Read-only deployment preflight; never create or alter tables."""
         inspector = inspect(self.engine)
         db_tables = inspector.get_table_names()
-        
-        # Get all models from SQLAlchemy Base
         model_tables = self.base.metadata.tables.keys()
-        
-        dev_mode = os.getenv("DEV_MODE", "").lower() == "true"
-        if not dev_mode:
-            # Compare and log differences
-            logger.info("Validating database schema...")
-            
-            # Check for missing tables in models
-            missing_in_models = set(db_tables) - set(model_tables)
-            if missing_in_models:
-                logger.error(f"Tables in database but missing in models: {missing_in_models}")
-                raise Exception(f"Tables in database but missing in models: {missing_in_models}")
-            
-            # Check for extra tables in models
-            extra_in_models = set(model_tables) - set(db_tables)
-            if extra_in_models:
-                logger.error(f"Tables in models but missing in database: {extra_in_models}")
-                raise Exception(f"Tables in models but missing in database: {extra_in_models}")
-            
-            # Check detailed column differences for each table
-            for table_name in set(db_tables) & set(model_tables):
-                self._validate_table_schema(inspector, table_name)
-        else:
-            logger.info("Skipping database schema validation because DEV_MODE=true")
-        
-        try:
-            self.base.metadata.create_all(self.engine)
-        except Exception as e:
-            logger.error(f'Error creating tables: {str(e)}')
-            raise Exception(f'Error creating tables: {str(e)}')
-
-        self.metadata = MetaData()
-        self.metadata.reflect(bind=self.engine)
-        logger.success(f'Database initialized')
+        missing_in_models = set(db_tables) - set(model_tables)
+        extra_in_models = set(model_tables) - set(db_tables)
+        if missing_in_models or extra_in_models:
+            raise Exception(f'Schema table mismatch: unmodeled={sorted(missing_in_models)}, missing={sorted(extra_in_models)}')
+        for table_name in sorted(model_tables):
+            self._validate_table_schema(inspector, table_name)
+        logger.success('Schema preflight passed')
 
     def _pool_status(self) -> str:
         try:
@@ -194,7 +176,8 @@ class DatabaseManager:
             
             if db_type_base != model_type_base:
                 logger.warning(f"Table '{table_name}', column '{col_name}': Data type difference. DB: {db_type_str}, Model: {model_type_str}")
-                # Don't raise exception for type differences, just warn as they might be compatible
+                # Runtime now uses declared types rather than reflected types.
+                raise Exception(f"Table '{table_name}', column '{col_name}': Data type mismatch. DB: {db_type_str}, Model: {model_type_str}")
     
 
     def with_session(self, func=None, max_retries: int = 3, delay: int = 1, commit: bool = True):

@@ -75,9 +75,8 @@ def start_api():
         headers_enabled=True,
     )
 
-    # Initialize the database explicitly before importing blueprints. This
-    # preserves fail-fast schema validation in production while keeping
-    # component imports free of database side effects.
+    # Initialize declared metadata before blueprints; the candidate-image
+    # deployment preflight validates the live schema before traffic changes.
     initialize_database()
 
     @app.before_request

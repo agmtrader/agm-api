@@ -5,25 +5,28 @@ import calendar
 import io
 import threading
 import pandas as pd
-import pandas as pd
 import re
 import json
 import hashlib
+import os
 import pytz
 from collections import Counter
 
 from src.utils.connectors.drive import GoogleDrive
 from src.utils.exception import ServiceError, handle_exception
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
+from src.utils.report_cache import ReportCache
+from src.utils.lazy_client import LazyClient
 
 logger.announcement('Initializing Reporting Service', type='info')
-Drive = GoogleDrive()
-ibkr_web_api = IBKRWebAPI()
+Drive = LazyClient(GoogleDrive)
+ibkr_web_api = LazyClient(IBKRWebAPI)
 _ending_balances_cache = {'key': None, 'rows': None}
 _activity_statement_file_cache = {}
 _ending_balances_cache_lock = threading.Lock()
 _ibkr_statement_rows_cache = {}
 _ibkr_statement_rows_cache_lock = threading.Lock()
+_daily_report_cache = ReportCache(os.getenv('REPORT_CACHE_TTL_SECONDS', '30'))
 
 activity_statement_folders = {
     'I6413690': '1qJhG-9F_YteWY-hCP1EaIhbJQ1DW71_h',
@@ -54,13 +57,15 @@ def get_clients_report():
     
     :return: Response object with clients list or error message
     """
-    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
-    clients_file = [client for client in files_in_resources_folder if 'ibkr_clients' in client['name']]
-    if len(clients_file) != 1:
-        logger.error('Clients file not found or multiple files found')
-        raise Exception('Clients file not found or multiple files found')
-    clients = Drive.download_file(file_id=clients_file[0]['id'], parse=True)
-    return clients
+    return _daily_report_cache.get('clients', lambda: _read_daily_report('ibkr_clients'))
+
+
+def _read_daily_report(name):
+    files = Drive.get_files_in_folder(resources_folder_id)
+    matches = [file for file in files if name in file['name']]
+    if len(matches) != 1:
+        raise Exception(f'{name} file not found or multiple files found')
+    return Drive.download_file(file_id=matches[0]['id'], parse=True)
 
 @handle_exception
 def get_client_fees_report():
@@ -84,13 +89,7 @@ def get_nav_report():
     
     :return: Response object with NAV report or error message
     """
-    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
-    nav_file = [nav for nav in files_in_resources_folder if 'ibkr_nav' in nav['name']]
-    if len(nav_file) != 1:
-        logger.error('Nav file not found or multiple files found')
-        raise Exception('Nav file not found or multiple files found')
-    nav = Drive.download_file(file_id=nav_file[0]['id'], parse=True)
-    return nav
+    return _daily_report_cache.get('nav', lambda: _read_daily_report('ibkr_nav'))
 
 @handle_exception
 def get_bond_report():

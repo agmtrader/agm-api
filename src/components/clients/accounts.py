@@ -6,10 +6,12 @@ from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 from src.utils.connectors.ibkr_trading_api import IBKRTradingAPI
 from sqlalchemy import text
 import uuid
+from src.utils.lazy_client import LazyClient
 
 logger.announcement('Initializing Accounts Service', type='info')
-ibkr_web_api = IBKRWebAPI()
-ibkr_trading_api = IBKRTradingAPI()
+
+ibkr_web_api = LazyClient(IBKRWebAPI)
+ibkr_trading_api = LazyClient(IBKRTradingAPI)
 logger.announcement('Initialized Accounts Service', type='success')
 
 table = 'account'

@@ -20,10 +20,11 @@ from src.utils.connectors.ibkr_trading_api import IBKRTradingAPI
 from src.utils.exception import handle_exception
 from src.components.tools.public.reporting import get_bond_report
 from src.utils.logger import logger
+from src.utils.lazy_client import LazyClient
 
 logger.announcement('Initializing Reporting Service', type='info')
-Drive = GoogleDrive()
-ibkr_trading_api = IBKRTradingAPI()
+Drive = LazyClient(GoogleDrive)
+ibkr_trading_api = LazyClient(IBKRTradingAPI)
 
 
 def _with_ibkr_market_data_session(func):

@@ -27,32 +27,11 @@ steps:
       ]
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: 'gcloud'
+    entrypoint: 'bash'
     args:
-      [
-        'run',
-        'services',
-        'update',
-          'agm-api',
-        '--platform=managed',
-        '--region=us-central1',
-        '--concurrency=4',
-        '--min-instances=0',
-        '--max-instances=10',
-        '--timeout=300',
-        '--cpu=1',
-        '--memory=2Gi',
-        '--port=5000',
-        '--service-account=agm-api@agm-datalake.iam.gserviceaccount.com',
-        '--set-env-vars=DEV_MODE=false',
-        '--vpc-connector=agm-qa-connector',
-        '--vpc-egress=all-traffic',
-        '--cpu-boost',
-        '--ingress=all',
-        '--image=us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api:${_IMAGE_TAG}',
-        '--labels=managed-by=github-actions,commit-sha=${_IMAGE_TAG}',
-        '--quiet'
-      ]
+      - 'dev/deploy_api.sh'
+      - 'us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api:${_IMAGE_TAG}'
+      - '${_IMAGE_TAG}'
 
 images:
   - 'us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api:${_IMAGE_TAG}'
