@@ -40,5 +40,5 @@ jobs:
       - name: Compile application and schema preflight
         run: python -m compileall -q src run.py dev/schema_preflight.py
 
-      - name: Test startup, deployment gating and reporting cache
-        run: python -m pytest tests/test_database_startup.py tests/test_report_cache.py -q
+      - name: Test startup, deployment gating, reporting cache and exception privacy
+        run: python -m pytest tests/test_database_startup.py tests/test_report_cache.py tests/test_exception_reporting.py -q
