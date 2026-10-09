@@ -1,30 +1,37 @@
-# cloudbuild.yaml
+# Registry cache survives between ephemeral Cloud Build workers.
 options:
   machineType: 'E2_HIGHCPU_8'
   logging: 'CLOUD_LOGGING_ONLY'
 
 substitutions:
-  # GitHub Actions overrides this with the commit SHA. The default keeps manual
-  # `gcloud builds submit` invocations valid; manual callers should override it.
   _IMAGE_TAG: 'manual'
+  _CACHE_TAG: 'buildcache'
 
 steps:
-  - name: 'gcr.io/cloud-builders/docker'
+  # Docker's CLI image has buildx but no gcloud credential helper. Pass the
+  # build identity's short-lived token outside the application build context.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
     args:
-      [
-        'build',
-        '--no-cache',
-        '-t',
-        'us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api:${_IMAGE_TAG}',
-        '.'
-      ]
+      - '-ceu'
+      - |
+        umask 077
+        gcloud auth print-access-token > /builder/home/agm-registry-token
 
-  - name: 'gcr.io/cloud-builders/docker'
+  - name: 'docker:27.5.1-cli'
+    env: ['DOCKER_CONFIG=/builder/home/agm-cache-docker']
+    entrypoint: 'sh'
     args:
-      [
-        'push',
-        'us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api:${_IMAGE_TAG}'
-      ]
+      - '-ceu'
+      - |
+        docker login -u oauth2accesstoken --password-stdin https://us-central1-docker.pkg.dev < /builder/home/agm-registry-token
+        rm /builder/home/agm-registry-token
+        docker buildx create --name agm-cache --driver docker-container --use
+        docker buildx build --progress=plain --provenance=false \
+          --cache-from=type=registry,ref=us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api:${_CACHE_TAG} \
+          --cache-to=type=registry,ref=us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api:${_CACHE_TAG},mode=max \
+          --tag=us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api:${_IMAGE_TAG} \
+          --push .
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
@@ -32,6 +39,3 @@ steps:
       - 'dev/deploy_api.sh'
       - 'us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api:${_IMAGE_TAG}'
       - '${_IMAGE_TAG}'
-
-images:
-  - 'us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api:${_IMAGE_TAG}'
