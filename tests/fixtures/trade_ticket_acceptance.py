@@ -29,10 +29,10 @@ def test_independent_synthetic_field_mapping_and_formats():
  for col,date in {3:(2026,10,12),5:(2026,10,14),20:(2027,10,12)}.items():
   assert s.cell_type(1,col)==xlrd.XL_CELL_DATE
   assert xlrd.xldate_as_tuple(s.cell_value(1,col),w.datemode)[:3]==date
-  assert w.format_map[w.xf_list[s.cell_xf_index(1,col)].format_key].format_str=='DD/MM/YYYY'
+  assert w.format_map[w.xf_list[s.cell_xf_index(1,col)].format_key].format_str=='dd/mm/yyyy;@'
  for col in [2,4,9,14,15,16,17,21,22,23]:assert s.cell_value(1,col)==''
  for col in [2,14,15,16,17,21,22,23]:assert s.cell_value(0,col)=='N/A'
- assert w.format_map[w.xf_list[s.cell_xf_index(1,10)].format_key].format_str=='#,##0.00'
+ assert w.format_map[w.xf_list[s.cell_xf_index(1,10)].format_key].format_str=='_-* #,##0.00_-;\\-* #,##0.00_-;_-* "-"??_-;_-@_-'
 
 @pytest.mark.parametrize('field',['ClientAccountID','TradeDate','SettleDate','ISIN','Quantity','Price','NetCash','CurrencyPrimary'])
 def test_missing_required_fields_fail_explicitly(field):
@@ -127,6 +127,30 @@ def test_missing_required_text_in_mixed_rows_rejected(field):
 def test_nan_primary_source_uses_valid_fallback():
  s=book([{**BASE,'ISIN':float('nan'),'SecurityID':'FALLBACK-ISIN'}],[0]).sheet_by_index(0)
  assert s.cell_value(1,6)=='FALLBACK-ISIN'
+
+
+
+import hashlib,json
+
+def style_signature(w,s,r,c):
+ x=w.xf_list[s.cell_xf_index(r,c)];f=w.font_list[x.font_index]
+ fields={'font':{k:v for k,v in vars(f).items() if k!='font_index'},'alignment':vars(x.alignment),'border':vars(x.border),'background':vars(x.background),'protection':vars(x.protection),'format':w.format_map[x.format_key].format_str}
+ return hashlib.sha256(json.dumps(fields,sort_keys=True).encode()).hexdigest()
+
+
+def test_reference_template_layout_and_styles_preserved_for_each_execution():
+ import json
+ reference=json.loads((Path(__file__).parent/'improsa_reference_fingerprints.json').read_text())
+ w=book([BASE,{**BASE,'ExecID':'execution-B'}],[0,1]);s=w.sheet_by_index(0)
+ assert w.sheet_names()==[reference['sheet']]
+ assert s.row_values(0)==reference['headers']
+ assert [s.colinfo_map[c].width for c in range(28)]==reference['widths']
+ assert s.rowinfo_map[0].height==reference['heights'][0]
+ assert [style_signature(w,s,0,c) for c in range(28)]==reference['header_styles']
+ for r in (1,2):
+  assert s.rowinfo_map[r].height==reference['heights'][1]
+  assert [style_signature(w,s,r,c) for c in range(28)]==reference['data_styles']
+ assert sorted(s.merged_cells)==[(1,2,0,2),(2,3,0,2)]
 
 if __name__=='__main__':
  raise SystemExit(pytest.main([__file__,'-q']))

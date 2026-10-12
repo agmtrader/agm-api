@@ -1,0 +1,1115 @@
+{
+  "source_sha256": "1d58e45dc11cb44b22d524aa782383bf3f9dd7ff95b53b53d60f34eb1501e983",
+  "sheet_name": "ExportacionDatos_0",
+  "widths": [
+    325,
+    3141,
+    2490,
+    3979,
+    558,
+    5841,
+    3840,
+    3793,
+    3002,
+    512,
+    3328,
+    3328,
+    6469,
+    4654,
+    2048,
+    1070,
+    2885,
+    2164,
+    2350,
+    5515,
+    6097,
+    1070,
+    2420,
+    1070,
+    1861,
+    2676,
+    5329,
+    11845
+  ],
+  "header_height": 750,
+  "data_height": 250,
+  "header_styles": [
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    2,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+  ],
+  "data_styles": [
+    3,
+    3,
+    4,
+    5,
+    5,
+    5,
+    6,
+    6,
+    7,
+    4,
+    8,
+    9,
+    9,
+    9,
+    4,
+    4,
+    4,
+    4,
+    10,
+    11,
+    5,
+    4,
+    4,
+    12,
+    13,
+    13,
+    13,
+    14
+  ],
+  "styles": [
+    {
+      "num_format_str": "General",
+      "font": {
+        "height": 200,
+        "name": "Arial",
+        "bold": 0,
+        "italic": 0,
+        "struck_out": 0,
+        "outline": 0,
+        "shadow": 0,
+        "colour_index": 32767,
+        "escapement": 0,
+        "underline": 0,
+        "family": 0,
+        "charset": 0
+      },
+      "alignment": {
+        "horz": 0,
+        "vert": 2,
+        "rota": 0,
+        "wrap": 1,
+        "shri": 0,
+        "inde": 0,
+        "dire": 0
+      },
+      "borders": {
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "diag": 0,
+        "left_colour": 0,
+        "right_colour": 0,
+        "top_colour": 0,
+        "bottom_colour": 0,
+        "diag_colour": 0,
+        "need_diag1": 0,
+        "need_diag2": 0
+      },
+      "pattern": {
+        "pattern": 0,
+        "pattern_fore_colour": 64,
+        "pattern_back_colour": 65
+      },
+      "protection": {
+        "cell_locked": 1,
+        "formula_hidden": 0
+      }
+    },
+    {
+      "num_format_str": "General",
+      "font": {
+        "height": 200,
+        "name": "Arial",
+        "bold": 0,
+        "italic": 0,
+        "struck_out": 0,
+        "outline": 0,
+        "shadow": 0,
+        "colour_index": 32767,
+        "escapement": 0,
+        "underline": 0,
+        "family": 0,
+        "charset": 0
+      },
+      "alignment": {
+        "horz": 0,
+        "vert": 2,
+        "rota": 0,
+        "wrap": 1,
+        "shri": 0,
+        "inde": 0,
+        "dire": 0
+      },
+      "borders": {
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "diag": 0,
+        "left_colour": 0,
+        "right_colour": 0,
+        "top_colour": 0,
+        "bottom_colour": 0,
+        "diag_colour": 0,
+        "need_diag1": 0,
+        "need_diag2": 0
+      },
+      "pattern": {
+        "pattern": 1,
+        "pattern_fore_colour": 13,
+        "pattern_back_colour": 64
+      },
+      "protection": {
+        "cell_locked": 1,
+        "formula_hidden": 0
+      }
+    },
+    {
+      "num_format_str": "General",
+      "font": {
+        "height": 200,
+        "name": "Arial",
+        "bold": 0,
+        "italic": 0,
+        "struck_out": 0,
+        "outline": 0,
+        "shadow": 0,
+        "colour_index": 32767,
+        "escapement": 0,
+        "underline": 0,
+        "family": 0,
+        "charset": 0
+      },
+      "alignment": {
+        "horz": 0,
+        "vert": 2,
+        "rota": 0,
+        "wrap": 1,
+        "shri": 0,
+        "inde": 0,
+        "dire": 0
+      },
+      "borders": {
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "diag": 0,
+        "left_colour": 0,
+        "right_colour": 0,
+        "top_colour": 0,
+        "bottom_colour": 0,
+        "diag_colour": 0,
+        "need_diag1": 0,
+        "need_diag2": 0
+      },
+      "pattern": {
+        "pattern": 1,
+        "pattern_fore_colour": 22,
+        "pattern_back_colour": 64
+      },
+      "protection": {
+        "cell_locked": 1,
+        "formula_hidden": 0
+      }
+    },
+    {
+      "num_format_str": "0",
+      "font": {
+        "height": 200,
+        "name": "Arial",
+        "bold": 0,
+        "italic": 0,
+        "struck_out": 0,
+        "outline": 0,
+        "shadow": 0,
+        "colour_index": 32767,
+        "escapement": 0,
+        "underline": 0,
+        "family": 2,
+        "charset": 0
+      },
+      "alignment": {
+        "horz": 2,
+        "vert": 0,
+        "rota": 0,
+        "wrap": 1,
+        "shri": 0,
+        "inde": 0,
+        "dire": 1
+      },
+      "borders": {
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "diag": 0,
+        "left_colour": 0,
+        "right_colour": 0,
+        "top_colour": 0,
+        "bottom_colour": 0,
+        "diag_colour": 0,
+        "need_diag1": 0,
+        "need_diag2": 0
+      },
+      "pattern": {
+        "pattern": 0,
+        "pattern_fore_colour": 64,
+        "pattern_back_colour": 65
+      },
+      "protection": {
+        "cell_locked": 0,
+        "formula_hidden": 0
+      }
+    },
+    {
+      "num_format_str": "General",
+      "font": {
+        "height": 200,
+        "name": "Arial",
+        "bold": 0,
+        "italic": 0,
+        "struck_out": 0,
+        "outline": 0,
+        "shadow": 0,
+        "colour_index": 32767,
+        "escapement": 0,
+        "underline": 0,
+        "family": 2,
+        "charset": 0
+      },
+      "alignment": {
+        "horz": 2,
+        "vert": 0,
+        "rota": 0,
+        "wrap": 1,
+        "shri": 0,
+        "inde": 0,
+        "dire": 1
+      },
+      "borders": {
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "diag": 0,
+        "left_colour": 0,
+        "right_colour": 0,
+        "top_colour": 0,
+        "bottom_colour": 0,
+        "diag_colour": 0,
+        "need_diag1": 0,
+        "need_diag2": 0
+      },
+      "pattern": {
+        "pattern": 0,
+        "pattern_fore_colour": 64,
+        "pattern_back_colour": 65
+      },
+      "protection": {
+        "cell_locked": 0,
+        "formula_hidden": 0
+      }
+    },
+    {
+      "num_format_str": "dd/mm/yyyy;@",
+      "font": {
+        "height": 200,
+        "name": "Arial",
+        "bold": 0,
+        "italic": 0,
+        "struck_out": 0,
+        "outline": 0,
+        "shadow": 0,
+        "colour_index": 32767,
+        "escapement": 0,
+        "underline": 0,
+        "family": 2,
+        "charset": 0
+      },
+      "alignment": {
+        "horz": 2,
+        "vert": 0,
+        "rota": 0,
+        "wrap": 1,
+        "shri": 0,
+        "inde": 0,
+        "dire": 1
+      },
+      "borders": {
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "diag": 0,
+        "left_colour": 0,
+        "right_colour": 0,
+        "top_colour": 0,
+        "bottom_colour": 0,
+        "diag_colour": 0,
+        "need_diag1": 0,
+        "need_diag2": 0
+      },
+      "pattern": {
+        "pattern": 0,
+        "pattern_fore_colour": 64,
+        "pattern_back_colour": 65
+      },
+      "protection": {
+        "cell_locked": 0,
+        "formula_hidden": 0
+      }
+    },
+    {
+      "num_format_str": "General",
+      "font": {
+        "height": 200,
+        "name": "Arial",
+        "bold": 0,
+        "italic": 0,
+        "struck_out": 0,
+        "outline": 0,
+        "shadow": 0,
+        "colour_index": 32767,
+        "escapement": 0,
+        "underline": 0,
+        "family": 0,
+        "charset": 0
+      },
+      "alignment": {
+        "horz": 0,
+        "vert": 2,
+        "rota": 0,
+        "wrap": 0,
+        "shri": 0,
+        "inde": 0,
+        "dire": 0
+      },
+      "borders": {
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "diag": 0,
+        "left_colour": 0,
+        "right_colour": 0,
+        "top_colour": 0,
+        "bottom_colour": 0,
+        "diag_colour": 0,
+        "need_diag1": 0,
+        "need_diag2": 0
+      },
+      "pattern": {
+        "pattern": 0,
+        "pattern_fore_colour": 64,
+        "pattern_back_colour": 65
+      },
+      "protection": {
+        "cell_locked": 1,
+        "formula_hidden": 0
+      }
+    },
+    {
+      "num_format_str": "General",
+      "font": {
+        "height": 200,
+        "name": "Arial",
+        "bold": 0,
+        "italic": 0,
+        "struck_out": 0,
+        "outline": 0,
+        "shadow": 0,
+        "colour_index": 32767,
+        "escapement": 0,
+        "underline": 0,
+        "family": 2,
+        "charset": 0
+      },
+      "alignment": {
+        "horz": 0,
+        "vert": 2,
+        "rota": 0,
+        "wrap": 0,
+        "shri": 0,
+        "inde": 0,
+        "dire": 0
+      },
+      "borders": {
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "diag": 0,
+        "left_colour": 0,
+        "right_colour": 0,
+        "top_colour": 0,
+        "bottom_colour": 0,
+        "diag_colour": 0,
+        "need_diag1": 0,
+        "need_diag2": 0
+      },
+      "pattern": {
+        "pattern": 0,
+        "pattern_fore_colour": 64,
+        "pattern_back_colour": 65
+      },
+      "protection": {
+        "cell_locked": 1,
+        "formula_hidden": 0
+      }
+    },
+    {
+      "num_format_str": "_-* #,##0.00_-;\\-* #,##0.00_-;_-* \"-\"??_-;_-@_-",
+      "font": {
+        "height": 200,
+        "name": "Arial",
+        "bold": 0,
+        "italic": 0,
+        "struck_out": 0,
+        "outline": 0,
+        "shadow": 0,
+        "colour_index": 32767,
+        "escapement": 0,
+        "underline": 0,
+        "family": 2,
+        "charset": 0
+      },
+      "alignment": {
+        "horz": 0,
+        "vert": 2,
+        "rota": 0,
+        "wrap": 0,
+        "shri": 0,
+        "inde": 0,
+        "dire": 0
+      },
+      "borders": {
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "diag": 0,
+        "left_colour": 0,
+        "right_colour": 0,
+        "top_colour": 0,
+        "bottom_colour": 0,
+        "diag_colour": 0,
+        "need_diag1": 0,
+        "need_diag2": 0
+      },
+      "pattern": {
+        "pattern": 0,
+        "pattern_fore_colour": 64,
+        "pattern_back_colour": 65
+      },
+      "protection": {
+        "cell_locked": 1,
+        "formula_hidden": 0
+      }
+    },
+    {
+      "num_format_str": "#,##0.00",
+      "font": {
+        "height": 200,
+        "name": "Arial",
+        "bold": 0,
+        "italic": 0,
+        "struck_out": 0,
+        "outline": 0,
+        "shadow": 0,
+        "colour_index": 32767,
+        "escapement": 0,
+        "underline": 0,
+        "family": 2,
+        "charset": 0
+      },
+      "alignment": {
+        "horz": 0,
+        "vert": 2,
+        "rota": 0,
+        "wrap": 0,
+        "shri": 0,
+        "inde": 0,
+        "dire": 0
+      },
+      "borders": {
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "diag": 0,
+        "left_colour": 0,
+        "right_colour": 0,
+        "top_colour": 0,
+        "bottom_colour": 0,
+        "diag_colour": 0,
+        "need_diag1": 0,
+        "need_diag2": 0
+      },
+      "pattern": {
+        "pattern": 0,
+        "pattern_fore_colour": 64,
+        "pattern_back_colour": 65
+      },
+      "protection": {
+        "cell_locked": 1,
+        "formula_hidden": 0
+      }
+    },
+    {
+      "num_format_str": "General",
+      "font": {
+        "height": 200,
+        "name": "Arial",
+        "bold": 0,
+        "italic": 0,
+        "struck_out": 0,
+        "outline": 0,
+        "shadow": 0,
+        "colour_index": 32767,
+        "escapement": 0,
+        "underline": 0,
+        "family": 2,
+        "charset": 0
+      },
+      "alignment": {
+        "horz": 1,
+        "vert": 0,
+        "rota": 0,
+        "wrap": 1,
+        "shri": 0,
+        "inde": 0,
+        "dire": 1
+      },
+      "borders": {
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "diag": 0,
+        "left_colour": 0,
+        "right_colour": 0,
+        "top_colour": 0,
+        "bottom_colour": 0,
+        "diag_colour": 0,
+        "need_diag1": 0,
+        "need_diag2": 0
+      },
+      "pattern": {
+        "pattern": 0,
+        "pattern_fore_colour": 64,
+        "pattern_back_colour": 65
+      },
+      "protection": {
+        "cell_locked": 0,
+        "formula_hidden": 0
+      }
+    },
+    {
+      "num_format_str": "#,##0",
+      "font": {
+        "height": 200,
+        "name": "Arial",
+        "bold": 0,
+        "italic": 0,
+        "struck_out": 0,
+        "outline": 0,
+        "shadow": 0,
+        "colour_index": 32767,
+        "escapement": 0,
+        "underline": 0,
+        "family": 2,
+        "charset": 0
+      },
+      "alignment": {
+        "horz": 2,
+        "vert": 0,
+        "rota": 0,
+        "wrap": 1,
+        "shri": 0,
+        "inde": 0,
+        "dire": 1
+      },
+      "borders": {
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "diag": 0,
+        "left_colour": 0,
+        "right_colour": 0,
+        "top_colour": 0,
+        "bottom_colour": 0,
+        "diag_colour": 0,
+        "need_diag1": 0,
+        "need_diag2": 0
+      },
+      "pattern": {
+        "pattern": 0,
+        "pattern_fore_colour": 64,
+        "pattern_back_colour": 65
+      },
+      "protection": {
+        "cell_locked": 0,
+        "formula_hidden": 0
+      }
+    },
+    {
+      "num_format_str": "General",
+      "font": {
+        "height": 200,
+        "name": "Arial",
+        "bold": 0,
+        "italic": 0,
+        "struck_out": 0,
+        "outline": 0,
+        "shadow": 0,
+        "colour_index": 32767,
+        "escapement": 0,
+        "underline": 0,
+        "family": 2,
+        "charset": 0
+      },
+      "alignment": {
+        "horz": 2,
+        "vert": 2,
+        "rota": 0,
+        "wrap": 0,
+        "shri": 0,
+        "inde": 0,
+        "dire": 1
+      },
+      "borders": {
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "diag": 0,
+        "left_colour": 0,
+        "right_colour": 0,
+        "top_colour": 0,
+        "bottom_colour": 0,
+        "diag_colour": 0,
+        "need_diag1": 0,
+        "need_diag2": 0
+      },
+      "pattern": {
+        "pattern": 0,
+        "pattern_fore_colour": 64,
+        "pattern_back_colour": 65
+      },
+      "protection": {
+        "cell_locked": 1,
+        "formula_hidden": 0
+      }
+    },
+    {
+      "num_format_str": "General",
+      "font": {
+        "height": 180,
+        "name": "Arial",
+        "bold": 0,
+        "italic": 0,
+        "struck_out": 0,
+        "outline": 0,
+        "shadow": 0,
+        "colour_index": 32767,
+        "escapement": 0,
+        "underline": 0,
+        "family": 2,
+        "charset": 0
+      },
+      "alignment": {
+        "horz": 2,
+        "vert": 2,
+        "rota": 0,
+        "wrap": 0,
+        "shri": 0,
+        "inde": 0,
+        "dire": 1
+      },
+      "borders": {
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "diag": 0,
+        "left_colour": 0,
+        "right_colour": 0,
+        "top_colour": 0,
+        "bottom_colour": 0,
+        "diag_colour": 0,
+        "need_diag1": 0,
+        "need_diag2": 0
+      },
+      "pattern": {
+        "pattern": 0,
+        "pattern_fore_colour": 64,
+        "pattern_back_colour": 65
+      },
+      "protection": {
+        "cell_locked": 1,
+        "formula_hidden": 0
+      }
+    },
+    {
+      "num_format_str": "General",
+      "font": {
+        "height": 200,
+        "name": "Arial",
+        "bold": 0,
+        "italic": 0,
+        "struck_out": 0,
+        "outline": 0,
+        "shadow": 0,
+        "colour_index": 53,
+        "escapement": 0,
+        "underline": 0,
+        "family": 2,
+        "charset": 0
+      },
+      "alignment": {
+        "horz": 2,
+        "vert": 0,
+        "rota": 0,
+        "wrap": 1,
+        "shri": 0,
+        "inde": 0,
+        "dire": 1
+      },
+      "borders": {
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "diag": 0,
+        "left_colour": 0,
+        "right_colour": 0,
+        "top_colour": 0,
+        "bottom_colour": 0,
+        "diag_colour": 0,
+        "need_diag1": 0,
+        "need_diag2": 0
+      },
+      "pattern": {
+        "pattern": 0,
+        "pattern_fore_colour": 64,
+        "pattern_back_colour": 65
+      },
+      "protection": {
+        "cell_locked": 0,
+        "formula_hidden": 0
+      }
+    }
+  ],
+  "palette": {
+    "8": [
+      0,
+      0,
+      0
+    ],
+    "9": [
+      176,
+      224,
+      230
+    ],
+    "10": [
+      51,
+      51,
+      51
+    ],
+    "11": [
+      0,
+      255,
+      0
+    ],
+    "12": [
+      0,
+      0,
+      255
+    ],
+    "13": [
+      255,
+      255,
+      0
+    ],
+    "14": [
+      255,
+      0,
+      255
+    ],
+    "15": [
+      0,
+      255,
+      255
+    ],
+    "16": [
+      128,
+      0,
+      0
+    ],
+    "17": [
+      0,
+      128,
+      0
+    ],
+    "18": [
+      0,
+      0,
+      128
+    ],
+    "19": [
+      128,
+      128,
+      0
+    ],
+    "20": [
+      128,
+      0,
+      128
+    ],
+    "21": [
+      0,
+      128,
+      128
+    ],
+    "22": [
+      192,
+      192,
+      192
+    ],
+    "23": [
+      128,
+      128,
+      128
+    ],
+    "24": [
+      153,
+      153,
+      255
+    ],
+    "25": [
+      153,
+      51,
+      102
+    ],
+    "26": [
+      255,
+      255,
+      204
+    ],
+    "27": [
+      204,
+      255,
+      255
+    ],
+    "28": [
+      102,
+      0,
+      102
+    ],
+    "29": [
+      255,
+      128,
+      128
+    ],
+    "30": [
+      0,
+      102,
+      204
+    ],
+    "31": [
+      204,
+      204,
+      255
+    ],
+    "32": [
+      0,
+      0,
+      128
+    ],
+    "33": [
+      255,
+      0,
+      255
+    ],
+    "34": [
+      255,
+      255,
+      0
+    ],
+    "35": [
+      0,
+      255,
+      255
+    ],
+    "36": [
+      128,
+      0,
+      128
+    ],
+    "37": [
+      128,
+      0,
+      0
+    ],
+    "38": [
+      0,
+      128,
+      128
+    ],
+    "39": [
+      0,
+      0,
+      255
+    ],
+    "40": [
+      0,
+      204,
+      255
+    ],
+    "41": [
+      204,
+      255,
+      255
+    ],
+    "42": [
+      204,
+      255,
+      204
+    ],
+    "43": [
+      255,
+      255,
+      153
+    ],
+    "44": [
+      153,
+      204,
+      255
+    ],
+    "45": [
+      255,
+      153,
+      204
+    ],
+    "46": [
+      204,
+      153,
+      255
+    ],
+    "47": [
+      255,
+      204,
+      153
+    ],
+    "48": [
+      51,
+      102,
+      255
+    ],
+    "49": [
+      51,
+      204,
+      204
+    ],
+    "50": [
+      153,
+      204,
+      0
+    ],
+    "51": [
+      255,
+      204,
+      0
+    ],
+    "52": [
+      255,
+      153,
+      0
+    ],
+    "53": [
+      255,
+      102,
+      0
+    ],
+    "54": [
+      102,
+      102,
+      153
+    ],
+    "55": [
+      150,
+      150,
+      150
+    ],
+    "56": [
+      0,
+      51,
+      102
+    ],
+    "57": [
+      51,
+      153,
+      102
+    ],
+    "58": [
+      0,
+      51,
+      0
+    ],
+    "59": [
+      51,
+      51,
+      0
+    ],
+    "60": [
+      153,
+      51,
+      0
+    ],
+    "61": [
+      153,
+      51,
+      102
+    ],
+    "62": [
+      51,
+      51,
+      153
+    ],
+    "63": [
+      51,
+      51,
+      51
+    ]
+  }
+}

@@ -6,6 +6,8 @@ from src.utils.logger import logger
 from src.utils.exception import handle_exception
 import re
 from math import isfinite
+import json
+from pathlib import Path
 from datetime import datetime
 from src.utils.connectors.supabase import db
 from src.utils.connectors.flex_query_api import getFlexQuery
@@ -135,6 +137,16 @@ def _improsa_row(row):
     }
 
 
+def _improsa_template_style(spec):
+    style = xlwt.XFStyle()
+    style.num_format_str = spec['num_format_str']
+    for group in ('font', 'alignment', 'borders', 'pattern', 'protection'):
+        target = getattr(style, group)
+        for attribute, value in spec[group].items():
+            setattr(target, attribute, value)
+    return style
+
+
 def generate_improsa_xls(flex_query_dict, indices):
     """Build the legacy Excel workbook required by the Improsa export."""
     rows = pd.DataFrame(flex_query_dict).iloc[indices].to_dict(orient='records')
@@ -142,23 +154,20 @@ def generate_improsa_xls(flex_query_dict, indices):
         raise ValueError('At least one execution must be selected.')
 
     workbook = xlwt.Workbook()
-    worksheet = workbook.add_sheet('ExportacionDatos_0')
-    header_style = xlwt.easyxf('align: wrap on, vert centre;')
-    na_header_style = xlwt.easyxf('align: wrap on, vert centre; pattern: pattern solid, fore_colour yellow;')
-    price_header_style = xlwt.easyxf('align: wrap on, vert centre; pattern: pattern solid, fore_colour gray25;')
-    text_style = xlwt.easyxf('align: wrap on, horiz centre, vert centre;')
-    date_style = xlwt.easyxf(num_format_str='DD/MM/YYYY')
-    number_style = xlwt.easyxf(num_format_str='#,##0.00')
-    integer_style = xlwt.easyxf(num_format_str='#,##0')
-
-    widths = {0: 1800, 1: 1800, 2: 1400, 3: 2600, 5: 3300, 6: 2200, 7: 2200, 8: 1700, 10: 1900, 11: 1900, 12: 3600, 13: 2800, 18: 1800, 19: 3000, 20: 3300, 24: 1500, 25: 1900, 26: 3000, 27: 6000}
-    for column, width in widths.items():
+    # This profile contains only formatting extracted from the approved sample;
+    # no sample contract, execution values or formulas are copied into exports.
+    layout_path = Path(__file__).resolve().parents[3] / 'lib/export_templates/improsa_layout.json'
+    layout = json.loads(layout_path.read_text())
+    for index, rgb in layout['palette'].items():
+        workbook.set_colour_RGB(int(index), *rgb)
+    worksheet = workbook.add_sheet(layout['sheet_name'])
+    styles = [_improsa_template_style(spec) for spec in layout['styles']]
+    for column, width in enumerate(layout['widths']):
         worksheet.col(column).width = width
 
-    worksheet.row(0).height = 750
-    for column, label in IMPROSA_HEADERS.items():
-        style = na_header_style if column == 2 else price_header_style if column == 10 else header_style
-        worksheet.write(0, column, label, style)
+    worksheet.row(0).height = layout['header_height']
+    for column in range(len(layout['widths'])):
+        worksheet.write(0, column, IMPROSA_HEADERS.get(column, ''), styles[layout['header_styles'][column]])
 
     for row_number, source_row in enumerate(rows, start=1):
         values = _improsa_row(source_row)
@@ -175,12 +184,12 @@ def generate_improsa_xls(flex_query_dict, indices):
         missing = [label for column, label in required_columns.items() if values[column] in (None, '')]
         if missing:
             raise ValueError(f'Missing required Improsa fields: {", ".join(missing)}')
-        worksheet.write_merge(row_number, row_number, 0, 1, values[0], text_style)
-        for column, value in values.items():
+        worksheet.row(row_number).height = layout['data_height']
+        worksheet.write_merge(row_number, row_number, 0, 1, values[0], styles[layout['data_styles'][0]])
+        for column in range(len(layout['widths'])):
             if column in (0, 1):
                 continue
-            style = date_style if isinstance(value, datetime) else number_style if column in (8, 10, 11, 12, 13, 27) else integer_style if column == 19 else xlwt.Style.default_style
-            worksheet.write(row_number, column, value, style)
+            worksheet.write(row_number, column, values.get(column, ''), styles[layout['data_styles'][column]])
     output = BytesIO()
     workbook.save(output)
     output.seek(0)
