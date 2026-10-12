@@ -15,6 +15,7 @@ from src.utils.logger import logger
 import numpy as np
 import re
 import time
+import math
 
 TOTAL_ASSETS = 20
 INVESTMENT_PROPOSAL_CONTEXT_TTL_SECONDS = 300
@@ -798,15 +799,25 @@ def _portfolio_plan_matches_selected_archetype_defaults(portfolio_plan: dict, ri
     bond_rating_allocation = portfolio_plan.get('bond_rating_allocation') or {}
 
     expected_allocation = _default_allocation_from_risk_archetype(risk_archetype)
-    expected_bond_rating_allocation = _default_bond_rating_allocation_from_risk_archetype(risk_archetype)
+    # Accept the old rounded UI presets during rollout, and precise new presets.
+    # Both resolve to the canonical weights rather than propagating UI rounding.
+    legacy_bond_rating_allocation = _default_bond_rating_allocation_from_risk_archetype(risk_archetype)
+    total_bonds = sum(float(risk_archetype.get(key) or 0) for key in ('bonds_aaa_a', 'bonds_bbb', 'bonds_bb'))
+    exact_bond_rating_allocation = {
+        key: float(risk_archetype.get(source_key) or 0) / total_bonds * 100
+        for key, source_key in [('aaa', 'bonds_aaa_a'), ('bbb', 'bonds_bbb'), ('bb', 'bonds_bb')]
+    } if total_bonds > 0 else legacy_bond_rating_allocation
 
     allocation_matches = all(
         float(allocation.get(key) or 0) == float(expected_allocation.get(key) or 0)
         for key in expected_allocation
     )
-    bond_rating_matches = all(
-        float(bond_rating_allocation.get(key) or 0) == float(expected_bond_rating_allocation.get(key) or 0)
-        for key in expected_bond_rating_allocation
+    bond_rating_matches = any(
+        all(
+            math.isclose(float(bond_rating_allocation.get(key) or 0), expected[key], rel_tol=0, abs_tol=1e-8)
+            for key in expected
+        )
+        for expected in (legacy_bond_rating_allocation, exact_bond_rating_allocation)
     )
 
     return allocation_matches and bond_rating_matches
