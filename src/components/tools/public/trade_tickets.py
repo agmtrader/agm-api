@@ -5,6 +5,7 @@ from io import BytesIO
 from src.utils.logger import logger
 from src.utils.exception import handle_exception
 import re
+from math import isfinite
 from datetime import datetime
 from src.utils.connectors.supabase import db
 from src.utils.connectors.flex_query_api import getFlexQuery
@@ -63,7 +64,7 @@ IMPROSA_HEADERS = {
 def _first_value(row, *keys):
     for key in keys:
         value = row.get(key)
-        if value not in (None, ''):
+        if value not in (None, '') and pd.notna(value):
             return value
     return ''
 
@@ -72,7 +73,8 @@ def _number(value):
     if value in (None, ''):
         return ''
     try:
-        return float(value)
+        number = float(value)
+        return number if isfinite(number) else ''
     except (TypeError, ValueError):
         return ''
 
