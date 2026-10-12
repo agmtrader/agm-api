@@ -16,7 +16,7 @@ from src.utils import authz
 from src.app.tools.public import trade_tickets as routes
 from src.components.tools.public.trade_tickets import generate_improsa_xls
 
-BASE={'ExecID':'execution-A','ClientAccountID':'TEST-CONTRACT','Description':'Synthetic bond','TradeDate':'2026-10-12','SettleDate':'2026-10-14','ISIN':'TEST-ISIN','Quantity':'1000','Price':'98.25','Yield':'5.125','AccruedInterest':'12.50','NetCash':'-995.00','CurrencyPrimary':'USD','Maturity':'2027-10-12','Exchange':'TEST-EXCHANGE','Market':'TEST-MARKET','TransactionType':'BUY','Commission':'-2.50','OtherCommission':'-0.50'}
+BASE={'ExecID':'execution-A','ClientAccountID':'TEST-ACCOUNT','IBOrderID':'ORDER-A','Description':'Synthetic bond','TradeDate':'2026-10-12','SettleDate':'2026-10-14','ISIN':'TEST-ISIN','Quantity':'1000','Price':'98.25','Yield':'5.125','AccruedInterest':'12.50','NetCash':'-995.00','CurrencyPrimary':'USD','Maturity':'2027-10-12','Exchange':'TEST-EXCHANGE','Market':'TEST-MARKET','TransactionType':'BUY','Commission':'-2.50','OtherCommission':'-0.50'}
 def book(rows,indices):
  return xlrd.open_workbook(file_contents=generate_improsa_xls(rows,indices).getvalue(),formatting_info=True)
 
@@ -24,17 +24,17 @@ def test_independent_synthetic_field_mapping_and_formats():
  w=book([BASE],[0]);s=w.sheet_by_index(0)
  assert w.sheet_names()==['ExportacionDatos_0'] and (s.nrows,s.ncols)==(2,28)
  assert s.merged_cells==[(1,2,0,2)]
- expected={0:'TEST-CONTRACT',6:'TEST-ISIN',7:'TEST-ISIN',8:1000,10:98.25,11:5.125,12:12.5,13:-995,18:'USD',19:365,24:'TEST-EXCHANGE',25:'TEST-MARKET',26:'BUY',27:3}
+ expected={0:'ORDER-A',6:'TEST-ISIN',7:'TEST-ISIN',8:1000,9:0,10:98.25,11:5.125,12:12.5,13:98250,18:'dolares',19:365,24:'BXV',25:'S',26:'C',27:3}
  for col,value in expected.items():assert s.cell_value(1,col)==value
  for col,date in {3:(2026,10,12),5:(2026,10,14),20:(2027,10,12)}.items():
   assert s.cell_type(1,col)==xlrd.XL_CELL_DATE
   assert xlrd.xldate_as_tuple(s.cell_value(1,col),w.datemode)[:3]==date
   assert w.format_map[w.xf_list[s.cell_xf_index(1,col)].format_key].format_str=='dd/mm/yyyy;@'
- for col in [2,4,9,14,15,16,17,21,22,23]:assert s.cell_value(1,col)==''
+ for col in [2,4,14,15,16,17,21,22,23]:assert s.cell_value(1,col)==''
  for col in [2,14,15,16,17,21,22,23]:assert s.cell_value(0,col)=='N/A'
  assert w.format_map[w.xf_list[s.cell_xf_index(1,10)].format_key].format_str=='_-* #,##0.00_-;\\-* #,##0.00_-;_-* "-"??_-;_-@_-'
 
-@pytest.mark.parametrize('field',['ClientAccountID','TradeDate','SettleDate','ISIN','Quantity','Price','NetCash','CurrencyPrimary'])
+@pytest.mark.parametrize('field',['IBOrderID','TradeDate','SettleDate','ISIN','Quantity','Price','CurrencyPrimary','TransactionType'])
 def test_missing_required_fields_fail_explicitly(field):
  row={k:v for k,v in BASE.items() if k!=field}
  with pytest.raises(ValueError,match='Missing required Improsa fields'):book([row],[0])
@@ -43,9 +43,9 @@ def test_empty_selection_rejected():
  with pytest.raises(ValueError,match='At least one'):book([BASE],[])
 
 def test_optional_missing_values_are_blank_not_zero():
- row={k:v for k,v in BASE.items() if k not in ['Yield','AccruedInterest','Maturity','Exchange','Market','TransactionType','Commission','OtherCommission']}
+ row={k:v for k,v in BASE.items() if k not in ['Yield','AccruedInterest','Maturity','Commission','OtherCommission']}
  s=book([row],[0]).sheet_by_index(0)
- for col in [11,12,19,20,24,25,26,27]:assert s.cell_value(1,col)==''
+ for col in [11,12,27]:assert s.cell_value(1,col)==''
 
 @pytest.fixture
 def boundary(monkeypatch):
@@ -55,7 +55,7 @@ def boundary(monkeypatch):
  app.before_request(authz.authenticate_request);app.before_request(authz.enforce_route_scope)
  app.register_blueprint(routes.bp,url_prefix='/trade_tickets')
  lookup=Mock(side_effect=lambda query:[{'query_id':'owned-query','user_id':'owner'}] if query.get('query_id','owned-query')=='owned-query' and query.get('user_id','owner')=='owner' else [])
- reads=Mock(return_value=[BASE,{**BASE,'ExecID':'execution-B','NetCash':'-996'}])
+ reads=Mock(return_value=[BASE,{**BASE,'ExecID':'execution-B','IBOrderID':'ORDER-B'}])
  monkeypatch.setattr(routes,'list_trade_tickets',lookup);monkeypatch.setattr(routes,'read',reads)
  email=Mock(side_effect=AssertionError('export must not email'));monkeypatch.setattr(routes,'send_trade_ticket_email',email)
  def headers(identity='owner',claims=None):
@@ -86,7 +86,7 @@ def test_http_export_execid_preserves_duplicate_looking_rows(boundary):
  assert r.status_code==200 and r.mimetype=='application/vnd.ms-excel'
  assert 'improsa-trade-ticket.xls' in r.headers['Content-Disposition']
  s=xlrd.open_workbook(file_contents=r.data).sheet_by_index(0)
- assert s.nrows==3 and [s.cell_value(i,13) for i in [1,2]]==[-996,-995]
+ assert s.nrows==3 and [s.cell_value(i,0) for i in [1,2]]==['ORDER-B','ORDER-A']
  reads.assert_called_once_with('owned-query');email.assert_not_called()
 
 @pytest.mark.parametrize('ids',[[],['unknown'],[''],[1],'execution-A'])
@@ -119,7 +119,7 @@ def test_bad_required_price_in_mixed_rows_http_400(boundary,price):
  assert r.status_code==400 and 'gross price' in r.json['error']
  email.assert_not_called()
 
-@pytest.mark.parametrize('field',['ClientAccountID','ISIN','CurrencyPrimary'])
+@pytest.mark.parametrize('field',['IBOrderID','ISIN','CurrencyPrimary'])
 def test_missing_required_text_in_mixed_rows_rejected(field):
  second={k:v for k,v in BASE.items() if k!=field}
  with pytest.raises(ValueError,match='Missing required Improsa fields'):book([BASE,second],[0,1])
@@ -151,6 +151,50 @@ def test_reference_template_layout_and_styles_preserved_for_each_execution():
   assert s.rowinfo_map[r].height==reference['heights'][1]
   assert [style_signature(w,s,r,c) for c in range(28)]==reference['data_styles']
  assert sorted(s.merged_cells)==[(1,2,0,2),(2,3,0,2)]
+
+
+@pytest.mark.parametrize('side,expected',[('BUY','C'),('SELL','V'),(' buy ','C'),('sell','V')])
+def test_improsa_business_codes(side,expected):
+ w=book([{**BASE,'Buy/Sell':side,'TransactionType':'ExchTrade'}],[0]);s=w.sheet_by_index(0)
+ assert s.cell_value(1,18)=='dolares'
+ assert s.cell_value(1,24)=='BXV' and s.cell_value(1,25)=='S'
+ assert s.cell_value(1,26)==expected and s.cell_value(1,9)==0
+
+@pytest.mark.parametrize('changes,match',[({'CurrencyPrimary':'EUR'},'currency mapping'),({'TransactionType':'TRANSFER'},'transaction mapping')])
+def test_unconfirmed_business_codes_fail_explicitly(changes,match):
+ with pytest.raises(ValueError,match=match):book([{**BASE,**changes}],[0])
+
+def test_quantity_preserves_ibkr_units_and_sign():
+ s=book([{**BASE,'Quantity':-12.5,'Buy/Sell':'SELL','FaceValue':99999}],[0]).sheet_by_index(0)
+ assert s.cell_value(1,8)==-12.5
+
+
+
+def test_improsa_original_sample_value_convention():
+ # Independently specified sample values: 5395 x 14.57 = positive 78605.15.
+ # Different NetCash deliberately proves this is gross Quantity x Price.
+ row={**BASE,'Quantity':5395,'Price':14.57,'NetCash':-79000,'IBOrderID':'ORDER-SAMPLE','Maturity':'','Description':'Synthetic stock'}
+ w=book([row],[0]);s=w.sheet_by_index(0)
+ assert s.cell_value(1,0)=='ORDER-SAMPLE'
+ assert s.cell_value(1,8)==5395 and s.cell_value(1,13)==pytest.approx(78605.15)
+ assert xlrd.xldate_as_tuple(s.cell_value(1,20),w.datemode)[:3]==(2099,1,1)
+ assert s.cell_value(1,19)==( __import__('datetime').datetime(2099,1,1)-__import__('datetime').datetime(2026,10,12)).days
+ assert s.cell_value(1,18)=='dolares' and s.cell_value(1,24)=='BXV' and s.cell_value(1,25)=='S' and s.cell_value(1,26)=='C'
+
+
+def test_sell_value_is_positive_gross_quantity_times_price():
+ s=book([{**BASE,'Quantity':-10,'Price':12.5,'Buy/Sell':'SELL','NetCash':121}],[0]).sheet_by_index(0)
+ assert s.cell_value(1,13)==125 and s.cell_value(1,8)==-10 and s.cell_value(1,26)=='V'
+
+
+def test_missing_order_id_never_substitutes_account_or_instrument_id():
+ row={k:v for k,v in BASE.items() if k!='IBOrderID'}
+ row['Conid']='INSTRUMENT-ID'
+ with pytest.raises(ValueError,match='contract number'):book([row],[0])
+
+
+def test_nonfinite_gross_product_rejected():
+ with pytest.raises(ValueError,match='transaction value'):book([{**BASE,'Quantity':1e308,'Price':1e308}],[0])
 
 if __name__=='__main__':
  raise SystemExit(pytest.main([__file__,'-q']))

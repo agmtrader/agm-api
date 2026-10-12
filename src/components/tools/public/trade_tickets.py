@@ -90,12 +90,31 @@ def _date(value):
     return parsed.to_pydatetime()
 
 
+def _improsa_currency(value):
+    if value == '':
+        return ''
+    if str(value).strip().upper() == 'USD':
+        return 'dolares'
+    raise ValueError(f'Unsupported Improsa currency mapping: {value}')
+
+
+def _improsa_transaction(value):
+    if value == '':
+        return ''
+    code = {'BUY': 'C', 'SELL': 'V', 'C': 'C', 'V': 'V'}.get(str(value).strip().upper())
+    if code is None:
+        raise ValueError(f'Unsupported Improsa transaction mapping: {value}')
+    return code
+
+
 def _improsa_row(row):
     operation_date = _date(_first_value(row, 'TradeDate', 'Date/Time', 'OrigTradeDate'))
     maturity_date = _date(_first_value(row, 'Maturity', 'Expiry', 'MaturityDate'))
     if maturity_date is None:
         details = extract_bond_details(str(row.get('Description', '')))
         maturity_date = _date(details.get('maturity'))
+    if maturity_date is None:
+        maturity_date = datetime(2099, 1, 1)
     days_to_maturity = ''
     if operation_date and maturity_date:
         days_to_maturity = (maturity_date.date() - operation_date.date()).days
@@ -116,23 +135,28 @@ def _improsa_row(row):
             commission += abs(value)
             commission_found = True
 
+    quantity = _number(_first_value(row, 'Quantity'))
+    price = _number(_first_value(row, 'Price'))
+    transaction_value = _number(abs(quantity * price)) if quantity != '' and price != '' else ''
+
     return {
-        0: _first_value(row, 'ClientAccountID', 'AccountAlias'),
+        0: _first_value(row, 'IBOrderID'),
         3: operation_date,
         5: _date(_first_value(row, 'SettleDate', 'SettlementDate')),
         6: _first_value(row, 'ISIN', 'SecurityID'),
         7: _first_value(row, 'ISIN', 'SecurityID'),
-        8: _number(_first_value(row, 'Quantity', 'FaceValue')),
-        10: _number(_first_value(row, 'Price')),
+        8: quantity,
+        9: 0,
+        10: price,
         11: _number(_first_value(row, 'Yield', 'Yield (Price + Interest)', 'YTM')),
         12: _number(_first_value(row, 'AccruedInterest')),
-        13: _number(_first_value(row, 'NetCash', 'Amount')),
-        18: _first_value(row, 'CurrencyPrimary', 'Currency'),
+        13: transaction_value,
+        18: _improsa_currency(_first_value(row, 'CurrencyPrimary', 'Currency')),
         19: days_to_maturity,
         20: maturity_date,
-        24: _first_value(row, 'Exchange', 'ListingExchange'),
-        25: _first_value(row, 'Market', 'ListingExchange'),
-        26: _first_value(row, 'TransactionType', 'Buy/Sell'),
+        24: 'BXV',
+        25: 'S',
+        26: _improsa_transaction(_first_value(row, 'Buy/Sell', 'TransactionType')),
         27: commission if commission_found else '',
     }
 
@@ -180,6 +204,7 @@ def generate_improsa_xls(flex_query_dict, indices):
             10: 'gross price',
             13: 'transaction value',
             18: 'currency',
+            26: 'transaction type',
         }
         missing = [label for column, label in required_columns.items() if values[column] in (None, '')]
         if missing:
