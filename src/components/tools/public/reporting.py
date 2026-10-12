@@ -16,6 +16,7 @@ from src.utils.connectors.drive import GoogleDrive
 from src.utils.exception import ServiceError, handle_exception
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 from src.utils.report_cache import ReportCache
+from src.utils.position_quotes import enrich_position_quotes
 from src.utils.lazy_client import LazyClient
 
 logger.announcement('Initializing Reporting Service', type='info')
@@ -27,6 +28,7 @@ _ending_balances_cache_lock = threading.Lock()
 _ibkr_statement_rows_cache = {}
 _ibkr_statement_rows_cache_lock = threading.Lock()
 _daily_report_cache = ReportCache(os.getenv('REPORT_CACHE_TTL_SECONDS', '30'))
+_quote_snapshot_cache = ReportCache(os.getenv('REPORT_CACHE_TTL_SECONDS', '30'), keys=('market-quotes',))
 
 activity_statement_folders = {
     'I6413690': '1qJhG-9F_YteWY-hCP1EaIhbJQ1DW71_h',
@@ -151,8 +153,29 @@ def get_ust_bond_report():
     rtd = Drive.download_file(file_id=rtd_file[0]['id'], parse=True)
     return rtd
 
+def _read_quote_snapshots():
+    files = Drive.get_files_in_folder(resources_folder_id)
+    snapshots = []
+    for name, asset_class in [('ibkr_bonds_snapshot.csv', 'BOND'), ('ibkr_ust_bonds_snapshot.csv', 'BOND'), ('ibkr_stocks_snapshot.csv', 'STK'), ('ibkr_etfs_snapshot.csv', 'STK')]:
+        matches = [item for item in files if item['name'] == name]
+        if len(matches) != 1:
+            raise ServiceError(f'{name} missing or duplicated; quote report unavailable', 503)
+        item = matches[0]
+        snapshots.append({'name': name, 'asset_class': asset_class, 'modified_time': item.get('modifiedTime'),
+                          'rows': Drive.download_file(file_id=item['id'], parse=True)})
+    return snapshots
+
+
 @handle_exception
-def get_open_positions_report():
+def add_open_position_quotes(positions):
+    if not positions:
+        return []
+    snapshots = _quote_snapshot_cache.get('market-quotes', _read_quote_snapshots)
+    return enrich_position_quotes(positions, snapshots)
+
+
+@handle_exception
+def get_open_positions_report(include_quotes=False, account_ids=None):
     """
     Get the open positions report.
     
@@ -164,7 +187,10 @@ def get_open_positions_report():
         logger.error('Open positions file not found or multiple files found')
         raise Exception('Open positions file not found or multiple files found')
     open_positions = Drive.download_file(file_id=open_positions_file[0]['id'], parse=True)
-    return open_positions
+    if account_ids is not None:
+        selected = {str(value).strip() for value in account_ids}
+        open_positions = [row for row in open_positions if str(row.get('ClientAccountID') or '').strip() in selected]
+    return add_open_position_quotes(open_positions) if include_quotes else open_positions
 
 @handle_exception
 def get_ofac_sdn_list():

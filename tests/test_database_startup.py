@@ -159,3 +159,15 @@ esac
         assert 'Artifact Registry permission denied' in result.stderr
     else:
         assert 'Could not resolve an immutable candidate image digest' in result.stderr
+
+
+def test_database_read_projection_keeps_filters_pagination_and_full_detail(database):
+    from sqlalchemy import literal
+    manager, _, statements = database
+    manager.create('item', {'id': 'one', 'name': 'full application payload'})
+    manager.create('item', {'id': 'two', 'name': 'other payload'})
+    result = manager.read('item', {'id': 'one'}, limit=1, order_by=('id',), column_overrides={'name': literal('summary').label('name')})
+    assert result[0]['id'] == 'one' and result[0]['name'] == 'summary'
+    assert manager.read('item', {'id': 'one'})[0]['name'] == 'full application payload'
+    projected = next(statement for statement in statements if 'summary' not in statement and '? AS name' in statement)
+    assert 'item.name' not in projected and 'WHERE' in projected and 'LIMIT' in projected

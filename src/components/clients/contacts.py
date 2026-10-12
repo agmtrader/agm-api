@@ -179,9 +179,10 @@ def read_contact_documents(
     if not include_documents:
         documents = []
         if include_processing and links:
+            linked_ids = sorted({str(link.get('document_id') or '').strip() for link in links if link.get('document_id')})
             processing_rows = db.read(
                 table='document_processing',
-                query={'process_type': 'text_extraction'},
+                query={'process_type': 'text_extraction', 'document_id': linked_ids},
             ) or []
             processing_by_document_id = {
                 str(processing.get('document_id') or '').strip(): processing
@@ -205,10 +206,10 @@ def read_contact_documents(
     documents = []
     exclude = None if include_data else ['data']
     processing_by_document_id = {}
-    if include_processing:
+    if include_processing and linked_document_ids:
         processing_rows = db.read(
             table='document_processing',
-            query={'process_type': 'text_extraction'},
+            query={'process_type': 'text_extraction', 'document_id': sorted(linked_document_ids)},
         ) or []
         processing_by_document_id = {
             str(processing.get('document_id') or '').strip(): processing

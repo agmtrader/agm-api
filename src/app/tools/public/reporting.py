@@ -46,7 +46,8 @@ def get_nav_report_monthly_route():
 @format_response
 def get_open_positions_report_route():
     """Read the open positions reporting dataset."""
-    return get_open_positions_report()
+    account_ids = [value.strip() for value in request.args['account_ids'].split(',') if value.strip()] if 'account_ids' in request.args else None
+    return get_open_positions_report(include_quotes=request.args.get('quotes') == '1', account_ids=account_ids)
 
 @bp.route('/trades', methods=['GET'])
 @format_response

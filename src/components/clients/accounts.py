@@ -4,7 +4,7 @@ from src.utils.connectors.supabase import db
 from src.utils.logger import logger
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 from src.utils.connectors.ibkr_trading_api import IBKRTradingAPI
-from sqlalchemy import text
+from sqlalchemy import text, case, func
 import uuid
 from src.utils.lazy_client import LazyClient
 
@@ -188,12 +188,22 @@ def create_account(account: dict = None) -> dict:
     return {'id': account_id}
 
 @handle_exception
-def read_accounts(query: dict = None, limit: int = None, offset: int = 0):
+def read_accounts(query: dict = None, limit: int = None, offset: int = 0, view: str = 'full'):
+    if view not in ('full', 'list'):
+        raise ServiceError('view must be full or list', status_code=400)
+    read_options = {}
+    if view == 'list':
+        application = db.metadata.tables[table].c.application_json
+        summary = case(
+            (application.is_(None), None),
+            else_=func.jsonb_build_object('customer', func.jsonb_build_object('type', application['customer']['type'])),
+        ).label('application_json')
+        read_options['column_overrides'] = {'application_json': summary}
     if limit is None:
-        return _sanitize_accounts(db.read(table=table, query=query))
+        return _sanitize_accounts(db.read(table=table, query=query, **read_options))
     if not 1 <= limit <= 200 or offset < 0:
         raise ServiceError('limit must be between 1 and 200 and offset must be non-negative', status_code=400)
-    accounts = db.read(table=table, query=query, limit=limit + 1, offset=offset, order_by=('created', 'id'))
+    accounts = db.read(table=table, query=query, limit=limit + 1, offset=offset, order_by=('created', 'id'), **read_options)
     return {'accounts': _sanitize_accounts(accounts[:limit]), 'has_more': len(accounts) > limit}
 
 @handle_exception

@@ -8,6 +8,9 @@ from src.utils.exception import handle_exception, ServiceError
 from src.utils.logger import logger
 from src.utils.ibkr_errors import raise_ibkr_response_error
 from functools import wraps
+from threading import RLock
+import hashlib
+import inspect
 
 logger.announcement('Initializing Interactive Brokers Web API Service', type='info')
 logger.announcement('Initialized Interactive Brokers Web API Service', type='success')
@@ -17,6 +20,24 @@ DAILY_AGREEMENT_FORM_NUMBERS = [
     4024, 9130, 3074, 3203, 3070, 3094, 3071, 4587, 4837, 2192,
     4399, 2109, 4016, 4289, 4208, 9902, 3081,
 ]
+
+def credential_locked(func):
+    """Serialize mutable credential context through the complete connector call.
+
+    Do not increase request concurrency until immutable clients replace this boundary.
+    No operation is retried by this decorator.
+    """
+    signature = inspect.signature(func)
+    @wraps(func)
+    def wrapped(self, *args, **kwargs):
+        bound = signature.bind(self, *args, **kwargs)
+        master = bound.arguments.get('master_account')
+        if master and str(master).strip().upper() not in self.MASTER_ACCOUNT_CREDENTIALS:
+            raise ServiceError('Unsupported IBKR master account', 400, code='ibkr_master_unsupported')
+        with self._credential_lock:
+            return func(self, *args, **kwargs)
+    return wrapped
+
 
 def retry_on_connection_error(max_retries=3, delay=1):
     """Retry decorator to gracefully handle transient connection errors such as broken pipes.
@@ -46,7 +67,7 @@ def retry_on_connection_error(max_retries=3, delay=1):
                         )
                         if attempt < max_retries - 1:
                             # Force token refresh and wait before retry (exponential back-off)
-                            self._token = None
+                            self._invalidate_token()
                             time.sleep(delay * (attempt + 1))
                             continue
                     # Not a retriable error or retries exhausted – re-raise
@@ -99,7 +120,9 @@ class IBKRWebAPI:
         # Initialize token cache
         self._token = None
         self._token_expiry = 0
-        self.TOKEN_REFRESH_BUFFER = 300
+        self._credential_lock = RLock()
+        self._tokens = {}
+        self._token_context = None
 
     def _apply_credentials(self, master_account: str):
         """
@@ -110,33 +133,40 @@ class IBKRWebAPI:
             tuple: (original_client_id, original_key_id, original_private_key)
         """
         original = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
-        self.CLIENT_PRIVATE_KEY = get_secret("IBKR_ACCOUNT_MANAGEMENT_PRIVATE_KEY")
         normalized_master_account = (
             str(master_account).strip().upper()
             if master_account
             else self.DEFAULT_MASTER_ACCOUNT
         )
-        credentials = self.MASTER_ACCOUNT_CREDENTIALS.get(
-            normalized_master_account,
-            self.MASTER_ACCOUNT_CREDENTIALS[self.DEFAULT_MASTER_ACCOUNT],
-        )
-        if normalized_master_account not in self.MASTER_ACCOUNT_CREDENTIALS:
-            logger.warning(
-                f"Master account {normalized_master_account} has no dedicated "
-                f"credential mapping; using default {self.DEFAULT_MASTER_ACCOUNT} credentials"
-            )
+        credentials = self.MASTER_ACCOUNT_CREDENTIALS.get(normalized_master_account)
+        if credentials is None:
+            raise ServiceError('Unsupported IBKR master account', 400, code='ibkr_master_unsupported')
 
+        self.CLIENT_PRIVATE_KEY = get_secret("IBKR_ACCOUNT_MANAGEMENT_PRIVATE_KEY")
         self.CLIENT_ID = credentials["client_id"]
         self.KEY_ID = credentials["key_id"]
-        self._token = None
-        self._token_expiry = 0
         return original
 
+    def _credential_token_key(self):
+        # A rotated private key cannot reuse a token issued under its predecessor.
+        key = self.CLIENT_PRIVATE_KEY
+        key_bytes = key if isinstance(key, bytes) else str(key).encode('utf-8')
+        return (self.BASE_URL, self.CLIENT_ID, self.KEY_ID, hashlib.sha256(key_bytes).digest())
+
+    def _invalidate_token(self):
+        with self._credential_lock:
+            self._tokens.pop(self._token_context, None)
+            self._token = None
+            self._token_expiry = 0
+
+    @credential_locked
     def get_bearer_token(self):
-        current_time = int(time.time())
-        
-        # Check if we have a valid cached token
-        if self._token and current_time < (self._token_expiry - self.TOKEN_REFRESH_BUFFER):
+        current_time = time.time()
+        key = self._credential_token_key()
+        cached = self._tokens.get(key)
+        if cached and current_time < cached[1] - cached[2]:
+            self._token, self._token_expiry = cached[0], cached[1]
+            self._token_context = key
             logger.info("Using cached token")
             return self._token
 
@@ -157,12 +187,20 @@ class IBKRWebAPI:
         }
 
         # Send the request
-        response = requests.post(url, data=payload, headers=headers)
+        response = requests.post(url, data=payload, headers=headers, timeout=(10, 30))
         if response.status_code == 200:
             response_data = response.json()
             self._token = response_data["access_token"]
             # Calculate absolute expiry time
-            self._token_expiry = current_time + response_data["expires_in"]
+            lifetime = float(response_data["expires_in"])
+            self._token_expiry = current_time + lifetime
+            self._token_context = key
+            # A 59-second token gets a 5.9-second margin, not a 300-second margin.
+            self._tokens[key] = (self._token, self._token_expiry, min(30.0, max(0.0, lifetime * 0.1)))
+            if len(self._tokens) > 16:
+                oldest = min(self._tokens, key=lambda item: self._tokens[item][1])
+                if oldest != key:
+                    self._tokens.pop(oldest, None)
             logger.success(f"New token fetched, expires in {response_data['expires_in']} seconds")
             return self._token
         else:
@@ -230,8 +268,10 @@ class IBKRWebAPI:
         return signed_jwt
 
     # Account Management API
+    @credential_locked
     @handle_exception
     def list_accounts(self, master_account: str = None):
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info("Getting accounts")
@@ -253,8 +293,10 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
     
+    @credential_locked
     @handle_exception
     def get_account_details(self, account_id, master_account: str = None):
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Getting account details for {account_id} with master account: {master_account}")
@@ -302,8 +344,10 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def get_registration_tasks(self, account_id, master_account: str = None):
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Getting registration tasks for account {account_id}")
@@ -322,8 +366,10 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def get_pending_tasks(self, account_id, master_account: str = None):
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Getting pending tasks for account {account_id}")
@@ -343,8 +389,10 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def submit_documents(self, document_submission, master_account: str = None):
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Updating account.")
@@ -373,6 +421,7 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def apply_fee_template(self, account_id: str, template_name: str, master_account: str = None):
         """Apply a fee template to the specified account.
@@ -384,6 +433,7 @@ class IBKRWebAPI:
         Returns:
             dict: API response after applying fee template.
         """
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Applying fee template {template_name} to account {account_id}")
@@ -419,6 +469,7 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def update_account_alias(self, account_id: str, new_alias: str, master_account: str = None):
         """Update the alias for a given account.
@@ -430,6 +481,7 @@ class IBKRWebAPI:
         Returns:
             dict: API response after updating the alias.
         """
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Updating alias for account {account_id} to {new_alias}")
@@ -491,8 +543,10 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def send_to_ibkr(self, application, master_account: str = None):
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Sending application to Interactive Brokers using master account type: {master_account}")
@@ -583,6 +637,7 @@ class IBKRWebAPI:
             # Restore original credentials to avoid side-effects
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def deposit_funds(self, master_account: str, instruction: dict) -> dict:
         """Submit a deposit instruction to IBKR.
@@ -594,6 +649,7 @@ class IBKRWebAPI:
         Returns:
             dict: API response from IBKR.
         """
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Submitting deposit instruction for account {instruction['accountId']}")
@@ -625,10 +681,12 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def withdraw_funds(self, master_account: str, instruction: dict) -> dict:
         """Submit a withdrawal instruction to IBKR.
         """
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Submitting withdrawal instruction for account {instruction['accountId']}")
@@ -660,10 +718,12 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def transfer_position_internally(self, source_account_id: str, target_account_id: str, conid: int, transfer_quantity: int, master_account: str = None):
         """Transfer a position internally within IBKR.
         """
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Transferring position internally for account {source_account_id} to {target_account_id}")
@@ -697,6 +757,7 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
     
+    @credential_locked
     @handle_exception
     def transfer_position_externally(self, account_id: str, client_instruction_id: int, contra_broker_account_id: str, contra_broker_dtc_code: str, quantity: int, conid: int, master_account: str = None):
         """
@@ -737,6 +798,7 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def transfer_positions_externally_complex(
         self,
@@ -801,6 +863,7 @@ class IBKRWebAPI:
                 "quantity": position["quantity"],
             })
 
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             instruction_id = client_instruction_id or int(time.time() * 1000)
@@ -838,9 +901,11 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def change_financial_information(self, account_id: str, new_financial_information: dict = None, master_account: str = None):
         """Change financial information for a given account."""
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Changing financial information for account {account_id}")
@@ -889,6 +954,7 @@ class IBKRWebAPI:
             master_account=master_account,
         )
 
+    @credential_locked
     @handle_exception
     def add_trading_permissions(self, account_id: str, trading_permissions: list = None, master_account: str = None) -> dict:
         """Add trading permissions to the given account.
@@ -902,6 +968,7 @@ class IBKRWebAPI:
         Returns:
             dict: API response from IBKR.
         """
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Adding trading permissions for account {account_id}")
@@ -976,6 +1043,7 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def add_clp_capability(self, account_id: str, document_submission: dict = None, master_account: str = None) -> dict:
         """Add trading permissions to the given account.
@@ -1029,9 +1097,11 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def close_account(self, account_id: str = None, close_reason: str = None, master_account: str = None) -> dict:
         """Submit an account-close request through IBKR's account management endpoint."""
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Closing account {account_id}")
@@ -1070,9 +1140,11 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def change_account_holder_external_id(self, accountId:str, entityId: str, external_id: str, master_account: str = None) -> dict:
         """Change account holder external id via account management PATCH endpoint."""
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info("Changing account holder external id")
@@ -1120,6 +1192,7 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def view_withdrawable_cash(self, master_account: str, account_id: str, client_instruction_id: str):
         """View the withdrawable cash for the given account.
@@ -1131,6 +1204,7 @@ class IBKRWebAPI:
         Returns:
             dict: The withdrawable cash.
         """
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Viewing withdrawable cash for account {account_id}")
@@ -1157,6 +1231,7 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def view_active_bank_instructions(self, master_account: str, account_id: str, client_instruction_id: str, bank_instruction_method: str):
         """View the active bank instructions for the given account.
@@ -1169,6 +1244,7 @@ class IBKRWebAPI:
         Returns:    
             dict: The active bank instructions.
         """
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Viewing active bank instructions for account {account_id}")
@@ -1193,9 +1269,11 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def get_status_of_instruction(self, client_instruction_id: str, master_account: str):
         """Get the status of an instruction via IBKR API."""
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Getting status of instruction for client instruction {client_instruction_id}")
@@ -1216,6 +1294,7 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def get_recent_instructions(
         self,
@@ -1238,6 +1317,7 @@ class IBKRWebAPI:
         if not 1 <= int(days_to_go_back) <= 7:
             raise ValueError("days_to_go_back must be between 1 and 7")
 
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             url = f"{self.BASE_URL}/gw/api/v1/instructions/query"
@@ -1269,6 +1349,7 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def get_account_statements(
         self,
@@ -1279,6 +1360,7 @@ class IBKRWebAPI:
         language: str = 'en'
     ):
         """Get account statements via IBKR API."""
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(
@@ -1334,9 +1416,11 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def get_available_statements(self, account_id: str, master_account: str = None):
         """Get available statements via IBKR API."""
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Fetching available statements for account {account_id}")
@@ -1363,8 +1447,10 @@ class IBKRWebAPI:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     # Enums
+    @credential_locked
     @handle_exception
     def get_forms(self, forms: list = None, master_account: str = None):
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info("Getting forms")
@@ -1432,9 +1518,11 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def get_security_questions(self):
         """Retrieve list of security questions from IBKR."""
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials('I6413690')
             logger.info("Fetching security questions")
@@ -1456,9 +1544,11 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def get_product_country_bundles(self):
         """Retrieve enumeration list for product country bundles from IBKR."""
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials('I6413690')
             logger.info("Fetching product country bundles enumerations")
@@ -1480,6 +1570,7 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def get_complex_asset_transfer_brokers(self):
         """Retrieve IBKR's accepted broker/custodian names for Basic FOP transfers."""
@@ -1499,6 +1590,7 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def get_wire_instructions(self, master_account: str, account_id: str, currency: str = "USD") -> dict:
         """Retrieve wire instructions for a given account & currency.
@@ -1510,6 +1602,7 @@ class IBKRWebAPI:
         Returns:
             dict: IBKR wire instruction details.
         """
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             logger.info(f"Fetching wire instructions for account {account_id} ({currency})")
@@ -1531,6 +1624,7 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def get_financial_ranges(self):
         """Get the account screenings.
@@ -1539,6 +1633,7 @@ class IBKRWebAPI:
         Returns:
             dict: The account screenings.
         """
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/gw/api/v1/enumerations/fin-info-ranges?currency=USD"
@@ -1556,12 +1651,14 @@ class IBKRWebAPI:
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
+    @credential_locked
     @handle_exception
     def get_business_and_occupation(self):
         """Get the business and occupation.
         Returns:
             dict: The business and occupation.
         """
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials('I6413690')
             url = f"{self.BASE_URL}/gw/api/v1/enumerations/business-and-occupation"
@@ -1702,9 +1799,11 @@ class IBKRWebAPI:
 
         return merged_results
 
+    @credential_locked
     @handle_exception
     def submit_all_agreements(self, master_account: str = 'I6413690', forms: list = None):
         original_creds = None
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
             resolved_master_account = master_account or 'I6413690'

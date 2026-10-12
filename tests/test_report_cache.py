@@ -93,3 +93,13 @@ def test_reporting_readers_share_cache_but_keep_report_sources_separate():
         assert namespace['get_nav_report']() == [{'source': 'nav-file'}]
     assert drive.get_files_in_folder.call_count == 2
     assert drive.download_file.call_count == 2
+
+
+def test_quote_snapshot_key_is_explicit_and_bounded():
+    cache = ReportCache(30, keys=('market-quotes',))
+    loader = Mock(return_value=[{'Bid': 10}])
+    assert cache.get('market-quotes', loader) == [{'Bid': 10}]
+    cache.get('market-quotes', loader)
+    assert loader.call_count == 1
+    with pytest.raises(ValueError):
+        cache.get('arbitrary-request-key', loader)

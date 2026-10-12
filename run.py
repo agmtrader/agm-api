@@ -1,4 +1,5 @@
 import time
+_process_import_started = time.perf_counter()
 import uuid
 import os
 
@@ -27,6 +28,8 @@ load_dotenv()
 public_routes = ['docs', 'index', 'token', 'users.login']
  
 def start_api():
+    logger.info(f"STARTUP_PHASE phase=module_imports duration_ms={(time.perf_counter() - _process_import_started) * 1000:.2f}")
+    phase_started = time.perf_counter()
 
     try:
         jwt_secret_key = get_secret('JWT_SECRET_KEY')
@@ -34,6 +37,7 @@ def start_api():
         logger.error(f"Failed to fetch JWT secret key: {str(e)}")
         raise Exception("Failed to initialize API - could not fetch JWT secret key")
     
+    logger.info(f"STARTUP_PHASE phase=jwt_secret duration_ms={(time.perf_counter() - phase_started) * 1000:.2f}")
     app = Flask(__name__, static_folder='static')
     cors = CORS(app, resources={r"/*": {"origins": "*"}})
     app.config['CORS_HEADERS'] = 'Content-Type'
@@ -77,7 +81,9 @@ def start_api():
 
     # Initialize declared metadata before blueprints; the candidate-image
     # deployment preflight validates the live schema before traffic changes.
+    phase_started = time.perf_counter()
     initialize_database()
+    logger.info(f"STARTUP_PHASE phase=database_metadata duration_ms={(time.perf_counter() - phase_started) * 1000:.2f}")
 
     @app.before_request
     def attach_request_context():

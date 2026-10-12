@@ -10,15 +10,16 @@ from time import monotonic
 
 
 class ReportCache:
-    def __init__(self, ttl_seconds=30, clock=monotonic):
+    def __init__(self, ttl_seconds=30, clock=monotonic, keys=('clients', 'nav')):
         self.ttl = max(0, min(float(ttl_seconds), 300))
         self.clock = clock
+        self.keys = frozenset(keys)
         self.lock = Lock()
         self.entries = {}
         self.pending = {}
 
     def get(self, key, load):
-        if key not in ('clients', 'nav'):
+        if key not in self.keys:
             raise ValueError('Unsupported report cache key')
         if self.ttl == 0:
             return load()

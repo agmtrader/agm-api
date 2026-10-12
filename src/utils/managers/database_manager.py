@@ -402,7 +402,7 @@ class DatabaseManager:
 
         return _create_many(table, data, batch_size)
 
-    def read(self, table: str, query: dict = None, exclude_columns: list = None, limit: int = None, offset: int = 0, order_by: tuple = ()) -> list:
+    def read(self, table: str, query: dict = None, exclude_columns: list = None, limit: int = None, offset: int = 0, order_by: tuple = (), column_overrides: dict = None) -> list:
         @self.with_session(commit=False)
         def _read(session, table: str, query: dict = None, exclude_columns: list = None):
 
@@ -423,8 +423,11 @@ class DatabaseManager:
             tbl = Table(table, self.metadata, autoload_with=self.engine)
             sql_query = session.query(tbl)
 
-            if exclude_columns:
-                selected_columns = [col for col in tbl.c if col.name not in exclude_columns]
+            if exclude_columns or column_overrides:
+                overrides = column_overrides or {}
+                if set(overrides) - set(tbl.c.keys()):
+                    raise ValueError("Column override must name an existing column")
+                selected_columns = [overrides.get(col.name, col) for col in tbl.c if col.name not in (exclude_columns or [])]
                 if not selected_columns:
                     raise Exception("All columns excluded; at least one column must be selected")
                 sql_query = session.query(*selected_columns)

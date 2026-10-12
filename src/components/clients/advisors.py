@@ -4,7 +4,7 @@ from src.utils.logger import logger
 from src.utils.authz import get_current_advisor
 from src.components.clients.accounts import get_account_statements, read_account_contacts, read_accounts
 from src.components.clients.investment_proposals import read_investment_proposals
-from src.components.tools.public.reporting import get_clients_report, get_nav_report, get_nav_report_monthly, get_open_positions_report
+from src.components.tools.public.reporting import get_clients_report, get_nav_report, get_nav_report_monthly, get_open_positions_report, add_open_position_quotes
 
 logger.announcement('Initializing Advisors Service', type='info')
 logger.announcement('Initialized Advisors Service', type='success')
@@ -77,7 +77,7 @@ def read_current_advisor_accounts() -> list:
 
 
 @handle_exception
-def read_current_advisor_open_positions() -> list:
+def read_current_advisor_open_positions(include_quotes=False) -> list:
     """Return open positions only for accounts owned by the advisor."""
     accounts = _current_advisor_accounts()
     account_ids = {
@@ -86,11 +86,12 @@ def read_current_advisor_open_positions() -> list:
         if str(account.get('ibkr_account_number') or '').strip()
     }
     positions = get_open_positions_report() or []
-    return [
+    owned_positions = [
         position for position in positions
         if str(position.get('ClientAccountID') or '').strip() in account_ids
         and str(position.get('OpenDateTime') or '').strip()
     ]
+    return add_open_position_quotes(owned_positions) if include_quotes else owned_positions
 
 
 @handle_exception
