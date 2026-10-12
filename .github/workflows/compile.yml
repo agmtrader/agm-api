@@ -40,5 +40,6 @@ jobs:
       - name: Compile application and schema preflight
         run: python -m compileall -q src run.py dev/schema_preflight.py
 
+      # Proposal eligibility regressions must pass before Cloud Build deploys this commit.
       - name: Test startup, deployment gating, reporting cache, exception privacy and proposals
         run: python -m pytest tests/test_database_startup.py tests/test_report_cache.py tests/test_exception_reporting.py tests/test_investment_proposals.py -q
