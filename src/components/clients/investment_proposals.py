@@ -64,22 +64,36 @@ ASSET_METADATA_FIELDS = (
     'maturity',
 )
 
-def _normalize_rating_token(value: str) -> str:
-    token = str(value or '').strip().upper().replace(' ', '')
-    return token
+SP_RATINGS = (
+    'AAA', 'AA+', 'AA', 'AA-', 'A+', 'A', 'A-',
+    'BBB+', 'BBB', 'BBB-', 'BB+', 'BB', 'BB-',
+    'B+', 'B', 'B-', 'CCC+', 'CCC', 'CCC-', 'CC', 'C', 'SD', 'D',
+)
 
-def _extract_sp_like_rating_from_text(value: str) -> str:
-    text = str(value or '').upper()
-    # Prefer explicit S&P-like tokens first.
-    candidates = [
-        'AAA', 'AA+', 'AA', 'AA-', 'A+', 'A', 'A-',
-        'BBB+', 'BBB', 'BBB-', 'BB+', 'BB', 'BB-',
-        'B+', 'B', 'B-', 'CCC+', 'CCC', 'CCC-', 'CC', 'C'
-    ]
-    for candidate in candidates:
-        if candidate in text:
-            return candidate
-    return ''
+
+def _normalize_rating_token(value) -> str:
+    if value is None or pd.isna(value):
+        return ''
+    return str(value).strip().upper().replace(' ', '').replace('−', '-').replace('–', '-')
+
+
+def _validated_sp_rating(value) -> str:
+    token = _normalize_rating_token(value)
+    return token if token in SP_RATINGS or token == 'UST' else ''
+
+
+def _extract_sp_like_rating_from_text(value) -> str:
+    if value is None or pd.isna(value):
+        return ''
+    text = str(value).upper().replace('−', '-').replace('–', '-')
+    text = re.sub(r'\bN\s*/\s*A\b', '', text)
+    # Match whole rating tokens, never letters embedded in agency names or words.
+    tokens = sorted(set(SP_RATINGS) | set(MOODYS_TO_SP_EQUIVALENT), key=len, reverse=True)
+    pattern = r'(?<![A-Z0-9+\-])(' + '|'.join(re.escape(token) for token in tokens) + r')(?![A-Z0-9+\-])'
+    ratings = [MOODYS_TO_SP_EQUIVALENT.get(token, token) for token in re.findall(pattern, text)]
+    # Like the market-data ETL, retain the lower credit rating when agencies differ.
+    return max(ratings, key=SP_RATINGS.index) if ratings else ''
+
 
 def _is_likely_ust_record(row: dict) -> bool:
     joined = ' '.join([
@@ -107,25 +121,21 @@ def _resolve_rating(row: dict) -> str:
     if _is_likely_ust_record(row):
         return 'UST'
 
-    sp_equivalent = _normalize_rating_token(row.get('S&P Equivalent'))
-    if sp_equivalent:
-        return sp_equivalent
+    # Report merges rename the canonical ETL equivalent with an _x suffix.
+    # Preserve a valid canonical rating, including ratings outside proposal buckets.
+    for field in ('S&P Equivalent_x', 'S&P Equivalent'):
+        equivalent = _validated_sp_rating(row.get(field))
+        if equivalent:
+            return equivalent
 
-    sp = _normalize_rating_token(row.get('SP'))
-    if sp:
-        return sp
+    sp = _validated_sp_rating(row.get('SP'))
+    moodys = MOODYS_TO_SP_EQUIVALENT.get(_normalize_rating_token(row.get('Moodys')), '')
+    structured = [rating for rating in (sp, moodys) if rating]
+    if structured:
+        return max(structured, key=lambda rating: SP_RATINGS.index(rating) if rating != 'UST' else -1)
 
-    ratings_text = _extract_sp_like_rating_from_text(row.get('Ratings'))
-    if ratings_text:
-        return ratings_text
+    return _extract_sp_like_rating_from_text(row.get('Ratings'))
 
-    moodys_raw = _normalize_rating_token(row.get('Moodys'))
-    if moodys_raw:
-        mapped = MOODYS_TO_SP_EQUIVALENT.get(moodys_raw)
-        if mapped:
-            return mapped
-
-    return ''
 
 def _to_float_or_none(value):
     if value is None:
@@ -302,7 +312,8 @@ def _build_investment_proposal_template() -> list[dict]:
     ]
 
 def _get_bucket_for_rating(rating: str) -> str:
-    normalized = str(rating).strip().upper().replace('+', '').replace('-', '')
+    token = _normalize_rating_token(rating)
+    normalized = token if token in {'UST', 'ETF', 'STOCK'} else _validated_sp_rating(token).replace('+', '').replace('-', '')
     if normalized == 'UST':
         return 'treasuries'
     if normalized == 'ETF':
@@ -399,13 +410,7 @@ def _load_investment_proposal_context() -> dict:
     logger.announcement(f'Total bonds from RTD: {len(merged_df)}')
     logger.info(f"Merged DF columns: {merged_df.columns.tolist()}")
 
-    if 'S&P Equivalent_x' in merged_df.columns:
-        missing_equivalent_mask = merged_df['S&P Equivalent_x'].astype(str).str.strip() == ''
-        if missing_equivalent_mask.any():
-            merged_df.loc[missing_equivalent_mask, 'S&P Equivalent_x'] = merged_df[missing_equivalent_mask].apply(
-                lambda row: _resolve_rating(row.to_dict()),
-                axis=1,
-            )
+    merged_df['S&P Equivalent_x'] = merged_df.apply(lambda row: _resolve_rating(row.to_dict()), axis=1)
 
     if 'S&P Equivalent_x' in merged_df.columns:
         logger.info(f"S&P Equivalent_x unique values: {merged_df['S&P Equivalent_x'].unique()}")
@@ -859,7 +864,8 @@ def _populate_investment_proposal_from_distribution(
     context: dict,
 ):
     bonds_df_no_duplicates = context['bonds_df_no_duplicates']
-    merged_df = context['merged_df']
+    merged_df = context['merged_df'].copy()
+    merged_df['S&P Equivalent_x'] = merged_df.apply(lambda row: _resolve_rating(row.to_dict()), axis=1)
     etf_candidates = _prepare_etf_candidates(
         context['etfs_df'],
         context.get('proposal_equity_df'),
@@ -934,7 +940,7 @@ def _populate_investment_proposal_from_distribution(
             rating_key = str(row['S&P Equivalent_x']).replace('+', '').replace('-', '')
             bucket = rating_to_bucket.get(rating_key)
             if not bucket:
-                bucket = next(bucket_ref for bucket_ref in investment_proposal if bucket_ref['name'] == 'bonds_bb')
+                continue
 
             selection_profile = bucket_selection_profiles.get(bucket['name'])
             target_yield = float(selection_profile['target_yield']) if selection_profile else float(row['Current Yield_x'])
@@ -962,7 +968,7 @@ def _populate_investment_proposal_from_distribution(
 
             bucket = next(
                 bucket_ref for bucket_ref in investment_proposal
-                if bucket_ref['name'] == str(row.get('_bucket_name') or 'bonds_bb')
+                if bucket_ref['name'] == row['_bucket_name']
             )
 
             if bucket_needs[bucket['name']] <= 0:

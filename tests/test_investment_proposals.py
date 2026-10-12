@@ -152,6 +152,69 @@ class InvestmentProposalTests(unittest.TestCase):
                     self.populate(2.85)
                 self.assertEqual(caught.exception.details['missing_buckets'], ['bonds_bb'])
 
+    def test_rating_fields_normalize_without_substring_false_positives(self):
+        cases = [
+            ({'S&P Equivalent': ' bb− '}, 'BB-'),
+            ({'S&P Equivalent_x': 'bb+'}, 'BB+'),
+            ({'S&P Equivalent': float('nan'), 'SP': 'BB'}, 'BB'),
+            ({'S&P Equivalent': 'UNRATED', 'Moodys': 'Ba2'}, 'BB'),
+            ({'Moodys': 'Ba1'}, 'BB+'), ({'Moodys': 'Ba2'}, 'BB'),
+            ({'Moodys': 'Ba3'}, 'BB-'),
+            ({'Ratings': 'Ba2'}, 'BB'), ({'Ratings': 'Baa2'}, 'BBB'),
+            ({'Ratings': 'BB-'}, 'BB-'),
+            ({'Ratings': 'CAA3/CCC+ (MOODY/SP)'}, 'CCC-'),
+            ({'Ratings': 'S&P: BB / Moody’s: Ba2'}, 'BB'),
+            ({'SP': 'BB', 'Moodys': 'B2'}, 'B'),
+            ({'S&P Equivalent': 'CCC', 'SP': 'BB'}, 'CCC'),
+            ({'S&P Equivalent_x': 'BB', 'Ratings': 'UNRATED'}, 'BB'),
+        ]
+        for row, expected in cases:
+            with self.subTest(row=row):
+                self.assertEqual(self.p._resolve_rating(row), expected)
+        for value in ['UNRATED', 'Not Rated', 'NR', 'Moody', 'N/A', None, float('nan'), 'BBQ', 'AAAfoo']:
+            with self.subTest(unrated=value):
+                self.assertEqual(self.p._resolve_rating({'Ratings': value}), '')
+
+    def test_bucket_lookup_preserves_asset_classes_and_rejects_invalid_bond_ratings(self):
+        for rating, expected in [('UST', 'treasuries'), ('ETF', 'etfs'), ('STOCK', 'stocks'),
+                                 (' bb− ', 'bonds_bb'), ('BBB+', 'bonds_bbb'), ('A-', 'bonds_aaa_a')]:
+            with self.subTest(rating=rating):
+                self.assertEqual(self.p._get_bucket_for_rating(rating), expected)
+        for rating in ['B', 'CCC', 'UNRATED', 'BB--', 'AAA+', None, float('nan')]:
+            with self.subTest(invalid=rating):
+                self.assertEqual(self.p._get_bucket_for_rating(rating), '')
+
+    def test_normalized_bb_equivalents_survive_generation_and_serialization(self):
+        rows = []
+        inputs = [
+            {'S&P Equivalent_x': ' bb '}, {'S&P Equivalent_x': 'BB+'},
+            {'S&P Equivalent_x': 'bb−'}, {'Moodys': 'Ba1'},
+            {'Moodys': 'Ba2'}, {'Moodys': 'Ba3'}, {'Ratings': 'Ba2'},
+            {'S&P Equivalent_x': float('nan'), 'SP': 'BB-'},
+        ]
+        for i, fields in enumerate(inputs):
+            rows.append({'Ticker': f'VALID{i}', 'Symbol_x': f'VALID{i}', 'Current Yield_x': 6.0, **fields})
+        self.context['merged_df'] = pd.DataFrame(rows)
+        proposal = self.p._build_investment_proposal_template()
+        self.p._populate_investment_proposal_from_distribution(proposal, {'bonds_bb': 1}, self.context)
+        record = self.p._normalize_saved_investment_proposal(self.p._serialize_investment_proposal(proposal, None, 'risk_profile'))
+        assets = record['assets']['bb']
+        self.assertEqual({a['symbol'] for a in assets}, {f'VALID{i}' for i in range(len(inputs))})
+        self.assertEqual({a['equivalent'] for a in assets}, {'BB', 'BB+', 'BB-'})
+        self.assertAlmostEqual(sum(a['percentage'] for a in assets), 1)
+
+    def test_ineligible_bonds_are_excluded_even_when_bb_assets_exist(self):
+        invalid = ['B', 'B+', 'CCC', 'CC', 'C', 'D', 'SD', '', 'UNRATED', 'Not Rated']
+        rows = [{'Ticker': f'INVALID{i}', 'Symbol_x': f'INVALID{i}', 'S&P Equivalent_x': rating,
+                 'Ratings': rating, 'Current Yield_x': 6.0} for i, rating in enumerate(invalid)]
+        rows.append({'Ticker': 'VALID', 'Symbol_x': 'VALID', 'S&P Equivalent_x': 'BB-', 'Current Yield_x': 6.0})
+        self.context['merged_df'] = pd.DataFrame(rows)
+        proposal = self.p._build_investment_proposal_template()
+        self.p._populate_investment_proposal_from_distribution(proposal, {'bonds_bb': 1}, self.context)
+        assets = self.p._assets_from_investment_proposal(proposal)['bb']
+        self.assertEqual([a['symbol'] for a in assets], ['VALID'])
+        self.assertEqual(assets[0]['percentage'], 1)
+
     def test_all_archetypes_preserve_exact_weights_and_asset_ratings(self):
         self.context['merged_df'] = pd.DataFrame([
             {'Ticker': f'{rating}{i}', 'Symbol_x': f'{rating}{i}',
@@ -218,6 +281,59 @@ class InvestmentProposalTests(unittest.TestCase):
             response = app.test_client().post('/investment_proposals/create/risk', json={'risk_profile': {'score': 3.2, 'id': 'test'}})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json['assets']['etfs']), 4)
+
+    def test_missing_eligible_bb_returns_422_without_persistence_on_all_routes(self):
+        app = Flask(__name__)
+        app.register_blueprint(self.routes.bp, url_prefix='/investment_proposals')
+        plan = {'allocation': {'bonds': 20, 'stocks': 80},
+                'bond_rating_allocation': {'bbb': 20, 'bb': 80}}
+        cases = [
+            ('create/risk', {'risk_profile': {'score': 2.85, 'id': 'test'}}),
+            ('create/plan', {'portfolio_plan': plan}),
+            ('preview/plan', {'portfolio_plan': plan}),
+        ]
+        for rating in ['B', 'CCC', '', 'UNRATED']:
+            invalid = pd.DataFrame([
+                {'Ticker': f'INVALID{i}', 'Symbol_x': f'INVALID{i}',
+                 'S&P Equivalent_x': rating, 'Current Yield_x': 6.0} for i in range(4)
+            ])
+            self.context['merged_df'] = pd.concat([
+                self.bonds[self.bonds['S&P Equivalent_x'] == 'BBB'], invalid,
+            ], ignore_index=True)
+            with patch.object(self.p, '_load_investment_proposal_context', return_value=self.context), \
+                 patch.object(self.p, '_persist_investment_proposal') as persist, \
+                 patch.object(self.p, '_build_investment_proposal_preview') as preview:
+                for route, payload in cases:
+                    with self.subTest(rating=rating, route=route):
+                        response = app.test_client().post('/investment_proposals/' + route, json=payload)
+                        self.assertEqual(response.status_code, 422)
+                        self.assertEqual(response.json['code'], 'proposal_assets_unavailable')
+                        self.assertEqual(response.json['details']['missing_buckets'], ['bonds_bb'])
+                        self.assertIn('no eligible assets for bonds_bb', response.json['error'])
+                        persist.assert_not_called()
+                        preview.assert_not_called()
+                        self.p.db.create.assert_not_called()
+                        self.p.db.update.assert_not_called()
+
+    def test_plan_preview_keeps_valid_bb_and_excludes_lower_ratings(self):
+        app = Flask(__name__)
+        app.register_blueprint(self.routes.bp, url_prefix='/investment_proposals')
+        self.context['merged_df'] = pd.DataFrame([
+            {'Ticker': 'VALID', 'Symbol_x': 'VALID', 'Moodys': 'Ba3', 'Current Yield_x': 6.0},
+            {'Ticker': 'INVALID', 'Symbol_x': 'INVALID', 'S&P Equivalent_x': 'B', 'Current Yield_x': 6.0},
+        ])
+        plan = {'allocation': {'bonds': 100}, 'bond_rating_allocation': {'bb': 100}}
+        with patch.object(self.p, '_load_investment_proposal_context', return_value=self.context), \
+             patch.object(self.p, '_persist_investment_proposal') as persist:
+            response = app.test_client().post('/investment_proposals/preview/plan', json={'portfolio_plan': plan})
+        self.assertEqual(response.status_code, 200)
+        assets = response.json['assets']['bb']
+        self.assertEqual([a['symbol'] for a in assets], ['VALID'])
+        self.assertEqual(assets[0]['equivalent'], 'BB-')
+        self.assertEqual(assets[0]['percentage'], 1)
+        persist.assert_not_called()
+        self.p.db.create.assert_not_called()
+        self.p.db.update.assert_not_called()
 
     def test_risk_plan_and_preview_routes_return_useful_422(self):
         self.context['etfs_df'] = pd.DataFrame()
