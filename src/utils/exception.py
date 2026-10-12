@@ -63,11 +63,11 @@ def build_error_payload(err: ServiceError) -> dict:
 
 
 def _safe_traceback(exc: Exception, seen: set[int] | None = None) -> str:
-    """Preserve reportable Python stack locations without messages or locals.
+    """Preserve exception messages and stack locations without locals/source lines.
 
-    Upstream exception strings can contain tokens, URLs, documents or client
-    payloads. Source lines can also contain literal secrets, so retain only
-    the filename, line number and function name for each frame.
+    Messages are needed to diagnose upstream failures in Error Reporting.
+    They may include upstream URLs or payload details; request context remains
+    restricted separately by get_request_context().
     """
     seen = set() if seen is None else seen
     if id(exc) in seen:
@@ -85,7 +85,7 @@ def _safe_traceback(exc: Exception, seen: set[int] | None = None) -> str:
     for frame in traceback.extract_tb(exc.__traceback__):
         output += f'  File "{frame.filename}", line {frame.lineno}, in {frame.name}\n'
     exception_type = type(exc)
-    output += f"{exception_type.__module__}.{exception_type.__qualname__}: message omitted\n"
+    output += f"{exception_type.__module__}.{exception_type.__qualname__}: {exc}\n"
     return output
 
 

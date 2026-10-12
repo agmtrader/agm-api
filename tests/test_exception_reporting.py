@@ -53,12 +53,13 @@ class ExceptionReportingTests(unittest.TestCase):
         self.assertIn('/failure/<item>', logged)
         self.assertIn('status=502', logged)
         self.assertIn('upstream_failed', logged)
-        self.assertIn('src.utils.exception.ServiceError', logged)
+        self.assertIn('src.utils.exception.ServiceError: synthetic-message-secret', logged)
+        self.assertNotIn('message omitted', logged)
         self.assertIn('in operation', logged)
-        for marker in ('synthetic-message-secret', 'synthetic-detail-secret', 'synthetic-path-secret', 'synthetic-query-secret', 'synthetic-email-secret'):
+        for marker in ('synthetic-detail-secret', 'synthetic-path-secret', 'synthetic-query-secret', 'synthetic-email-secret'):
             self.assertNotIn(marker, logged)
 
-    def test_unexpected_bug_keeps_trace_type_but_omits_message_and_source_line(self):
+    def test_unexpected_bug_keeps_message_but_omits_source_line(self):
         def operation(item):
             raise RuntimeError('synthetic-literal-secret')
         response = self.route(operation).get('/failure/bug')
@@ -70,10 +71,11 @@ class ExceptionReportingTests(unittest.TestCase):
         self.assertIn('builtins.RuntimeError', logged)
         self.assertIn('Traceback (most recent call last):', logged)
         self.assertIn('in operation', logged)
-        self.assertNotIn('synthetic-literal-secret', logged)
+        self.assertIn('builtins.RuntimeError: synthetic-literal-secret', logged)
+        self.assertNotIn("raise RuntimeError(", logged)
         self.assertIn(response.json['error_id'], logged)
 
-    def test_chained_failures_preserve_both_types_without_either_message(self):
+    def test_chained_failures_preserve_both_types_and_messages(self):
         def operation(item):
             try:
                 raise ValueError('synthetic-cause-secret')
@@ -85,8 +87,8 @@ class ExceptionReportingTests(unittest.TestCase):
         self.assertIn('builtins.ValueError', logged)
         self.assertIn('builtins.RuntimeError', logged)
         self.assertIn('direct cause', logged)
-        self.assertNotIn('synthetic-cause-secret', logged)
-        self.assertNotIn('synthetic-outer-secret', logged)
+        self.assertIn('synthetic-cause-secret', logged)
+        self.assertIn('synthetic-outer-secret', logged)
 
     def test_suppressed_context_is_not_reported(self):
         def operation(item):
@@ -109,7 +111,7 @@ class ExceptionReportingTests(unittest.TestCase):
         self.assertEqual(self.output.getvalue(), logged)
         self.assertIn('context={}', logged)
         self.assertIn(caught.exception.error_id, logged)
-        self.assertNotIn('synthetic-job-secret', logged)
+        self.assertIn('synthetic-job-secret', logged)
 
     def test_cycle_does_not_break_reporting(self):
         first = ValueError('synthetic-first-secret')
@@ -119,7 +121,27 @@ class ExceptionReportingTests(unittest.TestCase):
         result = errors._safe_traceback(first)
         self.assertEqual(result.count('builtins.ValueError'), 1)
         self.assertEqual(result.count('builtins.RuntimeError'), 1)
-        self.assertNotIn('synthetic-first-secret', result)
+        self.assertIn('synthetic-first-secret', result)
+
+    def test_google_drive_http_error_retains_provider_reason(self):
+        from googleapiclient.errors import HttpError
+        from httplib2 import Response
+
+        def operation(item):
+            raise HttpError(
+                Response({'status': '403', 'reason': 'Forbidden'}),
+                b'{"error":{"message":"User rate limit exceeded","errors":[{"reason":"userRateLimitExceeded","message":"User rate limit exceeded"}]}}',
+                uri='https://www.googleapis.com/drive/v3/files/synthetic-file',
+            )
+
+        response = self.route(operation).get('/failure/drive')
+        logged = self.output.getvalue()
+        self.assertEqual(response.status_code, 500)
+        self.assertIn('googleapiclient.errors.HttpError:', logged)
+        self.assertIn('403', logged)
+        self.assertIn('User rate limit exceeded', logged)
+        self.assertNotIn('message omitted', logged)
+        self.assertEqual(logged.count('Unhandled error in'), 1)
 
     def test_success_response_stays_successful_and_emits_no_error(self):
         response = self.route(lambda item: {'saved': True}).get('/failure/success')
