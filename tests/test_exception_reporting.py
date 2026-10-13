@@ -67,15 +67,16 @@ class ExceptionReportingTests(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertEqual(response.json['error'], 'Internal server error')
         self.assertEqual(response.json['code'], 'internal_error')
-        self.assertEqual(logged.count('Unhandled error in'), 1)
-        self.assertIn('builtins.RuntimeError', logged)
+        self.assertEqual(logged.count('failed [error_id='), 1)
+        self.assertIn('src.utils.exception.ServiceError', logged)
         self.assertIn('Traceback (most recent call last):', logged)
         self.assertIn('in operation', logged)
-        self.assertIn('builtins.RuntimeError: synthetic-literal-secret', logged)
+        self.assertIn('ServiceError: Internal server error', logged)
+        self.assertNotIn('synthetic-literal-secret', logged)
         self.assertNotIn("raise RuntimeError(", logged)
         self.assertIn(response.json['error_id'], logged)
 
-    def test_chained_failures_preserve_both_types_and_messages(self):
+    def test_chained_failures_propagate_one_final_error(self):
         def operation(item):
             try:
                 raise ValueError('synthetic-cause-secret')
@@ -83,12 +84,11 @@ class ExceptionReportingTests(unittest.TestCase):
                 raise RuntimeError('synthetic-outer-secret') from cause
         self.route(operation).get('/failure/bug')
         logged = self.output.getvalue()
-        self.assertEqual(logged.count('Unhandled error in'), 1)
-        self.assertIn('builtins.ValueError', logged)
-        self.assertIn('builtins.RuntimeError', logged)
-        self.assertIn('direct cause', logged)
-        self.assertIn('synthetic-cause-secret', logged)
-        self.assertIn('synthetic-outer-secret', logged)
+        self.assertEqual(logged.count('failed [error_id='), 1)
+        self.assertIn('ServiceError: Internal server error', logged)
+        self.assertEqual(logged.count('Traceback (most recent call last):'), 1)
+        for marker in ('builtins.ValueError', 'builtins.RuntimeError', 'direct cause', 'synthetic-cause-secret', 'synthetic-outer-secret'):
+            self.assertNotIn(marker, logged)
 
     def test_suppressed_context_is_not_reported(self):
         def operation(item):
@@ -98,7 +98,7 @@ class ExceptionReportingTests(unittest.TestCase):
                 raise RuntimeError('synthetic-visible-secret') from None
         self.route(operation).get('/failure/bug')
         self.assertNotIn('ValueError', self.output.getvalue())
-        self.assertIn('RuntimeError', self.output.getvalue())
+        self.assertIn('ServiceError', self.output.getvalue())
 
     def test_background_failure_without_request_context_is_reportable_once(self):
         @errors.handle_exception
@@ -123,7 +123,7 @@ class ExceptionReportingTests(unittest.TestCase):
         self.assertEqual(result.count('builtins.RuntimeError'), 1)
         self.assertIn('synthetic-first-secret', result)
 
-    def test_google_drive_http_error_retains_provider_reason(self):
+    def test_google_drive_http_error_returns_one_final_failure(self):
         from googleapiclient.errors import HttpError
         from httplib2 import Response
 
@@ -137,11 +137,12 @@ class ExceptionReportingTests(unittest.TestCase):
         response = self.route(operation).get('/failure/drive')
         logged = self.output.getvalue()
         self.assertEqual(response.status_code, 500)
-        self.assertIn('googleapiclient.errors.HttpError:', logged)
-        self.assertIn('403', logged)
-        self.assertIn('User rate limit exceeded', logged)
+        self.assertIn('ServiceError: Internal server error', logged)
+        self.assertNotIn('googleapiclient.errors.HttpError:', logged)
+        self.assertNotIn('synthetic-file', logged)
+        self.assertNotIn('User rate limit exceeded', logged)
         self.assertNotIn('message omitted', logged)
-        self.assertEqual(logged.count('Unhandled error in'), 1)
+        self.assertEqual(logged.count('failed [error_id='), 1)
 
     def test_success_response_stays_successful_and_emits_no_error(self):
         response = self.route(lambda item: {'saved': True}).get('/failure/success')
@@ -152,3 +153,127 @@ class ExceptionReportingTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class PropagationBoundaryTests(unittest.TestCase):
+    setUp = ExceptionReportingTests.setUp
+    tearDown = ExceptionReportingTests.tearDown
+    route = ExceptionReportingTests.route
+    def test_inner_handlers_preserve_one_failure_object_without_reporting(self):
+        failure = errors.ServiceError('final controlled failure', 503, code='final_failure')
+        seen = []
+        @errors.handle_exception
+        def inner():
+            raise failure
+        @errors.handle_exception
+        def middle():
+            try:
+                inner()
+            except errors.ServiceError as err:
+                seen.append(err)
+                self.assertEqual(self.output.getvalue(), '')
+                raise
+        def outer(item):
+            try:
+                middle()
+            except errors.ServiceError as err:
+                seen.append(err)
+                self.assertIs(err, failure)
+                self.assertEqual(self.output.getvalue(), '')
+                raise
+        response = self.route(outer).get('/failure/one')
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(seen, [failure, failure])
+        self.assertEqual(self.output.getvalue().count('Traceback (most recent call last):'), 1)
+        self.assertIn('outer failed', self.output.getvalue())
+
+    def test_final_replacement_error_is_the_only_propagated_chain(self):
+        @errors.handle_exception
+        def inner():
+            raise errors.ServiceError('private inner marker', 502)
+        @errors.handle_exception
+        def outer(item):
+            try:
+                inner()
+            except errors.ServiceError as exc:
+                raise errors.ServiceError('final operation failed', 503, code='final_failure') from exc
+        response = self.route(outer).get('/failure/one')
+        logged = self.output.getvalue()
+        self.assertEqual(response.status_code, 503)
+        self.assertIn('final operation failed', logged)
+        self.assertNotIn('private inner marker', logged)
+        self.assertNotIn('direct cause', logged)
+        self.assertEqual(logged.count('Traceback (most recent call last):'), 1)
+
+    def test_handled_nested_failure_does_not_report_or_poison_next_call(self):
+        @errors.handle_exception
+        def inner():
+            raise RuntimeError('synthetic handled failure')
+        @errors.handle_exception
+        def job():
+            try:
+                inner()
+            except errors.ServiceError:
+                return {'handled': True}
+        self.assertEqual(job(), {'handled': True})
+        self.assertEqual(self.output.getvalue(), '')
+        self.assertEqual(errors._component_depth.get(), 0)
+        @errors.handle_exception
+        def failing_job():
+            raise RuntimeError('next failure')
+        with self.assertRaises(errors.ServiceError):
+            failing_job()
+        self.assertIn('failing_job failed', self.output.getvalue())
+        self.assertEqual(self.output.getvalue().count('Traceback (most recent call last):'), 1)
+        self.assertEqual(errors._component_depth.get(), 0)
+
+    def test_undecorated_final_service_error_has_one_visible_exception(self):
+        final = errors.ServiceError('final operation failure', 503, code='final_failure')
+        final.__cause__ = ValueError('private lower-level marker')
+        errors.log_service_error(final, 'final_flask_boundary')
+        logged = self.output.getvalue()
+        self.assertIn('ServiceError: final operation failure', logged)
+        self.assertNotIn('private lower-level marker', logged)
+        self.assertEqual(logged.count('Traceback (most recent call last):'), 1)
+        self.assertIsNone(final.__cause__)
+
+    def test_nested_unexpected_failure_is_normalized_only_once(self):
+        @errors.handle_exception
+        def inner():
+            raise RuntimeError('private inner marker')
+        @errors.handle_exception
+        def middle():
+            return inner()
+        def outer(item):
+            return middle()
+        with patch.object(errors, 'wrap_unhandled_exception', wraps=errors.wrap_unhandled_exception) as normalize:
+            response = self.route(outer).get('/failure/one')
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(normalize.call_count, 1)
+        self.assertEqual(self.output.getvalue().count('Traceback (most recent call last):'), 1)
+        self.assertNotIn('private inner marker', self.output.getvalue())
+
+    def test_concurrent_direct_flows_keep_independent_exception_depth(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+        barrier = Barrier(2)
+        @errors.handle_exception
+        def inner():
+            barrier.wait(timeout=5)
+            raise RuntimeError('private thread marker')
+        @errors.handle_exception
+        def job():
+            return inner()
+        def invoke():
+            try:
+                job()
+            except errors.ServiceError:
+                return errors._component_depth.get()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            depths = list(pool.map(lambda _: invoke(), range(2)))
+        self.assertEqual(depths, [0, 0])
+        logged = self.output.getvalue()
+        self.assertEqual(logged.count('job failed'), 2)
+        self.assertNotIn('inner failed', logged)
+        self.assertEqual(logged.count('Traceback (most recent call last):'), 2)
+        self.assertNotIn('private thread marker', logged)

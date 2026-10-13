@@ -1,6 +1,10 @@
 import functools
 import traceback
 import uuid
+from contextvars import ContextVar
+
+_component_depth = ContextVar("api_component_depth", default=0)
+
 
 from flask import g, has_request_context, request
 
@@ -94,6 +98,9 @@ def log_service_error(err: ServiceError, source: str) -> None:
     # Expected request failures never need an exception report.
     if err.status_code < 500 or err._logged:
         return
+    # This is the final propagated API error, not its intermediate causes.
+    err.__cause__ = None
+    err.__suppress_context__ = True
     error_id = ensure_error_id(err)
     context = get_request_context()
     logger.error(
@@ -104,34 +111,34 @@ def log_service_error(err: ServiceError, source: str) -> None:
 
 
 def wrap_unhandled_exception(exc: Exception, source: str) -> ServiceError:
-    error_id = uuid.uuid4().hex[:12]
-    context = get_request_context()
-    logger.error(
-        f"Unhandled error in {source} [error_id={error_id}]. "
-        f"context={context}\n{_safe_traceback(exc)}"
-    )
-    err = ServiceError(
+    """Create the single API failure without emitting an intermediate error."""
+    return ServiceError(
         message="Internal server error",
         status_code=500,
         code="internal_error",
-        error_id=error_id,
-    )
-    err._logged = True
-    return err
+        error_id=uuid.uuid4().hex[:12],
+    ).with_traceback(exc.__traceback__)
 
 
 def handle_exception(func):
-    """Decorator for component/service layer functions."""
-
+    """Pass one ServiceError upward; final routes/direct jobs own the failure."""
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
+        depth = _component_depth.get()
+        token = _component_depth.set(depth + 1)
         try:
-            return func(*args, **kwargs)
+            try:
+                return func(*args, **kwargs)
+            except ServiceError as err:
+                # Keep the same failure object, excluding incidental cause/context
+                # exceptions from the final propagated exception chain.
+                raise err from None
+            except Exception as exc:
+                raise wrap_unhandled_exception(exc, func.__name__) from None
         except ServiceError as err:
-            if err.status_code >= 500:
+            if depth == 0 and not has_request_context():
                 log_service_error(err, func.__name__)
             raise
-        except Exception as exc:
-            raise wrap_unhandled_exception(exc, func.__name__) from exc
-
+        finally:
+            _component_depth.reset(token)
     return wrapper

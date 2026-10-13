@@ -42,4 +42,4 @@ jobs:
 
       # Proposal eligibility regressions must pass before Cloud Build deploys this commit.
       - name: Test startup, deployment gating, reporting cache, exception privacy and proposals
-        run: python -m pytest tests/test_database_startup.py tests/test_report_cache.py tests/test_exception_reporting.py tests/test_investment_proposals.py tests/test_position_quotes.py tests/test_ibkr_token_cache.py tests/test_authz_contract.py tests/test_contact_read_filters.py -q
+        run: python -m pytest tests/test_database_startup.py tests/test_report_cache.py tests/test_exception_reporting.py tests/test_unfunded_exception_reporting.py tests/test_investment_proposals.py tests/test_position_quotes.py tests/test_ibkr_token_cache.py tests/test_authz_contract.py tests/test_contact_read_filters.py -q

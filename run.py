@@ -200,6 +200,7 @@ def start_api():
     @app.errorhandler(Exception)
     def unexpected_error(error):
         wrapped = wrap_unhandled_exception(error, request.endpoint or 'flask')
+        log_service_error(wrapped, request.endpoint or 'flask')
         return jsonify(build_error_payload(wrapped)), wrapped.status_code
 
     # JWT Token

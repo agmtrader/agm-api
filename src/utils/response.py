@@ -51,6 +51,7 @@ def format_response(func):
             return jsonify(build_error_payload(err)), err.status_code
         except Exception as exc:
             err = wrap_unhandled_exception(exc, func.__name__)
+            log_service_error(err, func.__name__)
             return jsonify(build_error_payload(err)), err.status_code
 
     return wrapper

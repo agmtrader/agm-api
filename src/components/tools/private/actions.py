@@ -355,7 +355,9 @@ def send_unfunded_emails():
                 notice_number=contact['notice_number']
             )
         except Exception:
-            logger.exception("Unfunded email failed: " + (log_context % log_values))
+            # The shared exception handler reports the failure once. Re-logging
+            # its traceback here creates separate cause/wrapper error groups.
+            logger.warning("Unfunded email failed: " + (log_context % log_values))
             raise
         logger.info("Unfunded email sent successfully: " + (log_context % log_values))
     
