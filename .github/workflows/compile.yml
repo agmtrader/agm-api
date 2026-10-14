@@ -54,7 +54,7 @@ jobs:
         run: python -m compileall -q src run.py dev/schema_preflight.py
 
       - name: Test accounting coverage, independent totals, downloads and PDF isolation
-        run: python -m pytest tests/test_accounting_statements.py tests/test_reporting_statements.py -q
+        run: python -m pytest tests/test_accounting_statements.py tests/test_reporting_statements.py tests/test_trade_confirmations.py -q
 
       # Proposal eligibility regressions must pass before Cloud Build deploys this commit.
       - name: Test startup, deployment gating, reporting cache, exception privacy and proposals

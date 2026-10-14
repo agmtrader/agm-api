@@ -340,9 +340,20 @@ def parse_bank_summary(text, account, year, month):
         debits = sum((abs(_line_amount(block, label, optional=True) or Decimal(0)) for label in ['Checks Paid', 'ATM & Debit Card Withdrawals', 'Electronic Withdrawals', 'Other Withdrawals', r'\nFees']), Decimal(0))
     if credits < 0 or debits < 0:
         raise StatementError('Statement credit/debit totals have invalid signs.')
+    coverage_error = None
+    period_start = None
+    if institution == 'Terrabank':
+        beginning = re.search(r'Beginning Balance as of\s+(\d{2}/\d{2}/\d{4})', normalized, re.I)
+        if beginning:
+            period_start = date_value(beginning.group(1))
+            required_start = f'{year}-{month:02}-01'
+            if (account.get('opened_on') or '')[:7] == required_start[:7]:
+                required_start = account['opened_on']
+            if period_start > required_start:
+                coverage_error = f'The PDF begins {period_start}; required monthly coverage begins {required_start}. A full-period statement is needed.'
     return dict(opening=opening, ending=ending, credits=credits, debits=debits,
                 currency=account['currency'], evidence=institution + ' PDF account summary',
-                normalizations=normalizations)
+                normalizations=normalizations, period_start=period_start, coverage_error=coverage_error)
 
 
 def reconcile(summary, transactions, *, tolerance=Decimal('0.01')):

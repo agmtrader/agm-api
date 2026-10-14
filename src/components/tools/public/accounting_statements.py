@@ -462,6 +462,9 @@ def analyze_month(account_id, year, month):
         row = report['rows'][month - 1]
         try:
             summary = _summary(a, year, month, row)
+            if summary.get('coverage_error'):
+                row['errors'].append(summary['coverage_error'])
+                row['backed_up'] = False
             raw = row['selected_raw']
             if not raw:
                 raise StatementError('An unambiguous transaction original is required for reconciliation.')

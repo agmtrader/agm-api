@@ -430,3 +430,28 @@ def test_truist_activity_date_can_precede_statement_posting_month():
     tx = parse_bank_transactions(b'Posted Date,Transaction Date,Transaction Type,Check/Serial #,Description,Amount,Daily Posted Balance\n09/01/2026,08/31/2026,Debit,REF1,Fee,($21),79\n', account('Truist'))
     assert tx[0]['transaction_date'] == '2026-08-31'
     assert tx[0]['posted_date'] == '2026-09-01'
+
+
+def test_partial_terrabank_pdf_does_not_certify_a_full_month_but_opening_month_is_allowed():
+    a = account('Terrabank')
+    original = 'Statement Date 09/30/2026\nAccount Number: XXXXX1111\nBeginning Balance as of 09/11/2026 $100.00\nDeposits and Credits (1) $50.00\nWithdrawals and Debits (1) $21.00\nEnding Balance $129.00'
+    summary = parse_bank_summary(original, a, 2026, 9)
+    assert summary['period_start'] == '2026-09-11'
+    assert '2026-09-01' in summary['coverage_error']
+    a['opened_on'] = '2026-09-11'
+    assert parse_bank_summary(original, a, 2026, 9)['coverage_error'] is None
+
+
+def test_partial_pdf_cannot_count_as_backed_up_even_when_partial_totals_reconcile(monkeypatch):
+    a=account('Terrabank'); a['opened_on']='2026-09-01'
+    sources={'pdf':[source('pdf','pdf')],'csv':[source('csv')],'alternative_raw':[]}
+    row=service._month_row(a,2026,9,sources,[],date(2026,10,14))
+    monkeypatch.setattr(service,'inventory_report',lambda *_:{'accounts':[a],'rows':[copy.deepcopy(row) for _ in range(12)]})
+    summary=dict(opening=Decimal(100),ending=Decimal(129),credits=Decimal(50),debits=Decimal(21),currency='USD',coverage_error='Full-period PDF needed')
+    monkeypatch.setattr(service,'_summary',lambda *_:copy.deepcopy(summary))
+    raw=b'date,description,amount,balance\n09/11/2026,Fee,-21,79\n09/12/2026,Deposit,50,129\n'
+    monkeypatch.setattr(service,'source_bytes',lambda _:raw)
+    result=service.analyze_month(a['account'],2026,9)
+    assert result['analysis']['checks']['reconciled']
+    assert not result['reconciled'] and not result['backed_up']
+    assert result['errors']==['Full-period PDF needed']

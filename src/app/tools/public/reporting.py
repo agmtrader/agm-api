@@ -79,6 +79,7 @@ def accounting_annual_download_route():
     return response
 
 @bp.route('/trade_confirmations', methods=['GET'])
+@require_scope('all')
 @format_response
 def get_trade_confirmations_route():
     """Read the grouped all-account trade confirmations from Flex Query 1215183."""
