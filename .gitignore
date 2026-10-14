@@ -191,3 +191,5 @@ cython_debug/
 #.idea/
 
 !dev/refresh_ibkr_details.py
+
+!dev/deploy_clients_job.py

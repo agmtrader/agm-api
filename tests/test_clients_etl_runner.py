@@ -223,3 +223,78 @@ def test_sample_cannot_publish_as_success():
     assert report['status'] == 'partial' and report['sampled']
     assert values[1]['_agm_refresh']['status'] == 'stale'
     assert values[1]['_agm_refresh']['error'] == 'not_selected_in_sample'
+
+
+def test_accepted_coverage_never_accepts_new_gap_or_transform_failure():
+    from src.jobs.clients_etl import evaluate
+    r={'status':'partial','overview':{
+        'extract':{'status':'partial','steps':[{'name':'account_details','status':'partial',
+            'summary':{'successful':1},'outcomes':[{'account_id':'U1','status':'failed','error':'HTTP 403'}]}]},
+        'backup':{'status':'success'},'transform':{'status':'success'}}}
+    assert evaluate(r,[{'account_id':'U1','error':'HTTP 403'}])=='completed_with_accepted_coverage_gaps'
+    assert evaluate(r,[])=='failed'
+    r['overview']['transform']['status']='partial'
+    assert evaluate(r,[{'account_id':'U1','error':'HTTP 403'}])=='failed'
+
+
+def test_gcs_lock_owned_generation_released_and_overview_saved(tmp_path):
+    from src.jobs import storage
+    saved=Mock()
+    saved.put.side_effect=['123','456']
+    with patch.object(storage,'RunStorage',return_value=saved), \
+         patch.object(etl,'run_pipeline',return_value={'status':'success'}):
+        assert main(['--storage-bucket','synthetic','--output-dir',str(tmp_path)])==0
+    assert saved.put.call_args_list[0].args[0]=='locks/clients-etl.json'
+    assert saved.put.call_args_list[1].args[0].endswith('/overview.json')
+    saved.delete.assert_called_once_with('locks/clients-etl.json','123')
+
+
+def test_failed_lock_never_runs_pipeline_or_deletes_someone_elses_lock(tmp_path):
+    from src.jobs import storage
+    saved=Mock()
+    saved.put.side_effect=[RuntimeError('HTTP 412'),'report-generation']
+    with patch.object(storage,'RunStorage',return_value=saved),patch.object(etl,'run_pipeline') as pipeline:
+        assert main(['--storage-bucket','synthetic','--output-dir',str(tmp_path)])==1
+    pipeline.assert_not_called()
+    saved.delete.assert_not_called()
+
+
+def test_manual_copy_never_clears_source_or_copies_market_input():
+    from src.jobs.clients_etl import copy_manual_inputs
+    fake=Mock()
+    fake.get_files_in_folder.return_value=[{'id':'client','name':'clients.xls'}, {'id':'market','name':'bond_snapshot.csv'}]
+    with patch.object(etl,'Drive',fake),patch.object(etl,'batch_folder_id','isolated'):
+        result=copy_manual_inputs(etl,{'files':[{'batch_name':'clients.xls','extract_func':None}]},'shared')
+    fake.clear_folder.assert_called_once_with('isolated')
+    assert [x['source_id'] for x in result]==['client']
+    assert fake.service.files.return_value.copy.call_args.kwargs['body']['parents']==['isolated']
+
+
+def test_workflow_waits_for_its_execution_and_accepts_only_terminal_success(tmp_path):
+    import os
+    from pathlib import Path
+    import subprocess
+    import yaml
+    workflow=yaml.safe_load((Path(__file__).parents[1]/'.github/workflows/etl_clients.yaml').read_text())
+    script=next(s['run'] for s in workflow['jobs']['etl']['steps'] if s.get('id')=='execute')
+    binary=tmp_path/'gcloud'
+    binary.write_text('''#!/usr/bin/env python3
+import json,os,sys,shutil
+args=sys.argv[1:]
+if args[:4]==['run','jobs','execute','agm-clients-etl']: print('execution-fixture')
+elif args[:4]==['run','jobs','executions','describe']:
+ assert args[4]=='execution-fixture'
+ print(json.dumps({'status':{'completionTime':'2026-10-14T00:00:00Z','conditions':[{'type':'Completed','status':os.environ['TEST_COMPLETED']}]}}))
+elif args[:2]==['storage','cp']:
+ assert 'runs/execution-fixture/overview.json' in args[2]
+ shutil.copy(os.environ['TEST_OVERVIEW'],args[3])
+else: raise SystemExit(2)
+''')
+    binary.chmod(0o700)
+    report=tmp_path/'fixture.json';report.write_text(json.dumps({'status':'partial','operational_status':'completed_with_accepted_coverage_gaps','run_id':'execution-fixture'}))
+    env=dict(os.environ,PATH=str(tmp_path)+':'+os.environ['PATH'],RUNNER_TEMP=str(tmp_path),
+             GITHUB_OUTPUT=str(tmp_path/'output'),GITHUB_STEP_SUMMARY=str(tmp_path/'summary'),
+             TEST_OVERVIEW=str(report),TEST_COMPLETED='True')
+    assert subprocess.run(['bash','-e','-o','pipefail','-c',script],env=env,capture_output=True).returncode==0
+    env['TEST_COMPLETED']='False'
+    assert subprocess.run(['bash','-e','-o','pipefail','-c',script],env=env,capture_output=True).returncode!=0

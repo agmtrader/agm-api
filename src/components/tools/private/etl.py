@@ -35,7 +35,7 @@ def _with_ibkr_market_data_session(func):
             return func(*args, **kwargs)
     return wrapped
 
-batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
+batch_folder_id = os.getenv('ETL_BATCH_FOLDER_ID', '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8')
 resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
 
 # Get the current time in CST

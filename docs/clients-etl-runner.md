@@ -40,3 +40,21 @@ Do not switch GitHub/API triggers until these are completed:
 - Verify the first scheduled clients execution and ensure there is only one active trigger. Market ETL stays unchanged.
 
 Production code changes can also affect the existing HTTP clients route once deployed, so deployment must account for its longer refresh runtime. No container job has been provisioned by this local change.
+
+## Clients cloud cutover configuration (2026-10-14)
+
+Job `agm-clients-etl` in `agm-datalake/us-central1` uses the existing immutable API runtime image, service account `agm-api@agm-datalake.iam.gserviceaccount.com`, VPC connector `agm-qa-connector` with all-traffic egress, 1 CPU/2 GiB, one task and no automatic retries. No Docker build or API service update is needed: the Python command downloads a generation-pinned GCS code overlay, verifies its SHA-256 and exact path allowlist, then runs the clients module. Source artifact contains only the selected job/ETL modules and the accepted account-gap baseline, not environments or raw client data. Future image/runtime changes require compatibility testing; base image is intentionally pinned until then.
+
+Private bucket `agm-datalake-etl-runs` retains code artifacts and `runs/<execution>/overview.json`. `locks/clients-etl.json` uses generation-match-zero acquisition and generation-conditional release; a concurrent run fails before pipeline writes. A killed process may leave a lock: inspect Cloud Run execution state before an operator conditionally removes it. Never automatically steal a lock from a running execution.
+
+Clients staging folder `1EIshGq22oFg-WJ9aHdS37Heh5KaqN2ct` is separate from the original shared folder. Only manually supplied clients filenames are copied from the existing shared folder; source files are not renamed/moved/deleted by this job. Copied input source IDs/modified times are retained in the overview. Market ETL keeps its existing shared stage and schedule. The legacy API clients endpoint is not the scheduled trigger after cutover; avoid manually invoking it alongside a clients job because it still writes the same reporting resources without the job lock.
+
+The owner accepted current incomplete account coverage. The source bundle embeds the 208 account/error pairs from the verified local report as the explicit accepted baseline. The raw pipeline status and coverage outcomes remain partial/visible, while the job can finish as `completed_with_accepted_coverage_gaps` only when every failure matches that baseline and backup/transform and other extract steps succeed. New gaps, failed publication, failed lock release and other pipeline failures produce nonzero exit. This is not a declaration that stale/absent accounts are current.
+
+Deploy or update from the code workspace:
+
+```bash
+./venv/bin/python dev/deploy_clients_job.py --staging-folder 1EIshGq22oFg-WJ9aHdS37Heh5KaqN2ct --coverage-report dev/ibkr_details_runs/integrated_20261014T205914Z/refresh_report.json --update
+```
+
+The clients GitHub workflow is prepared to launch the job, poll that execution to terminal state, download its final overview, and preserve existing notifications. A workflow-only default-branch cutover commit uses `[skip ci]` to avoid triggering an unrelated API rebuild; the cloud execution itself is the acceptance test. First actual scheduled run remains a separate acceptance check. Deferred account discovery/contact reconciliation is API #294; market migration stays in #86.
