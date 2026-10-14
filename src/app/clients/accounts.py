@@ -5,6 +5,8 @@ from src.components.clients.accounts import create_account, read_accounts, submi
 from src.components.clients.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, apply_fee_template, add_trading_permissions, get_product_country_bundles, get_complex_asset_transfer_brokers, read_ibkr_account_positions, transfer_positions_externally_complex, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, change_account_holder_external_id, withdraw_funds, get_financial_ranges, get_business_and_occupation, view_active_bank_instructions, view_withdrawable_cash, close_account
 
 from src.components.clients.accounts import get_account_statements
+from src.components.clients.account_holder_service import get_account_holder_edit_context, change_account_holder_detail
+from src.utils.exception import ServiceError
 
 from src.utils.response import format_response
 
@@ -163,6 +165,21 @@ def send_to_ibkr_route():
     return send_to_ibkr(account_id=account_id, master_account=master_account, application=application)
 
 # Account Management
+@bp.route('/ibkr/account_holder_edit_context', methods=['GET'])
+@format_response
+def account_holder_edit_context_route():
+    return get_account_holder_edit_context(request.args.get('account_id'))
+
+
+@bp.route('/ibkr/account_holder_detail', methods=['POST'])
+@format_response
+def change_account_holder_detail_route():
+    payload = request.get_json() or {}
+    if not isinstance(payload, dict) or payload.keys() - {'account_id', 'person_key', 'changes'}:
+        raise ServiceError('Invalid holder-update request fields.', 400, code='holder_update_invalid')
+    return change_account_holder_detail(payload.get('account_id'), payload.get('person_key'), payload.get('changes'))
+
+
 @bp.route('/ibkr/details', methods=['GET'])
 @format_response
 def read_accounts_details_route():

@@ -10,6 +10,10 @@ LABEL description=""
 # Set the working directory in the container
 WORKDIR /app
 
+# Scanned bank statement summaries use bounded local OCR; no provider call.
+RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy the requirements file into the container
 COPY requirements.txt .
 

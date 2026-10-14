@@ -1,6 +1,7 @@
 
 from datetime import date, datetime
-from src.utils.exception import ServiceError, handle_exception, log_service_error
+import re
+from src.utils.exception import ServiceError, ensure_error_id, handle_exception, log_service_error, wrap_unhandled_exception
 from src.components.tools.public.reporting import (
     get_nav_report,
     get_clients_report,
@@ -305,21 +306,19 @@ def send_unfunded_emails():
     def _normalized_email(value):
         return value.strip().lower() if isinstance(value, str) else ''
 
-    excluded_mask = contacts_to_email['email'].map(_normalized_email).isin(UNFUNDED_EMAIL_EXCLUSIONS)
-    for excluded in contacts_to_email.loc[excluded_mask].to_dict(orient='records'):
-        logger.info(
-            "Skipping unfunded email (explicit exclusion): account=%r client=%r email=%r "
-            "advisor_email=%r business_days_since_opened=%r notice_number=%r" % (
-                excluded.get('ibkr_account_number'), excluded.get('name'), excluded.get('email'),
-                excluded.get('advisor_email'), excluded.get('business_days_since_date_opened'),
-                excluded.get('notice_number'),
-            )
-        )
-    contacts_to_email = contacts_to_email.loc[~excluded_mask].copy()
-
-    for contact in contacts_to_email.to_dict(orient='records'):
+    # Pandas missing values must become JSON null, including skipped contacts.
+    recipients = contacts_to_email.astype(object).where(pd.notna(contacts_to_email), None).to_dict(orient='records')
+    summary = {'total': len(recipients), 'sent': 0, 'failed': 0, 'skipped': 0}
+    for contact in recipients:
         client_email = contact.get('email')
-        if pd.isna(client_email) or not isinstance(client_email, str) or not client_email.strip():
+        if _normalized_email(client_email) in UNFUNDED_EMAIL_EXCLUSIONS:
+            contact.update(status='skipped', reason='Explicit email exclusion')
+            summary['skipped'] += 1
+            logger.info("Skipping unfunded email (explicit exclusion): account=%r" % contact.get('ibkr_account_number'))
+            continue
+        if not isinstance(client_email, str) or not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', client_email.strip()):
+            contact.update(status='skipped', reason='Missing or invalid client email')
+            summary['skipped'] += 1
             logger.info(
                 "Skipping unfunded email (invalid client email): account=%r client=%r email=%r "
                 "advisor_email=%r business_days_since_opened=%r notice_number=%r" % (
@@ -335,6 +334,8 @@ def send_unfunded_emails():
             advisor_email = ''
         else:
             advisor_email = advisor_email.strip()
+        contact['email'] = client_email.strip()
+        contact['advisor_email'] = advisor_email
 
         log_context = (
             "account=%r client=%r email=%r advisor_email=%r "
@@ -346,7 +347,7 @@ def send_unfunded_emails():
         )
         logger.info("Sending unfunded email: " + (log_context % log_values))
         try:
-            send_funding_notification_email(
+            message_id = send_funding_notification_email(
                 content={},
                 client_email=client_email.strip(),
                 lang='es',
@@ -354,14 +355,29 @@ def send_unfunded_emails():
                 days_since_opened=contact['business_days_since_date_opened'],
                 notice_number=contact['notice_number']
             )
-        except Exception:
-            # The shared exception handler reports the failure once. Re-logging
-            # its traceback here creates separate cause/wrapper error groups.
+        except Exception as exc:
+            # This batch owns handled recipient failures; nested components do
+            # not report them. Continue without retrying an uncertain send.
+            err = exc if isinstance(exc, ServiceError) else wrap_unhandled_exception(exc, 'send_unfunded_emails')
+            log_service_error(err, 'send_unfunded_emails_recipient')
+            contact.update(
+                status='failed', error=str(err), error_id=ensure_error_id(err),
+                error_code=err.code, error_status=err.status_code,
+                delivery_status='unknown',
+                reason='Send did not complete; verify delivery before retrying',
+            )
+            summary['failed'] += 1
             logger.warning("Unfunded email failed: " + (log_context % log_values))
-            raise
+            continue
+        contact.update(status='sent', message_id=message_id)
+        summary['sent'] += 1
         logger.info("Unfunded email sent successfully: " + (log_context % log_values))
-    
-    return contacts_to_email.to_dict(orient='records')
+
+    status = 'success'
+    if summary['failed']:
+        status = 'partial' if summary['sent'] else 'failed'
+    logger.info("Completed unfunded email batch: status=%s summary=%s" % (status, summary))
+    return {'status': status, 'summary': summary, 'recipients': recipients}
     
 @handle_exception
 def update_account_aliases():

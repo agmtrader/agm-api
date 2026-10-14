@@ -1142,6 +1142,40 @@ class IBKRWebAPI:
 
     @credential_locked
     @handle_exception
+    def change_account_holder_detail(self, account_id: str, holder_details: dict, master_account: str):
+        """Submit one account-scoped profile update, with no automatic write retry."""
+        from src.components.clients.holder_updates import validate_changes, parse_update_result
+        if not account_id or not master_account or not (holder_details.get('id') or holder_details.get('externalId')):
+            raise ServiceError('Account, master and holder identity are required.', 400, code='holder_update_invalid')
+        validate_changes({k: v for k, v in holder_details.items() if k not in {'id', 'externalId'}})
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
+        try:
+            original_creds = self._apply_credentials(master_account)
+            token = self.get_bearer_token()
+            if not token:
+                raise ServiceError('IBKR authentication is unavailable.', 502)
+            body = {'accountManagementRequests': {'changeAccountHolderDetail': {
+                'accountId': account_id, 'newAccountHolderDetails': [holder_details],
+            }}}
+            response = requests.patch(
+                f'{self.BASE_URL}/gw/api/v1/accounts',
+                headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/jwt'},
+                data=self.sign_request(body), timeout=120,
+            )
+            if response.status_code != 200:
+                raise_ibkr_response_error(response, account_access=True)
+            try:
+                data = response.json()
+            except ValueError:
+                raise ServiceError('IBKR returned an unreadable update result. Verify in IBKR Portal before resubmitting.', 502, code='ibkr_holder_result_unknown')
+            return parse_update_result(data, account_id)
+        except (requests.Timeout, requests.ConnectionError):
+            raise ServiceError('IBKR response could not be confirmed. Verify the profile and pending requests in IBKR Portal before resubmitting.', 502, code='ibkr_holder_result_unknown')
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @credential_locked
+    @handle_exception
     def change_account_holder_external_id(self, accountId:str, entityId: str, external_id: str, master_account: str = None) -> dict:
         """Change account holder external id via account management PATCH endpoint."""
         original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)

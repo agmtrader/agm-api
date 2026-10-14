@@ -118,38 +118,21 @@ def upload_contact_document(
     expiry_date: str = None,
     comment: Optional[str] = None
 ):
-    if not contact_id:
-        raise Exception('contact_id is required')
+    from src.components.clients.contact_uploads import save_contact_upload, attempt_upload_ocr
 
-    document_id = db.create(
-        table='document',
-        data={
-            'file_name': file_name,
-            'file_length': file_length,
-            'sha1_checksum': sha1_checksum,
-            'mime_type': mime_type,
-            'data': data
-        }
+    result, run_ocr = save_contact_upload(
+        db,
+        document={'file_name': file_name, 'file_length': file_length,
+                  'sha1_checksum': sha1_checksum, 'mime_type': mime_type, 'data': data},
+        link=_filter_supported_columns(contact_document_table, {
+            'account_id': account_id, 'contact_id': contact_id,
+            'category': category, 'type': type, 'document_language': document_language,
+            'issued_date': issued_date, 'expiry_date': expiry_date, 'comment': comment,
+        }),
     )
-
-    link_id = db.create(
-        table=contact_document_table,
-        data=_filter_supported_columns(
-            contact_document_table,
-            {
-            'account_id': account_id,
-            'contact_id': contact_id,
-            'document_id': document_id,
-            'category': category,
-            'type': type,
-            'document_language': document_language,
-            'issued_date': issued_date,
-            'expiry_date': expiry_date,
-            'comment': comment
-            }
-        )
-    )
-    return {'id': link_id, 'document_id': document_id}
+    if run_ocr:
+        attempt_upload_ocr(db, result['document_id'], document_language)
+    return result
 
 
 @handle_exception
@@ -251,27 +234,20 @@ def update_contact_document(
     document_language: str = None,
     issued_date: str = None,
     expiry_date: str = None,
-    comment: Optional[str] = None
+    comment: Optional[str] = None,
+    contact_document_id: str = None,
 ):
-    return db.update(
-        table=contact_document_table,
-        query={'document_id': document_id},
-        data={
-            'category': category,
-            'type': type,
-            'document_language': document_language,
-            'issued_date': issued_date,
-            'expiry_date': expiry_date,
-            'comment': comment
-        }
-    )
+    from src.components.clients.contact_uploads import mutate_contact_upload
+    return mutate_contact_upload(db, document_id, contact_document_id, data={
+        'category': category, 'type': type, 'document_language': document_language,
+        'issued_date': issued_date, 'expiry_date': expiry_date, 'comment': comment,
+    })
 
 
 @handle_exception
-def delete_contact_document(document_id: str = None):
-    db.delete(table=contact_document_table, query={'document_id': document_id})
-    db.delete(table='document', query={'id': document_id})
-    return {'status': 'success'}
+def delete_contact_document(document_id: str = None, contact_document_id: str = None):
+    from src.components.clients.contact_uploads import mutate_contact_upload
+    return mutate_contact_upload(db, document_id, contact_document_id, delete=True)
 
 
 @handle_exception

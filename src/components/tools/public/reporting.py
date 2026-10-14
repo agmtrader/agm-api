@@ -1030,11 +1030,13 @@ def get_ibkr_statement_summary(accounts=None, years=None, months=None):
 
             rows = _read_statement_csv(csv_file['id'], csv_file.get('modifiedTime'))
             _validate_statement_account(rows, account, year, month)
-            sections = {
-                row[2].strip(): _parse_amount(row[3], account, year, month, row[2])
-                for row in rows
-                if len(row) >= 4 and row[0].strip() == 'Change in NAV' and row[1].strip() == 'Data' and row[2].strip()
-            }
+            sections = {}
+            active_account = None
+            for row in rows:
+                if len(row) >= 4 and row[:3] == ['Account Information', 'Data', 'Account']:
+                    active_account = row[3].strip().split()[0] if row[3].strip() else None
+                if active_account == account and len(row) >= 4 and row[:2] == ['Change in NAV', 'Data'] and row[2].strip():
+                    sections[row[2].strip()] = _parse_amount(row[3], account, year, month, row[2])
             if 'Starting Value' not in sections or 'Ending Value' not in sections:
                 raise ServiceError(f'Change in NAV summary not found for {account} {year}-{month}', status_code=500)
 
@@ -1042,12 +1044,16 @@ def get_ibkr_statement_summary(accounts=None, years=None, months=None):
             debits = 0.0
             cash_opening_balance = None
             cash_closing_balance = None
+            statement_debits = None
+            statement_credits = None
             for row, columns in _base_currency_funds_rows(rows, account, year, month):
                 description = row[columns['Description']].strip()
                 if description == 'Opening Balance':
                     cash_opening_balance = _parse_amount(row[columns['Balance']], account, year, month, description)
                 elif description == 'Closing Balance':
                     cash_closing_balance = _parse_amount(row[columns['Balance']], account, year, month, description)
+                    statement_debits = _parse_amount(row[columns['Debit']], account, year, month, description, allow_blank=True)
+                    statement_credits = _parse_amount(row[columns['Credit']], account, year, month, description, allow_blank=True)
                 else:
                     debits += _parse_amount(row[columns['Debit']], account, year, month, description, allow_blank=True) or 0
                     credits += _parse_amount(row[columns['Credit']], account, year, month, description, allow_blank=True) or 0
@@ -1071,7 +1077,11 @@ def get_ibkr_statement_summary(accounts=None, years=None, months=None):
                 'cash_opening_balance': cash_opening_balance,
                 'cash_closing_balance': cash_closing_balance,
                 'cash_reconciliation_difference': cash_difference,
-                'cash_reconciled': cash_difference is not None and abs(cash_difference) < 0.01,
+                'statement_debits': statement_debits,
+                'statement_credits': statement_credits,
+                'cash_reconciled': cash_difference is not None and abs(cash_difference) < 0.01
+                    and statement_debits is not None and abs(debits - statement_debits) < 0.01
+                    and statement_credits is not None and abs(credits - statement_credits) < 0.01,
                 'eom': eom,
                 'source_file_id': csv_file['id'],
                 'source_file_name': csv_file.get('name'),
@@ -1155,17 +1165,29 @@ def _read_statement_csv(file_id, modified_time=None):
 
 
 def _base_currency_funds_rows(rows, account, year, month):
-    header = next((row for row in rows if len(row) >= 3 and row[0].strip() == 'Statement of Funds'
-                   and row[1].strip() == 'Header'), None)
-    required = {'Report Date', 'Activity Date', 'Description', 'Debit', 'Credit', 'Balance'}
-    columns = {name.strip(): index for index, name in enumerate(header or [])}
-    if not required.issubset(columns):
-        raise ServiceError(f'Statement of Funds columns missing for {account} {year}-{month}', status_code=500)
-    last_column = max(columns[name] for name in required)
+    required = {'Currency', 'Report Date', 'Activity Date', 'Description', 'Debit', 'Credit', 'Balance'}
+    columns = None
+    active_account = None
     for row in rows:
-        if len(row) > last_column and row[0].strip() == 'Statement of Funds' \
-                and row[1].strip() == 'Data' and row[2].strip() == 'Base Currency Summary':
+        if len(row) >= 4 and row[:3] == ['Account Information', 'Data', 'Account']:
+            active_account = row[3].strip().split()[0] if row[3].strip() else None
+        if active_account != account:
+            continue
+        if row[:2] == ['Statement of Funds', 'Header']:
+            columns = {name.strip(): index for index, name in enumerate(row)}
+            if not required.issubset(columns):
+                raise ServiceError(f'Statement of Funds columns missing for {account} {year}-{month}', status_code=500)
+        elif row[:2] == ['Statement of Funds', 'Data']:
+            if columns is None or len(row) <= max(columns[name] for name in required):
+                raise ServiceError(f'Statement of Funds row is incomplete for {account} {year}-{month}', status_code=500)
+            if row[columns['Currency']].strip() != 'Base Currency Summary':
+                continue
+            if not row[columns['Description']].strip() and 'Account' in columns and row[columns['Account']].strip() in {'Opening Balance', 'Closing Balance'}:
+                row = list(row)
+                row[columns['Description']] = row[columns['Account']]
             yield row, columns
+    if columns is None:
+        raise ServiceError(f'Statement of Funds columns missing for {account} {year}-{month}', status_code=500)
 
 
 def _validate_statement_account(rows, expected_account, year, month):

@@ -1,6 +1,8 @@
 """Actual batch/Gmail/Flask failure path with synthetic data and no provider calls."""
 import ast
 import logging
+import json
+import re
 import time
 import types
 from functools import wraps
@@ -65,6 +67,9 @@ def batch_client(monkeypatch, caplog):
     for module in (accounts, contacts, advisors):
         monkeypatch.setitem(__import__('sys').modules, module.__name__, module)
     namespace = {'pd': pd, 'logger': errors.logger, 'handle_exception': errors.handle_exception,
+                 're': re, 'ServiceError': errors.ServiceError, 'log_service_error': errors.log_service_error,
+                 'ensure_error_id': errors.ensure_error_id,
+                 'wrap_unhandled_exception': errors.wrap_unhandled_exception,
                  'UNFUNDED_EMAIL_EXCLUSIONS': frozenset(), 'UNFUNDED_ACCOUNT_EXCLUSIONS': frozenset(),
                  'NAV_ZERO_DISPLAY_THRESHOLD': 1,
                  'get_nav_report': lambda: [{'ClientAccountID': 'SYNTHETIC1', 'Total': 0},
@@ -79,12 +84,19 @@ def batch_client(monkeypatch, caplog):
     return app.test_client(), execute, connector
 
 
-def test_timeout_bubbles_once_and_stops_batch(batch_client, caplog):
+def test_timeout_reports_once_and_continues_batch(batch_client, caplog):
     client, execute, connector = batch_client
-    execute.side_effect = TimeoutError('synthetic Gmail timeout')
+    execute.side_effect = [TimeoutError('synthetic Gmail timeout'), {'id': 'second-message'}]
     response = client.get('/actions/send_unfunded_emails?token=excluded-query-marker')
-    assert response.status_code == 500
-    assert response.json['error'] == 'Internal server error'
+    assert response.status_code == 200
+    assert response.json['status'] == 'partial'
+    assert response.json['summary'] == {'total': 2, 'sent': 1, 'failed': 1, 'skipped': 0}
+    failed, sent = response.json['recipients']
+    assert failed['error'] == 'Internal server error'
+    assert failed['error_id']
+    assert failed['delivery_status'] == 'unknown'
+    assert sent['email'] == 'two@example.test'
+    assert sent['message_id'] == 'second-message'
     reports = [r for r in caplog.records if r.levelno >= logging.ERROR]
     assert len(reports) == 1
     report = reports[0].getMessage()
@@ -97,26 +109,97 @@ def test_timeout_bubbles_once_and_stops_batch(batch_client, caplog):
     assert reports[0].exc_info is None
     assert sum(r.levelno == logging.WARNING and 'Unfunded email failed:' in r.getMessage()
                for r in caplog.records) == 1
-    assert execute.call_count == 1  # No second recipient or new automatic retry.
+    assert execute.call_count == 2  # Later recipient attempted; failed send not retried.
     connector._force_connection_refresh.assert_not_called()
-    assert not any('Unfunded email sent successfully:' in r.getMessage() for r in caplog.records)
+    assert sum('Successfully sent funding_notification_es' in r.getMessage() for r in caplog.records) == 1
 
 
 def test_controlled_failure_keeps_guidance_without_exception_report(batch_client, caplog):
     client, execute, _ = batch_client
-    execute.side_effect = errors.ServiceError('Correct synthetic input', 422, code='validation_error')
+    execute.side_effect = [errors.ServiceError('Correct synthetic input', 422, code='validation_error'),
+                           {'id': 'second-message'}]
     response = client.get('/actions/send_unfunded_emails')
-    assert response.status_code == 422
-    assert response.json['error'] == 'Correct synthetic input'
-    assert response.json['error_id'] == 'synthetic-batch-request'
+    assert response.status_code == 200
+    assert response.json['status'] == 'partial'
+    assert response.json['recipients'][0]['error'] == 'Correct synthetic input'
+    assert response.json['recipients'][0]['error_status'] == 422
+    assert response.json['recipients'][0]['error_id'] == 'synthetic-batch-request'
     assert not any(r.levelno >= logging.ERROR for r in caplog.records)
-    assert execute.call_count == 1
+    assert execute.call_count == 2
 
 
 def test_success_preserves_batch_results_without_failure_reports(batch_client, caplog):
     client, execute, _ = batch_client
     response = client.get('/actions/send_unfunded_emails')
     assert response.status_code == 200
-    assert len(response.json) == 2
+    assert response.json['status'] == 'success'
+    assert response.json['summary'] == {'total': 2, 'sent': 2, 'failed': 0, 'skipped': 0}
     assert execute.call_count == 2
     assert not any(r.levelno >= logging.WARNING for r in caplog.records)
+
+
+def test_all_failed_attempts_every_recipient(batch_client, caplog):
+    client, execute, _ = batch_client
+    execute.side_effect = TimeoutError('synthetic timeout')
+    response = client.get('/actions/send_unfunded_emails')
+    assert response.status_code == 200
+    assert response.json['status'] == 'failed'
+    assert response.json['summary'] == {'total': 2, 'sent': 0, 'failed': 2, 'skipped': 0}
+    assert execute.call_count == 2
+    assert sum(r.levelno >= logging.ERROR for r in caplog.records) == 2
+
+
+@pytest.mark.parametrize('email', [None, '', 'missing-at-sign', 'one@example.test\r\nBcc:other@example.test'])
+def test_invalid_email_is_skipped_and_nulls_are_valid_json(batch_client, email):
+    client, execute, _ = batch_client
+    import sys
+    records = sys.modules['src.components.clients.contacts'].read_contacts.return_value
+    records[0]['email'] = email
+    records[0]['name'] = float('nan')
+    response = client.get('/actions/send_unfunded_emails')
+    assert response.json['summary'] == {'total': 2, 'sent': 1, 'failed': 0, 'skipped': 1}
+    assert response.json['recipients'][0]['name'] is None
+    json.dumps(response.json, allow_nan=False)
+    assert execute.call_count == 1
+
+
+def test_opt_out_is_skipped_case_insensitively(batch_client):
+    client, execute, _ = batch_client
+    operation = client.application.view_functions['unfunded'].__wrapped__.__wrapped__
+    operation.__globals__['UNFUNDED_EMAIL_EXCLUSIONS'] = frozenset({'one@example.test'})
+    import sys
+    sys.modules['src.components.clients.contacts'].read_contacts.return_value[0]['email'] = ' ONE@EXAMPLE.TEST '
+    response = client.get('/actions/send_unfunded_emails')
+    assert response.json['recipients'][0]['reason'] == 'Explicit email exclusion'
+    assert response.json['summary']['skipped'] == 1
+    assert execute.call_count == 1
+
+
+def test_account_exclusion_is_never_sent(batch_client):
+    client, execute, _ = batch_client
+    operation = client.application.view_functions['unfunded'].__wrapped__.__wrapped__
+    operation.__globals__['UNFUNDED_ACCOUNT_EXCLUSIONS'] = frozenset({'SYNTHETIC1'})
+    response = client.get('/actions/send_unfunded_emails')
+    assert response.json['summary']['total'] == 1
+    assert response.json['recipients'][0]['ibkr_account_number'] == 'SYNTHETIC2'
+    assert execute.call_count == 1
+
+
+def test_preparation_failure_remains_request_failure_without_sends(batch_client):
+    client, execute, _ = batch_client
+    import sys
+    sys.modules['src.components.clients.accounts'].read_accounts.side_effect = errors.ServiceError('Report unavailable', 503)
+    response = client.get('/actions/send_unfunded_emails')
+    assert response.status_code == 503
+    execute.assert_not_called()
+
+
+def test_no_candidates_returns_empty_success(batch_client):
+    client, execute, _ = batch_client
+    operation = client.application.view_functions['unfunded'].__wrapped__.__wrapped__
+    operation.__globals__['UNFUNDED_ACCOUNT_EXCLUSIONS'] = frozenset({'SYNTHETIC1', 'SYNTHETIC2'})
+    response = client.get('/actions/send_unfunded_emails')
+    assert response.status_code == 200
+    assert response.json == {'status': 'success', 'summary': {'total': 0, 'sent': 0, 'failed': 0, 'skipped': 0},
+                             'recipients': []}
+    execute.assert_not_called()

@@ -2,167 +2,93 @@ name: Send Unfunded Emails
 
 on:
   schedule:
-    - cron: '00 14 * * 1'   # Every Monday at 15:00 PM UTC (8:00 AM CST)
+    - cron: '00 14 * * 1'   # Every Monday at 14:00 UTC (8:00 AM Costa Rica)
   workflow_dispatch:
+
+concurrency:
+  group: send-unfunded-emails
+  cancel-in-progress: false
 
 jobs:
   send-unfunded-emails:
     runs-on: ubuntu-latest
     outputs:
-      summary: ${{ steps.unfunded.outputs.summary }}
-    env:
-      AGM_API_EMAIL: ${{ secrets.AGM_API_EMAIL }}
-      AGM_API_PASSWORD: ${{ secrets.AGM_API_PASSWORD }}
+      summary: ${{ steps.email-output.outputs.summary }}
+      status: ${{ steps.email-output.outputs.status }}
     steps:
+      - uses: actions/checkout@v4
       - name: Request token and call send unfunded emails endpoint
-        id: unfunded
         shell: bash
         env:
           AGM_API_EMAIL: ${{ secrets.AGM_API_EMAIL }}
           AGM_API_PASSWORD: ${{ secrets.AGM_API_PASSWORD }}
         run: |
-          test -n "$AGM_API_EMAIL" && test -n "$AGM_API_PASSWORD" || { echo "AGM_API_EMAIL/AGM_API_PASSWORD secrets are missing" >&2; exit 1; }
-          response=$(curl -s -w "\n%{http_code}" -X POST \
+          output_dir="$RUNNER_TEMP/unfunded-summary"
+          fatal() {
+            python3 .github/scripts/unfunded_summary.py --output-dir "$output_dir" --fatal "$1"
+          }
+          test -n "$AGM_API_EMAIL" && test -n "$AGM_API_PASSWORD" || { fatal "AGM_API_EMAIL/AGM_API_PASSWORD secrets are missing"; exit 1; }
+          if ! response=$(curl -sS -w "\n%{http_code}" -X POST \
             -H "Content-Type: application/json" \
             -d "$(jq -n --arg email "$AGM_API_EMAIL" --arg password "$AGM_API_PASSWORD" '{email: $email, password: $password}')" \
-            https://api.agmtechnology.com/token)
-
+            https://api.agmtechnology.com/token); then
+            fatal "Token request transport failure"
+            exit 1
+          fi
           http_status=$(echo "$response" | tail -n1)
           body=$(echo "$response" | sed '$d')
-
           if [ "$http_status" != "200" ]; then
-            echo "Token request failed with status $http_status" >&2
+            fatal "Token request failed (HTTP $http_status)"
             exit 1
           fi
-
-          access_token=$(echo "$body" | jq -r '.access_token')
-          if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
-            echo "access_token not found in response" >&2
+          if ! access_token=$(echo "$body" | jq -er '.access_token | select(type == "string" and length > 0)'); then
+            fatal "Token response has no usable access_token"
             exit 1
           fi
+          echo "::add-mask::$access_token"
 
-          response=$(curl -s -w "\n%{http_code}" -X GET \
+          # Do not retry this request: it sends real emails and may have partly completed.
+          if ! response=$(curl -sS -w "\n%{http_code}" -X GET \
             -H "Authorization: Bearer $access_token" \
-            https://api.agmtechnology.com/actions/send_unfunded_emails)
-
+            https://api.agmtechnology.com/actions/send_unfunded_emails); then
+            fatal "Email batch transport failure; delivery may have partly completed"
+            exit 1
+          fi
           http_status=$(echo "$response" | tail -n1)
           body=$(echo "$response" | sed '$d')
+          printf '%s' "$body" > "$RUNNER_TEMP/unfunded-response.json"
+          python3 .github/scripts/unfunded_summary.py \
+            --body "$RUNNER_TEMP/unfunded-response.json" --http-status "$http_status" --output-dir "$output_dir"
 
-          if [ "$http_status" != "200" ]; then
-            echo "send_unfunded_emails failed with status $http_status" >&2
-            echo "$body"
-            {
-              echo "## Unfunded email run"
-              echo
-              echo "| Metric | Value |"
-              echo "| --- | ---: |"
-              echo "| Status | Failed (HTTP $http_status) |"
-              echo "| Total sent | 0 |"
-              echo "| Total failed | 1 |"
-              echo "| Total skipped | — |"
-              echo
-              echo "The endpoint failed before returning a recipient result. Check the API logs for the per-recipient context and exception."
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 1
+      - name: Publish final notification summary
+        id: email-output
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          output_dir="$RUNNER_TEMP/unfunded-summary"
+          if [ -f "$output_dir/summary.txt" ]; then
+            summary=$(cat "$output_dir/summary.txt")
+            status=$(cat "$output_dir/status.txt")
+          else
+            summary="Unfunded email workflow failed before producing a batch result. Recipient counts are unknown. Review runner/API logs before retrying."
+            status=failed
+            printf '## Unfunded email run\n\n%s\n' "$summary" >> "$GITHUB_STEP_SUMMARY"
           fi
-
-          # Keep the raw response in the job log for troubleshooting, but make
-          # the useful result readable from the Actions Summary tab.
-          if ! echo "$body" | jq -e 'type == "array"' >/dev/null; then
-            echo "send_unfunded_emails returned an unexpected response (expected a JSON array)" >&2
-            echo "$body" >&2
-            exit 1
-          fi
-
-          echo "Raw response:"
-          echo "$body" | jq .
-
-          run_timestamp=$(date -u '+%Y-%m-%d %H:%M UTC')
-          total_count=$(echo "$body" | jq 'length')
-          sent_count=$(echo "$body" | jq 'def valid_email: (.email // "") | tostring | test("^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$"); [.[] | select(valid_email)] | length')
-          skipped_count=$((total_count - sent_count))
-          failed_count=0
-
-          {
-            echo "## Unfunded email run"
-            echo
-            echo "**Completed:** $run_timestamp"
-            echo
-            echo "| Metric | Value |"
-            echo "| --- | ---: |"
-            echo "| Status | Succeeded |"
-            echo "| Total sent | $sent_count |"
-            echo "| Total failed | $failed_count |"
-            echo "| Total skipped | $skipped_count |"
-            echo "| Total records | $total_count |"
-            echo
-            echo "A successful API response means the valid-email records completed the send helper; failures abort the endpoint and are reported above."
-            echo
-            echo "<details>"
-            echo "<summary>Recipient details</summary>"
-            echo
-            echo "### Recipients emailed"
-            echo
-            if [ "$sent_count" -gt 0 ]; then
-              echo '| Client | IBKR account | Email | Advisor | Notice | Business days open |'
-              echo '| --- | --- | --- | --- | ---: | ---: |'
-              echo "$body" | jq -r 'def clean:
-                if . == null or (type == "number" and isnan) then "—"
-                else tostring | gsub("[\\r\\n|]"; " ")
-                end;
-                def valid_email: (.email // "") | tostring | test("^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$");
-                .[]
-                | select(valid_email)
-                | [(.name | clean), (.ibkr_account_number | clean), (.email | clean), (.advisor_email | clean), (.notice_number | clean), (.business_days_since_date_opened | clean)]
-                | "| " + join(" | ") + " |"'
-            else
-              echo "No recipients found."
-            fi
-
-            if [ "$skipped_count" -gt 0 ]; then
-              echo
-              echo "### Skipped records"
-              echo
-              echo "The API returned these records without a usable client email, so no email was sent:"
-              echo
-              echo '| Client | IBKR account | Reason |'
-              echo '| --- | --- | --- |'
-              echo "$body" | jq -r 'def clean:
-                if . == null or (type == "number" and isnan) then "—"
-                else tostring | gsub("[\\r\\n|]"; " ")
-                end;
-                def valid_email: (.email // "") | tostring | test("^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$");
-                .[]
-                | select(valid_email | not)
-                | [(.name | clean), (.ibkr_account_number | clean), "Missing or invalid client email"]
-                | "| " + join(" | ") + " |"'
-            fi
-            echo
-            echo "</details>"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          summary=$(cat <<EOF
-          Unfunded email workflow completed successfully.
-          Total sent: $sent_count
-          Total skipped: $skipped_count
-          Total records: $total_count
-          EOF
-          )
-          printf "summary<<EOF\n%s\nEOF\n" "$summary" >> "$GITHUB_OUTPUT"
+          printf 'summary<<EOF\n%s\nEOF\nstatus=%s\n' "$summary" "$status" >> "$GITHUB_OUTPUT"
 
   notify-success:
     needs: send-unfunded-emails
     if: ${{ success() }}
     runs-on: ubuntu-latest
     steps:
-      - name: Send success email
+      - name: Send completion email
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
           server_port: 465
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "✅ Unfunded Emails Workflow SUCCEEDED"
+          subject: "${{ needs.send-unfunded-emails.outputs.status == 'partial' && '⚠️ Unfunded Emails COMPLETED WITH FAILURES' || '✅ Unfunded Emails Workflow SUCCEEDED' }}"
           to: cr@agmtechnology.com,as@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
@@ -187,5 +113,7 @@ jobs:
           to: cr@agmtechnology.com,as@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
-            The unfunded emails workflow failed. Review the workflow logs and API logs for details:
+            ${{ needs.send-unfunded-emails.outputs.summary }}
+
+            Review the workflow/API logs and recipient details:
             ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

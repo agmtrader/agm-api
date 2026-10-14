@@ -2023,11 +2023,13 @@ def _extract_text_with_ocr(
     file_bytes: bytes,
     source_language: Optional[str],
     mime_type: str,
+    provider: Optional[str] = None,
 ) -> tuple[str, str, OCRQualityAssessment]:
     result = extract_document_ocr(
         file_bytes,
         source_language=source_language,
         mime_type=mime_type,
+        provider=provider,
         render_dpi=OCR_RENDER_DPI,
         rotations=OCR_ROTATIONS,
         max_render_dimension=OCR_MAX_RENDER_DIMENSION,
@@ -2052,6 +2054,7 @@ def _extract_text_with_ocr(
 def _extract_document_text(
     document_row: dict,
     source_language: Optional[str],
+    provider: Optional[str] = None,
 ) -> tuple[str, str, OCRQualityAssessment]:
     mime_type = (
         str((document_row or {}).get('mime_type') or '')
@@ -2066,6 +2069,7 @@ def _extract_document_text(
             file_bytes,
             source_language,
             mime_type,
+            provider=provider,
         )
         if not ocr_text:
             raise ValueError('Document OCR completed but produced no text.')
@@ -2136,6 +2140,7 @@ def upsert_document_text_extraction_record(
 def process_document_text_extraction(
     document_id: str,
     source_language: Optional[str] = None,
+    provider: Optional[str] = None,
 ):
     if not document_id:
         raise ValueError('document_id is required')
@@ -2152,6 +2157,7 @@ def process_document_text_extraction(
         output_text, provider, assessment = _extract_document_text(
             document_row,
             normalized_language,
+            provider=provider,
         )
         record_id = upsert_document_text_extraction_record(
             document_id=document_id,
@@ -2173,7 +2179,7 @@ def process_document_text_extraction(
             source_language=normalized_language,
             status='failed',
             output_text=None,
-            provider=None,
+            provider=provider,
             error=str(exc),
         )
         return {'id': record_id, 'status': 'failed', 'error': str(exc)}

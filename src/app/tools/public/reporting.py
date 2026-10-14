@@ -1,9 +1,82 @@
-from flask import Blueprint, request
+from flask import Blueprint, request, g, send_file
+from io import BytesIO
 from src.components.tools.public.reporting import get_clients_report, get_client_fees_report, get_nav_report, get_nav_report_monthly, get_bond_report, get_stocks_report, get_etfs_report, get_ust_bond_report, get_proposals_equity_report, get_open_positions_report, get_deposits_withdrawals, get_monthly_deposits_withdrawals, get_trades_report, get_brokerage_commissions, get_management_commissions, get_ending_balances_from_statements, get_ibkr_details, get_ibkr_statement_summary, get_ibkr_statement_transactions
 from src.utils.response import format_response
 from src.components.tools.public.trade_confirmations import get_trade_confirmations_report
+from src.components.tools.public import accounting_statements as accounting
+from src.utils.authz import require_scope
+from src.utils.exception import ServiceError
 
 bp = Blueprint('reporting', __name__)
+
+
+def _accounting_payload():
+    if request.content_length and request.content_length > 36 * 1024 * 1024:
+        raise ServiceError('The accounting request exceeds its size limit.', 413)
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        raise ServiceError('Provide a JSON object for this accounting request.', 400)
+    return payload
+
+
+@bp.route('/accounting_statements', methods=['GET'])
+@require_scope('all')
+@format_response
+def accounting_inventory_route():
+    if request.args.get('refresh') == '1':
+        accounting.clear_cache()
+    return accounting.inventory_report(request.args.get('year'), request.args.get('account'))
+
+
+@bp.route('/accounting_statements/detail', methods=['GET'])
+@require_scope('all')
+@format_response
+def accounting_detail_route():
+    row = accounting.analyze_month(request.args.get('account'), request.args.get('year'), request.args.get('month'))
+    if request.args.get('transactions') == '0':
+        row.pop('transactions', None)
+    return row
+
+
+@bp.route('/accounting_statements/accounts', methods=['GET', 'POST'])
+@require_scope('all')
+@format_response
+def accounting_accounts_route():
+    if request.method == 'GET':
+        return accounting.load_registry()
+    payload = _accounting_payload()
+    return accounting.save_registry(payload.get('accounts'), payload.get('revision'), g.current_principal_id)
+
+
+@bp.route('/accounting_statements/upload', methods=['POST'])
+@require_scope('all')
+@format_response
+def accounting_upload_route():
+    payload = _accounting_payload()
+    return accounting.upload_original(payload.get('account'), payload.get('year'), payload.get('month'),
+                                     payload.get('filename', ''), payload.get('content'), g.current_principal_id)
+
+
+@bp.route('/accounting_statements/download', methods=['POST'])
+@require_scope('all')
+@format_response
+def accounting_download_route():
+    payload = _accounting_payload()
+    content, filename = accounting.download_original(payload.get('account'), payload.get('year'), payload.get('month'), payload.get('source_key'))
+    response = send_file(BytesIO(content), as_attachment=True, download_name=filename, mimetype='application/octet-stream')
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
+
+@bp.route('/accounting_statements/annual_download', methods=['POST'])
+@require_scope('all')
+@format_response
+def accounting_annual_download_route():
+    payload = _accounting_payload()
+    content, filename = accounting.annual_bundle(payload.get('year'), payload.get('account'), payload.get('institution'))
+    response = send_file(BytesIO(content), as_attachment=True, download_name=filename, mimetype='application/zip')
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
 
 @bp.route('/trade_confirmations', methods=['GET'])
 @format_response

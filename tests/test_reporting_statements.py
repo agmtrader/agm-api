@@ -100,3 +100,16 @@ def test_statement_routes_forward_filters():
 
     summary.assert_called_once_with(['U6413691'], ['2026'], ['08'])
     transactions.assert_called_once_with(['U6413691'], ['2026'], ['08'])
+
+
+def test_legacy_summary_checks_reported_totals_and_excludes_separate_paxos_sections():
+    files = [{'id': 'csv-correctness', 'name': 'U6413691_202608.csv'}]
+    foreign = SAMPLE.replace(b'Account,U6413691', b'Account,U6413691-P (Paxos)').replace(b'Starting Value,1000', b'Starting Value,0').replace(b'Ending Value,1206', b'Ending Value,0')
+    wrong_totals = SAMPLE.replace(b'Closing Balance,-2,200,1198', b'Closing Balance,-801,999,1198')
+    with patch.object(reporting, 'activity_statement_folders', {'U6413691': 'folder'}), \
+         patch.object(reporting.Drive, 'get_files_in_folder', return_value=files), \
+         patch.object(reporting.Drive, 'download_file', return_value=wrong_totals + foreign):
+        result = reporting.get_ibkr_statement_summary(['U6413691'], ['2026'], ['08'])[0]
+    assert result['starting_value'] == 1000 and result['ending_value'] == 1206
+    assert result['cash_opening_balance'] == 1000 and result['cash_closing_balance'] == 1198
+    assert result['cash_reconciled'] is False

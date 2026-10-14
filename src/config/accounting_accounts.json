@@ -1,0 +1,348 @@
+[
+  {
+    "account": "57669950",
+    "institution": "Chase",
+    "suffix": "9950",
+    "opened_on": "2019-11-14",
+    "closed_on": "2023-05-09",
+    "status": "closed",
+    "owner": "AGM Technology Inc",
+    "folder_id": "1vxZPABoOYduJkPZdU88WRrcY5Bdrc8m6",
+    "currency": "USD",
+    "required_formats": [
+      "pdf",
+      "csv"
+    ],
+    "source_account": "57669950",
+    "source": "Cris July 31 2026 email",
+    "governance": "FLORIDA",
+    "swift": "CHASUS33XXX",
+    "reference_code": "CHAS"
+  },
+  {
+    "account": "53509118",
+    "institution": "Chase",
+    "suffix": "9118",
+    "opened_on": "2019-10-23",
+    "closed_on": "2023-03-02",
+    "status": "closed",
+    "owner": "Access Global Management Group Limitada",
+    "folder_id": "1vxZPABoOYduJkPZdU88WRrcY5Bdrc8m6",
+    "currency": "USD",
+    "required_formats": [
+      "pdf",
+      "csv"
+    ],
+    "source_account": "53509118",
+    "source": "Cris July 31 2026 email",
+    "governance": "FLORIDA",
+    "swift": "CHASUS33XXX",
+    "reference_code": "CHAS"
+  },
+  {
+    "account": "591703510",
+    "institution": "Chase",
+    "suffix": "3510",
+    "opened_on": "2023-03-22",
+    "closed_on": null,
+    "status": "closed",
+    "owner": "AGM Technology Inc",
+    "folder_id": "1vxZPABoOYduJkPZdU88WRrcY5Bdrc8m6",
+    "currency": "USD",
+    "required_formats": [
+      "pdf",
+      "csv"
+    ],
+    "source_account": "591703510",
+    "source": "Cris July 31 2026 email",
+    "governance": "FLORIDA",
+    "swift": "CHASUS33XXX",
+    "reference_code": "CHAS",
+    "ignore_unknown_closing_date": true,
+    "closing_date_policy_note": "Requester instructed on 2026-10-14 to ignore the unavailable closing-date cutoff; no date is inferred."
+  },
+  {
+    "account": "I285407",
+    "institution": "IBKR",
+    "suffix": "5407",
+    "opened_on": "2006-06-01",
+    "closed_on": null,
+    "status": "closed",
+    "owner": "AGM Technology Inc",
+    "folder_id": "1CHFgaLx5sa4rja9QX25vwglMKMRL20b9",
+    "currency": "USD",
+    "required_formats": [
+      "pdf",
+      "csv"
+    ],
+    "source_account": "I285407",
+    "source": "Cris July 31 2026 email",
+    "governance": "PANAMA",
+    "swift": "IBKRUS33",
+    "reference_code": "IBKR",
+    "additional_folder_ids": [
+      "1FvUlT29iABb3usjiF0tniurQ9YSC1f28"
+    ],
+    "ignore_unknown_closing_date": true,
+    "closing_date_policy_note": "Requester instructed on 2026-10-14 to ignore the unavailable closing-date cutoff; no date is inferred."
+  },
+  {
+    "account": "U1433902",
+    "institution": "IBKR",
+    "suffix": "3902",
+    "opened_on": "2014-05-11",
+    "closed_on": null,
+    "status": "closed",
+    "owner": "AGM Technology Inc",
+    "folder_id": "1cJ0nHJUCfSoW3G3m2amsgbmBSsWHlAGa",
+    "currency": "USD",
+    "required_formats": [
+      "pdf",
+      "csv"
+    ],
+    "source_account": "U1433902",
+    "source": "Cris July 31 2026 email",
+    "governance": "PANAMA",
+    "swift": "IBKRUS33",
+    "reference_code": "IBKR",
+    "additional_folder_ids": [
+      "1gV2h-9I8_7Q1MAjOaSErYKCQouKyCpA2"
+    ],
+    "ignore_unknown_closing_date": true,
+    "closing_date_policy_note": "Requester instructed on 2026-10-14 to ignore the unavailable closing-date cutoff; no date is inferred."
+  },
+  {
+    "account": "F2074691",
+    "institution": "IBKR",
+    "suffix": "4691",
+    "opened_on": "2017-08-24",
+    "closed_on": null,
+    "status": "closed",
+    "owner": "Access Global Management Group Limitada",
+    "folder_id": "1Vt9TqUlNxn2l43AW7mM296EcpghoBlbj",
+    "currency": "USD",
+    "required_formats": [
+      "pdf",
+      "csv"
+    ],
+    "source_account": "F2074691",
+    "source": "Cris July 31 2026 email",
+    "governance": "COSTA RICA",
+    "swift": "IBKRUS33",
+    "reference_code": "IBKR",
+    "ignore_unknown_closing_date": true,
+    "closing_date_policy_note": "Requester instructed on 2026-10-14 to ignore the unavailable closing-date cutoff; no date is inferred."
+  },
+  {
+    "account": "8706",
+    "institution": "Terrabank",
+    "suffix": "8706",
+    "opened_on": "2017-05-03",
+    "closed_on": null,
+    "status": "closed",
+    "owner": "Access Global Management Group Limitada",
+    "folder_id": "1tjAU5T2el6DU6UOL8xSj7AGxVTX7Solf",
+    "currency": "USD",
+    "required_formats": [
+      "pdf",
+      "csv"
+    ],
+    "source_account": "8706",
+    "source": "Cris July 31 2026 email",
+    "governance": "COSTA RICA",
+    "swift": "TBNAUS33XXX",
+    "reference_code": "TBNA",
+    "ignore_unknown_closing_date": true,
+    "closing_date_policy_note": "Requester instructed on 2026-10-14 to ignore the unavailable closing-date cutoff; no date is inferred."
+  },
+  {
+    "account": "9801451222",
+    "institution": "Mercury",
+    "suffix": "1222",
+    "opened_on": "2022-03-01",
+    "closed_on": "2025-06-21",
+    "status": "closed",
+    "owner": "AGM Technology Inc",
+    "folder_id": "1K_oNKIRxA36KiVOkdba0OzKflNv132PT",
+    "currency": "USD",
+    "required_formats": [
+      "pdf",
+      "csv"
+    ],
+    "source_account": "9801451222",
+    "source": "Cris July 31 2026 email",
+    "governance": "FLORIDA",
+    "swift": "",
+    "reference_code": "MERC",
+    "closing_date_evidence": {
+      "drive_file_id": "1WhppWz2-3ahaNipa6-OAKXV15DcXbfrs",
+      "name": "mercury-account-closed-letter-1222.pdf",
+      "statement": "Bank confirmation states the matching account closed effective June 21, 2025."
+    }
+  },
+  {
+    "account": "1100026505060",
+    "institution": "Truist",
+    "suffix": "5060",
+    "opened_on": "2023-04-05",
+    "closed_on": null,
+    "status": "closed",
+    "owner": "AGM Technology Inc",
+    "folder_id": "1JX1hTUY2t4JoF4xSdv4dz7aqEDJoZC2u",
+    "currency": "USD",
+    "required_formats": [
+      "pdf",
+      "csv"
+    ],
+    "source_account": "1100026505060",
+    "source": "Cris July 31 2026 email",
+    "identity_review_required": false,
+    "identity_note": "Requester confirmed 1100026505060 on 2026-10-14. The July 31 email transcribed 110026505060.",
+    "governance": "FLORIDA",
+    "swift": "BRBTUS33XXX",
+    "reference_code": "BRBT",
+    "ignore_unknown_closing_date": true,
+    "closing_date_policy_note": "Requester instructed on 2026-10-14 to ignore the unavailable closing-date cutoff; no date is inferred.",
+    "email_account_identifier": "110026505060"
+  },
+  {
+    "account": "104002738",
+    "institution": "BAC Panama",
+    "suffix": "2738",
+    "opened_on": "2009-07-09",
+    "closed_on": null,
+    "status": "open",
+    "owner": "AGM Technology Inc",
+    "folder_id": "1u20HkjbgSPiI0MsssV62QpHE_p7IMePF",
+    "currency": "USD",
+    "required_formats": [
+      "pdf",
+      "csv"
+    ],
+    "source_account": "104002738",
+    "source": "Cris July 31 2026 email",
+    "governance": "PANAMA",
+    "swift": "BCINPAPAXXX",
+    "reference_code": "BCIN"
+  },
+  {
+    "account": "1500203847",
+    "institution": "Banesco",
+    "suffix": "3847",
+    "opened_on": "2025-01-01",
+    "closed_on": null,
+    "status": "open",
+    "owner": "AGM Technology (BVI) Inc",
+    "folder_id": "11l35S5puabMGQHVKQHVs6wLdB1GRC1Yh",
+    "currency": "USD",
+    "required_formats": [
+      "pdf",
+      "csv"
+    ],
+    "source_account": "1500203847",
+    "source": "Cris July 31 2026 email",
+    "governance": "FLORIDA",
+    "swift": "BBUBUS33XXX",
+    "reference_code": "BBUB"
+  },
+  {
+    "account": "I6413690",
+    "institution": "IBKR",
+    "suffix": "3690",
+    "opened_on": "2022-05-26",
+    "closed_on": null,
+    "status": "open",
+    "owner": "AGM Technology (BVI) Inc",
+    "folder_id": "1qJhG-9F_YteWY-hCP1EaIhbJQ1DW71_h",
+    "currency": "USD",
+    "required_formats": [
+      "pdf",
+      "csv"
+    ],
+    "source_account": "I6413690",
+    "source": "Cris July 31 2026 email",
+    "governance": "BVI",
+    "swift": "IBKRUS33",
+    "reference_code": "IBKR"
+  },
+  {
+    "account": "U6413691",
+    "institution": "IBKR",
+    "suffix": "3691",
+    "opened_on": "2022-05-26",
+    "closed_on": null,
+    "status": "open",
+    "owner": "AGM Technology (BVI) Inc",
+    "folder_id": "1v-WwlyMJ-U59F0eBL58CDJPNrorxRw1p",
+    "currency": "USD",
+    "required_formats": [
+      "pdf",
+      "csv"
+    ],
+    "source_account": "U6413691",
+    "source": "Cris July 31 2026 email",
+    "governance": "BVI",
+    "swift": "IBKRUS33",
+    "reference_code": "IBKR"
+  },
+  {
+    "account": "F10740574",
+    "institution": "IBKR",
+    "suffix": "0574",
+    "opened_on": "2022-09-15",
+    "closed_on": null,
+    "status": "open",
+    "owner": "AGM Technology (BVI) Inc",
+    "folder_id": "1hhcJWVJFJwo6cKWcTBgMMExL-kdKDN9s",
+    "currency": "USD",
+    "required_formats": [
+      "pdf",
+      "csv"
+    ],
+    "source_account": "F10740574",
+    "source": "Cris July 31 2026 email",
+    "governance": "BVI",
+    "swift": "IBKRUS33",
+    "reference_code": "IBKR"
+  },
+  {
+    "account": "12-4529-6078",
+    "institution": "PNC BANK",
+    "suffix": "6078",
+    "opened_on": "2023-07-13",
+    "closed_on": null,
+    "status": "open",
+    "owner": "AGM Technology Inc",
+    "folder_id": "1FA353toR0UGW1YQ6N0XFbqRiIRTVKmlA",
+    "currency": "USD",
+    "required_formats": [
+      "pdf",
+      "csv"
+    ],
+    "source_account": "12-4529-6078",
+    "source": "Cris July 31 2026 email",
+    "governance": "FLORIDA",
+    "swift": "PNCCUS33XXX",
+    "reference_code": "PNCC"
+  },
+  {
+    "account": "5506",
+    "institution": "Terrabank",
+    "suffix": "5506",
+    "opened_on": "2014-11-24",
+    "closed_on": null,
+    "status": "open",
+    "owner": "AGM Technology Inc",
+    "folder_id": "1tjAU5T2el6DU6UOL8xSj7AGxVTX7Solf",
+    "currency": "USD",
+    "required_formats": [
+      "pdf",
+      "csv"
+    ],
+    "source_account": "5506",
+    "source": "Cris July 31 2026 email",
+    "governance": "PANAMA",
+    "swift": "TBNAUS33XXX",
+    "reference_code": "TBNA"
+  }
+]

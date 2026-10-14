@@ -92,6 +92,7 @@ def update_contact_document_route():
     payload = request.get_json(force=True)
     return update_contact_document(
         document_id=payload.get('document_id'),
+        contact_document_id=payload.get('contact_document_id'),
         category=payload.get('category'),
         type=payload.get('type'),
         document_language=payload.get('document_language'),
@@ -106,7 +107,8 @@ def update_contact_document_route():
 def delete_contact_document_route():
     """Delete a contact document by document_id."""
     payload = request.get_json(force=True)
-    return delete_contact_document(document_id=payload.get('document_id'))
+    return delete_contact_document(document_id=payload.get('document_id'),
+                                   contact_document_id=payload.get('contact_document_id'))
 
 
 @bp.route('/screening', methods=['GET'])
