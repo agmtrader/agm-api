@@ -153,13 +153,14 @@ def extract_data(etl_config) -> dict:
             })
             continue
         try:
-            extract_func(file_config)
-            steps.append({'name': step_name, 'status': 'success'})
+            result = extract_func(file_config)
+            steps.append(dict(result or {}, name=step_name,
+                              status=(result or {}).get('status', 'success')))
         except Exception as e:
             logger.error(f'Error during {step_name}: {e}')
             steps.append({'name': step_name, 'status': 'failed', 'error': str(e)})
 
-    failed_steps = [step for step in steps if step.get('status') == 'failed']
+    failed_steps = [step for step in steps if step.get('status') not in ('success', 'skipped')]
     overall_status = 'success' if not failed_steps else 'partial'
 
     logger.announcement('Information successfully extracted for reports.', type='success')
@@ -355,122 +356,42 @@ def extract_un_sanctions_list(config=None):
     logger.announcement('UN sanctions list extracted and uploaded to batch folder.', type='success')
     return {'status': 'success'}
 
-def _append_missing_account_details(details: list):
-
-    SKIP_ACCOUNT_DETAILS_ACCOUNT_IDS = {
-        'Paper Trading account', 'U11255020', 'JJJJ', 'mgflt1245', '.', 'U5667692', 'U6545558', 'U6601533',
-        'U6481241', 'U6514132', 'U6456839', 'U6343218', 'U6299911', 'U6201107', 'U6192519', '?', 'U5974991',
-        'U6017743', 'U5961489', 'U5959931', 'U5862172', 'U5885640', 'U5704986', 'U5667734', 'U5549845',
-        'U5360244', 'U5360311', 'U5312423', 'U5224474', 'U5212993', 'U5209932', 'U4993318', 'U5176479',
-        'U5866637', 'U4911438', 'U4900285', 'U4838642', 'U5213625', 'U4735325', 'U4668914', 'U4549008',
-        'U4470712', 'U4434708', 'U4346346', 'U4273862', 'U4279195', 'U4319961', 'U4218638', 'U4259153',
-        'U4127849', 'U4196108', 'U4055337', 'U4083153', 'U3965484', 'U4185115', 'U4470860', 'U4605137',
-        'U4625417', 'U4656580', 'U3652992', 'U3633092', 'U3604455', 'U3511434', 'U3511297', 'U3496363',
-        'U3495597', 'U3545775', 'U3535501', 'U3429534', 'U3428791', 'U3464930', 'U3372072', 'U3304536',
-        'U3314477', 'U6077094', 'U3208714', 'U3228034', 'U3315369', 'U3412654', 'U3419606', 'U3528304',
-        'U3604393', 'U3677610', 'U3776509', 'U3224638', 'U3171464', 'U2676460', 'U4714674', 'U2639635',
-        'U2478829', 'U2440709', 'U2447095', 'U2479810', 'U2482465', 'U2677556', 'U2738060', 'U2940074',
-        'U3034848', 'U3160536', 'U3240192', 'U3247007', 'U2245491', 'U2169126', 'U2169127', 'U2358621',
-        'U2112241', 'U2014203', 'U1960643', 'U1809703', 'U1763844', 'U2798255', 'U1753236', 'U1558124',
-        'U1512073', 'U1224910', 'U1213466', 'U1206083', 'U1192065', 'U1180647', 'U1161945', 'U1139038',
-        'U1117382', 'U1114073', 'U7201776', 'U8431354', 'U6061707', 'U4892747', 'U4127415', 'U3320909',
-        'U1037726', 'U928543', 'U918392', 'U877620', 'U758608', 'U743013', 'U528111', 'U471311', 'U450281',
-        'U436576', 'U401595', 'U13388281', 'U2573636', 'U7115856', 'U13321987', 'U6774207',
-        'U6978407', 'U7107190', 'U7130162', 'U7254887', 'U7250030', 'U7442191', 'U7558648', 'U7585547',
-        'U7692759', 'U7662396', 'U7761674', 'U7779413', 'U7849662', 'U7762995', 'U7811476', 'U7954199',
-        'U7968914', 'U9151583', 'U9074670', 'U9074960', 'U8928849', 'U8944802', 'U8477223', 'U8497149',
-        'U8455007', 'U8334049', 'U8210758', 'U8437534', 'U9324890', 'U9858733', 'U10553677', 'U10509335',
-        'U10748811', 'U10763225', 'U10770438', 'U10977992', 'U10955481', 'U10476251', 'U10545876',
-        'U10565675', 'U10790476', 'U10627439', 'U20020075', 'U13708322'
-    }
-
-    
-    from src.components.clients.accounts import read_accounts, read_account_details
-    accounts = read_accounts({})
-    detail_account_ids = {
-        str(detail.get('account', {}).get('accountId')).strip()
-        for detail in details
-        if (
-            isinstance(detail, dict)
-            and isinstance(detail.get('account'), dict)
-            and detail.get('account', {}).get('accountId')
-        )
-    }
-
-    missing_accounts = [
-        account for account in accounts
-        if str(account.get('ibkr_account_number') or '').strip()
-        and str(account.get('ibkr_account_number')).strip() not in detail_account_ids
-    ]
-
-    logger.info(f'Found {len(missing_accounts)} accounts missing account details.')
-    for account in missing_accounts:
-        account_id = str(account.get('ibkr_account_number') or '').strip()
-        if not account_id:
-            continue
-        if account_id in SKIP_ACCOUNT_DETAILS_ACCOUNT_IDS:
-            continue
-
-        master_account = account.get('master_account')
-
-        if master_account is None:
-            logger.warning(f'Skipping account {account_id}: missing master_account.')
-            print(f'[account_details_failed] {account_id} (missing master_account)')
-            continue
-
-        try:
-            new_details = read_account_details(account_id=account_id, master_account=master_account)
-            if new_details:
-                details.append(new_details)
-        except Exception as e:
-            logger.error(f'Error fetching details for account {account_id}: {e}')
-            print(f'[account_details_failed] {account_id}')
-            continue
-
-    return details
-
 def extract_account_details_backup(config=None):
-    logger.announcement('Extracting account details backup.', type='info')
-    account_details_config = config or _get_file_config('account_details', [clients_etl])
-    if account_details_config is None:
-        logger.warning('Account details config not found. Skipping account details extraction.')
-        return {'status': 'skipped'}
+    from src.components.clients.accounts import read_accounts
+    from src.components.tools.private.ibkr_details_refresh import refresh_details
+    from pathlib import Path
 
-    backup_folder_id = account_details_config.get('backup_folder_id')
-    files = Drive.get_files_in_folder(backup_folder_id)
-    account_detail_files = [f for f in files if 'account_details' in f.get('name', '')]
-    candidate_files = account_detail_files if len(account_detail_files) > 0 else files
-
-    if len(candidate_files) == 0:
-        raise Exception('No account details files found in backup folder.')
-
-    most_recent_file = Drive.get_most_recent_file(candidate_files)
-
-    raw_details = Drive.download_file(file_id=most_recent_file['id'], parse=True)
-    details = raw_details if isinstance(raw_details, list) else []
-    enriched_details = _append_missing_account_details(details)
-    file_name = account_details_config['backup_name']
-
-    existing_file = Drive.get_file_info(
-        parent_id=backup_folder_id,
-        file_name=file_name,
-        raise_if_missing=False
-    )
-    if existing_file:
-        Drive.delete_file(file_id=existing_file['id'])
-
-    json_bytes = json.dumps(enriched_details, default=str).encode('utf-8')
-    json_base64 = base64.b64encode(json_bytes).decode('utf-8')
-    Drive.upload_file(
-        file_name=file_name,
-        mime_type='application/json',
-        file_data=json_base64,
-        parent_folder_id=backup_folder_id
-    )
-
-    logger.announcement('Account details backup extracted, enriched, and uploaded.', type='success')
-
-    return {'status': 'success', 'processed_file': most_recent_file.get('name'), 'saved_file': file_name}
+    config = config or _get_file_config('account_details', [_get_etl_config_by_name('clients')])
+    if config is None:
+        raise ValueError('Account details config missing')
+    folder = config['backup_folder_id']
+    files = [f for f in Drive.get_files_in_folder(folder)
+             if re.fullmatch(r'account_details_\d+\.json', f.get('name', ''))]
+    previous_file = Drive.get_most_recent_file(files) if files else None
+    previous = Drive.download_file(previous_file['id'], parse=True) if previous_file else []
+    if not isinstance(previous, list):
+        raise ValueError('Prior account details must be a list')
+    details, report = refresh_details(read_accounts({}), previous,
+        limit=config.get('refresh_limit', 0),
+        progress=lambda outcome: logger.info(
+            f"IBKR refresh {outcome['account_id']}: {outcome['status']}"))
+    if config.get('local_output_dir'):
+        output = Path(config['local_output_dir'])
+        output.mkdir(parents=True, exist_ok=True, mode=0o700)
+        for name, value in [('account_details.json', details), ('refresh_report.json', report)]:
+            with os.fdopen(os.open(output / name, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), 'w') as stream:
+                json.dump(value, stream, indent=2, default=str)
+        return report
+    if report['sampled']:
+        raise ValueError('Sampled account details cannot be published')
+    # Upload first. A failed upload must not delete the previous good backup.
+    uploaded = Drive.upload_file(file_name=config['backup_name'], mime_type='application/json',
+        file_data=base64.b64encode(json.dumps(details, default=str).encode()).decode(), parent_folder_id=folder)
+    report['saved_file'] = config['backup_name']
+    report_name = config['backup_name'].replace('.json', '.refresh.json')
+    Drive.upload_file(file_name=report_name, mime_type='application/json',
+        file_data=base64.b64encode(json.dumps(report, default=str).encode()).decode(), parent_folder_id=folder)
+    return report
 
 # Market data
 @_with_ibkr_market_data_session
@@ -1328,6 +1249,8 @@ def process_report(config):
         if not files_for_config:
             files_for_config = [f for f in files if f.get('name', '').startswith(f'{config_name}_')]
         files = files_for_config or files
+        if config_name == 'account_details':
+            files = [f for f in files if re.fullmatch(r'account_details_\d+\.json', f.get('name', ''))]
 
         if len(files) == 0:
             logger.error(f'No files found in backup folder.')
