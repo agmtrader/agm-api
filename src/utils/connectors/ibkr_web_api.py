@@ -18,7 +18,7 @@ logger.announcement('Initialized Interactive Brokers Web API Service', type='suc
 DAILY_AGREEMENT_FORM_NUMBERS = [
     3024, 4070, 3089, 4304, 4404, 6108, 5013, 6112,
     4024, 9130, 3074, 3203, 3070, 3094, 3071, 4587, 4837, 2192,
-    4399, 2109, 4016, 4289, 4208, 9902, 3081,
+    4399, 2109, 4016, 4289, 4208, 3081,
 ]
 
 def credential_locked(func):
@@ -1714,6 +1714,21 @@ class IBKRWebAPI:
                 "message": f"Form is missing required field(s): {', '.join(missing_fields)}.",
             }
 
+        import base64
+        try:
+            raw_pdf = base64.b64decode(encoded_data, validate=True)
+            valid_length = int(form.get('fileLength')) == len(raw_pdf)
+        except (ValueError, TypeError):
+            raise ServiceError('Agreement PDF data or length is invalid', 422)
+        if (_normalize_form_number(form.get('formNumber')) != _normalize_form_number(form_number)
+                or file_data.get('name') != form.get('fileName')
+                or not raw_pdf.startswith(b'%PDF-')
+                or not valid_length
+                or hashlib.sha1(raw_pdf).hexdigest() != str(form.get('sha1Checksum') or '').lower()):
+            raise ServiceError('Agreement PDF identity, length or checksum does not match its metadata', 422)
+        if len(raw_pdf) > 10 * 1024 * 1024:
+            raise ServiceError('Agreement PDF exceeds the 10 MB file limit', 422)
+
         document = {
             "attachedFile": {
                 "fileName": form.get("fileName"),
@@ -1759,55 +1774,44 @@ class IBKRWebAPI:
         return []
 
     def _merge_daily_agreement_response(self, prepared_results, ibkr_response):
-        results_by_form = {
-            _normalize_form_number(result.get('formNumber')): dict(result)
-            for result in prepared_results
-            if result.get('status') != 'Skipped'
-        }
-
         response_results = self._extract_process_document_results(ibkr_response)
-        for response_result in response_results:
-            if not isinstance(response_result, dict):
-                continue
-            form_number = _normalize_form_number(response_result.get('formNumber'))
-            if not form_number or form_number not in results_by_form:
-                continue
-
-            status = response_result.get('status') or response_result.get('state') or response_result.get('result')
-            message = response_result.get('message') or response_result.get('description') or response_result.get('error')
-            results_by_form[form_number].update({
-                "status": status or "Submitted",
-                "message": message,
-            })
-
-        merged_results = []
-        for result in prepared_results:
-            form_number = _normalize_form_number(result.get('formNumber'))
+        if isinstance(ibkr_response, dict) and ibkr_response.get('hasError'):
+            response_results = []
+        responses_by_form = {}
+        for row in response_results:
+            if isinstance(row, dict):
+                responses_by_form.setdefault(_normalize_form_number(row.get('formNumber')), []).append(row)
+        results = []
+        for prepared in prepared_results:
+            result = dict(prepared)
             if result.get('status') == 'Skipped':
-                merged_results.append(result)
+                results.append(result)
+                continue
+            rows = responses_by_form.get(_normalize_form_number(result.get('formNumber')), [])
+            if len(rows) != 1:
+                result.update(status='Unconfirmed', message='IBKR did not return one explicit outcome for this form.')
             else:
-                merged_results.append(results_by_form.get(form_number, result))
-
-        has_response_statuses = any(
-            result.get('status') not in ('Prepared', 'Skipped')
-            for result in merged_results
-        )
-        if not has_response_statuses:
-            for result in merged_results:
-                if result.get('status') == 'Prepared':
-                    result['status'] = 'Accepted'
-
-        return merged_results
+                row = rows[0]
+                status = row.get('status') or row.get('state') or row.get('result')
+                result.update(status='Rejected' if row.get('error') else status or 'Unconfirmed',
+                              message=row.get('message') or row.get('description') or row.get('error'))
+            results.append(result)
+        return results
 
     @credential_locked
     @handle_exception
-    def submit_all_agreements(self, master_account: str = 'I6413690', forms: list = None):
-        original_creds = None
+    def submit_all_agreements(self, master_account: str = None, forms: list = None, *, dry_run: bool = False):
+        if not master_account:
+            raise ServiceError('master_account is required for daily agreement submission', 422)
         original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
-            resolved_master_account = master_account or 'I6413690'
-            form_numbers = forms or DAILY_AGREEMENT_FORM_NUMBERS
+            resolved_master_account = str(master_account).strip().upper()
+            form_numbers = list(dict.fromkeys(_normalize_form_number(n) for n in (DAILY_AGREEMENT_FORM_NUMBERS if forms is None else forms)))
+            if not form_numbers:
+                raise ServiceError('At least one agreement form is required', 422)
+            if '5001' in form_numbers:
+                raise ServiceError('Tax form 5001 must be included with each application, not daily agreements', 422)
             timestamp = _ibkr_timestamp()
             url = f"{self.BASE_URL}/gw/api/v1/accounts/documents"
             logger.info(
@@ -1850,35 +1854,19 @@ class IBKRWebAPI:
                         "message": str(exc),
                     })
 
-            if len(documents) == 0:
-                logger.error("No agreement documents were prepared. Skipping submit_all_agreements POST call.")
+            if len(documents) != len(form_numbers):
+                logger.error("Agreement preparation is incomplete. No daily agreement POST was made.")
                 return {
                     "ok": False,
                     "masterAccount": resolved_master_account,
                     "formsRequested": len(form_numbers),
-                    "documentsPrepared": 0,
+                    "documentsPrepared": len(documents),
                     "accepted": 0,
                     "rejected": 0,
-                    "skipped": len(results),
+                    "skipped": sum(result["status"] == "Skipped" for result in results),
                     "results": results,
                     "ibkrResponse": None,
                 }
-
-            doc_preview = []
-            for document in documents[:5]:
-                attached_file = document.get("attachedFile") or {}
-                payload = document.get("payload") or {}
-                doc_preview.append({
-                    "formNumber": document.get("formNumber"),
-                    "fileName": attached_file.get("fileName"),
-                    "fileLength": attached_file.get("fileLength"),
-                    "sha1ChecksumPrefix": str(attached_file.get("sha1Checksum") or "")[:12],
-                    "dataPrefix": str(payload.get("data") or "")[:20],
-                })
-            logger.info(
-                f"submit_all_agreements payload summary: documents={len(documents)} "
-                f"preview_first_{len(doc_preview)}={doc_preview}"
-            )
 
             body = {
                 "processDocuments": {
@@ -1888,17 +1876,28 @@ class IBKRWebAPI:
                 }
             }
 
+            encoded_body_bytes = len(json.dumps(body).encode('ascii'))
+            if encoded_body_bytes > 20 * 1024 * 1024:
+                raise ServiceError('Daily agreement request exceeds the 20 MB limit', 422)
+            if dry_run:
+                return {'ok': False, 'ready': True, 'submitted': False,
+                        'masterAccount': resolved_master_account, 'formsRequested': len(form_numbers),
+                        'documentsPrepared': len(documents), 'requestBytes': encoded_body_bytes,
+                        'accepted': 0, 'rejected': 0, 'skipped': 0, 'results': results}
+
             token = self.get_bearer_token()
             if not token:
                 raise Exception("No token found")
 
             signed_request = self.sign_request(body)
+            if len(signed_request.encode('ascii')) > 20 * 1024 * 1024:
+                raise ServiceError('Signed daily agreement request exceeds the 20 MB limit', 422)
             headers = {
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/jwt"
             }
 
-            response = requests.post(url, headers=headers, data=signed_request)
+            response = requests.post(url, headers=headers, data=signed_request, timeout=(10, 120))
 
             if response.status_code != 200:
                 raise_ibkr_response_error(response, account_access="/accounts" in url)
@@ -1913,9 +1912,10 @@ class IBKRWebAPI:
             skipped = sum(1 for result in results if result.get('status') == 'Skipped')
             rejected = sum(1 for result in results if result.get('status') != 'Skipped' and _is_rejected_status(result.get('status')))
 
-            logger.success("All agreements submitted successfully")
+            logger.info(f"Daily agreements outcomes accepted={accepted} rejected_or_unconfirmed={rejected} skipped={skipped}")
             return {
-                "ok": rejected == 0 and skipped == 0,
+                "ok": accepted == len(form_numbers) and rejected == 0 and skipped == 0,
+                "submitted": True,
                 "masterAccount": resolved_master_account,
                 "formsRequested": len(form_numbers),
                 "documentsPrepared": len(documents),
@@ -1953,7 +1953,6 @@ for _method_name in [
     'close_account',
     'get_account_statements',
     'get_available_statements',
-    'submit_all_agreements',
 ]:
     if 'IBKRWebAPI' in globals() and hasattr(IBKRWebAPI, _method_name):
         setattr(

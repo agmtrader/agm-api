@@ -34,3 +34,11 @@ def send_compliance_manual_update_email_route():
     """Send the compliance manual update notification email."""
     payload = request.get_json(silent=True) or {}
     return send_compliance_manual_update_email(payload)
+
+
+@bp.route('/prepare_daily_agreements', methods=['POST'])
+@format_response
+def prepare_daily_agreements_route():
+    """Download and validate agreement PDFs without submitting them to IBKR."""
+    from src.components.tools.private.daily_agreements import prepare_daily_agreements
+    return prepare_daily_agreements(request.get_json(silent=True))
