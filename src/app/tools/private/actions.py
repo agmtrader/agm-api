@@ -42,3 +42,11 @@ def prepare_daily_agreements_route():
     """Download and validate agreement PDFs without submitting them to IBKR."""
     from src.components.tools.private.daily_agreements import prepare_daily_agreements
     return prepare_daily_agreements(request.get_json(silent=True))
+
+
+@bp.route('/submit_daily_agreements', methods=['POST'])
+@format_response
+def submit_daily_agreements_route():
+    """Preload the configured agreement PDFs at IBKR without automatic replay."""
+    from src.components.tools.private.daily_agreements import submit_daily_agreements
+    return submit_daily_agreements(request.get_json(silent=True))

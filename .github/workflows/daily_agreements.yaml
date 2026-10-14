@@ -1,4 +1,4 @@
-name: Daily IBKR Agreement Preparation
+name: Daily IBKR Agreement Submission
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       master_account:
-        description: IBKR master account for download and validation only
+        description: IBKR master account for daily PDF preload
         type: choice
         options: [I6413690, F10740574]
         default: I6413690
@@ -30,13 +30,13 @@ jobs:
       summary: ${{ steps.publish.outputs.summary }}
     steps:
       - uses: actions/checkout@v4
-      - name: Authenticate and prepare agreements
+      - name: Authenticate and submit agreements
         id: prepare
         shell: bash
         run: |
           set -euo pipefail
           summary_file="$RUNNER_TEMP/daily-agreements-summary.txt"
-          printf 'Preparation failed before producing a result. Nothing submitted by this workflow.\n' > "$summary_file"
+          printf 'Submission failed before producing a result. Broker acceptance is unconfirmed.\n' > "$summary_file"
           test -n "$AGM_API_EMAIL" && test -n "$AGM_API_PASSWORD" || { echo 'AGM_API_EMAIL/AGM_API_PASSWORD secrets are missing' >&2; exit 1; }
           response=$(curl -sS --connect-timeout 10 --max-time 45 -w "\n%{http_code}" -X POST \
             -H 'Content-Type: application/json' \
@@ -49,8 +49,8 @@ jobs:
           if ! response=$(curl -sS --connect-timeout 10 --max-time 300 -w "\n%{http_code}" -X POST \
             -H "Authorization: Bearer $access_token" -H 'Content-Type: application/json' \
             -d "$(jq -n --arg master "$AGREEMENT_MASTER" '{master_account: $master}')" \
-            https://api.agmtechnology.com/actions/prepare_daily_agreements); then
-            printf 'Preparation transport failure. Nothing submitted by this workflow.\n' > "$summary_file"
+            https://api.agmtechnology.com/actions/submit_daily_agreements); then
+            printf 'Submission transport failure. Broker acceptance is unknown; check before retrying.\n' > "$summary_file"
             exit 1
           fi
           http_status=$(echo "$response" | tail -n1)
@@ -66,7 +66,49 @@ jobs:
         shell: bash
         run: |
           summary_file="$RUNNER_TEMP/daily-agreements-summary.txt"
-          if [ -f "$summary_file" ]; then summary=$(cat "$summary_file"); else summary='Preparation failed before producing a result. Nothing submitted.'; fi
+          if [ -f "$summary_file" ]; then summary=$(cat "$summary_file"); else summary='Submission failed before producing a result. Broker acceptance is unconfirmed.'; fi
           delimiter="AGREEMENTS_$(python3 -c 'import uuid; print(uuid.uuid4())')"
           printf 'summary<<%s\n%s\n%s\n' "$delimiter" "$summary" "$delimiter" >> "$GITHUB_OUTPUT"
-          printf '## Daily IBKR agreement preparation\n\n%s\n' "$summary" >> "$GITHUB_STEP_SUMMARY"
+          printf '## Daily IBKR agreement submission\n\n%s\n' "$summary" >> "$GITHUB_STEP_SUMMARY"
+
+  notify-success:
+    needs: prepare
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send success email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "Daily IBKR Agreements COMPLETED"
+          to: cr@agmtechnology.com,as@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: |
+            ${{ needs.prepare.outputs.summary }}
+
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            Check broker acceptance before replaying a failed or interrupted submission.
+
+  notify-failure:
+    needs: prepare
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send failure email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "Daily IBKR Agreements FAILED"
+          to: cr@agmtechnology.com,as@agmtechnology.com
+          from: aa@agmtechnology.com
+          body: |
+            ${{ needs.prepare.outputs.summary }}
+
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            Check broker acceptance before replaying a failed or interrupted submission.

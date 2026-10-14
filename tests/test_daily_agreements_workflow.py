@@ -25,6 +25,11 @@ def preparation():
             'expectedForms':numbers,'results':[{'formNumber':str(n),'status':'Prepared'} for n in numbers]}
 
 
+def submission():
+    return {**preparation(), 'ok': True, 'submitted': True, 'mode': 'submission', 'accepted': 24,
+            'results': [{'formNumber': str(n), 'status': 'Accepted'} for n in daily_agreements.DAILY_AGREEMENT_FORM_NUMBERS]}
+
+
 def execute(tmp_path,payload,*,http='200',token_http='200',transport=False,credentials=True,token_body=None):
     binaries=tmp_path/'bin';binaries.mkdir()
     curl=binaries/'curl'
@@ -47,34 +52,34 @@ def execute(tmp_path,payload,*,http='200',token_http='200',transport=False,crede
     return result,(tmp_path/'summary').read_text(),calls
 
 
-def test_actual_shell_prepares_once_and_never_calls_submission(tmp_path):
-    result,summary,calls=execute(tmp_path,preparation())
+def test_actual_shell_submits_once_and_reports_explicit_outcomes(tmp_path):
+    result,summary,calls=execute(tmp_path,submission())
     assert result.returncode==0,result.stderr
-    assert 'PASSED' in summary and 'not broker acceptance' in summary
-    assert len(calls)==2 and calls[-1].endswith('/actions/prepare_daily_agreements')
+    assert 'PASSED' in summary and 'explicit successful IBKR outcomes' in summary
+    assert len(calls)==2 and calls[-1].endswith('/actions/submit_daily_agreements')
     assert 'synthetic-token' not in result.stdout+result.stderr+summary
 
 
-@pytest.mark.parametrize('change',[{'documentsPrepared':23},{'ready':False},{'accepted':24,'submitted':True},
+@pytest.mark.parametrize('change',[{'documentsPrepared':23},{'ok':False},{'accepted':0,'submitted':False},
                                   {'masterAccount':'F10740574'},{'skipped':1},{'results':[]},{'expectedForms':[9902]}])
-def test_partial_invalid_or_submitted_result_fails_workflow(tmp_path,change):
-    result,summary,calls=execute(tmp_path,{**preparation(),**change})
+def test_partial_invalid_or_unsubmitted_result_fails_workflow(tmp_path,change):
+    result,summary,calls=execute(tmp_path,{**submission(),**change})
     assert result.returncode==1 and 'FAILED' in summary and len(calls)==2
 
 
 @pytest.mark.parametrize('options,expected_calls',[({'credentials':False},0),({'token_http':'401'},1),
                                                     ({'token_body':{}},1),({'http':'500'},2),({'transport':True},2)])
 def test_auth_and_transport_failures_publish_summary_without_retry(tmp_path,options,expected_calls):
-    result,summary,calls=execute(tmp_path,preparation(),**options)
+    result,summary,calls=execute(tmp_path,submission(),**options)
     assert result.returncode!=0 and len(calls)==expected_calls
-    assert 'Nothing submitted' in summary
+    assert 'acceptance' in summary
 
 
-def test_workflow_schedule_concurrency_and_no_notification():
+def test_workflow_schedule_concurrency_and_standard_notifications():
     triggers=WORKFLOW.get('on',WORKFLOW.get(True))
     assert triggers['schedule']==[{'cron':'0 11 * * *'}]
     assert WORKFLOW['concurrency']['cancel-in-progress'] is False
-    assert list(WORKFLOW['jobs'])==['prepare']
+    assert set(WORKFLOW['jobs']) == {'prepare', 'notify-success', 'notify-failure'}
     assert '--retry' not in STEPS[1]['run'] and 'wretry' not in json.dumps(WORKFLOW)
 
 
@@ -82,7 +87,7 @@ def test_workflow_schedule_concurrency_and_no_notification():
 def route(monkeypatch):
     client=Mock();client.submit_all_agreements.return_value={**preparation(),'ibkrResponse':{'private':'must not leave action'}}
     monkeypatch.setattr(daily_agreements.IBKRWebAPI, '__new__', lambda cls: client)
-    monkeypatch.setattr(authz,'_load_user',lambda user:{'id':user,'scopes':'actions/prepare_daily_agreements' if user=='allowed' else 'accounts/read'})
+    monkeypatch.setattr(authz,'_load_user',lambda user:{'id':user,'scopes':'actions' if user=='allowed' else 'accounts/read'})
     app=Flask(__name__);app.config['JWT_SECRET_KEY']='synthetic-test-signing-key-at-least-32-bytes';JWTManager(app)
     app.before_request(lambda:setattr(g,'request_id','synthetic-preparation'))
     app.before_request(authz.authenticate_request);app.before_request(authz.enforce_route_scope)
@@ -113,4 +118,21 @@ def test_route_requires_verified_identity_and_scope(route):
     http,headers,denied,client=route
     assert http.post('/actions/prepare_daily_agreements',json={'master_account':'I6413690'}).status_code==401
     assert http.post('/actions/prepare_daily_agreements',headers=denied,json={'master_account':'I6413690'}).status_code==403
+    client.submit_all_agreements.assert_not_called()
+
+
+def test_live_route_submits_once_and_strips_raw_response(route):
+    http,headers,_,client=route
+    client.submit_all_agreements.return_value = {**submission(), 'ibkrResponse': {'private': 'omitted'}}
+    response=http.post('/actions/submit_daily_agreements',headers=headers,json={'master_account':'I6413690'})
+    assert response.status_code==200 and response.json['mode']=='submission'
+    assert response.json['accepted']==24 and 'ibkrResponse' not in response.json
+    client.submit_all_agreements.assert_called_once_with(master_account='I6413690',dry_run=False)
+
+
+def test_live_route_auth_scope_and_payload_validation(route):
+    http,headers,denied,client=route
+    assert http.post('/actions/submit_daily_agreements',json={'master_account':'I6413690'}).status_code==401
+    assert http.post('/actions/submit_daily_agreements',headers=denied,json={'master_account':'I6413690'}).status_code==403
+    assert http.post('/actions/submit_daily_agreements',headers=headers,json={'master_account':'UNKNOWN'}).status_code==422
     client.submit_all_agreements.assert_not_called()

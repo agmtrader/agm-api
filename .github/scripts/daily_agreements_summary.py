@@ -1,4 +1,4 @@
-"""Validate a preparation result and retain a compact workflow summary."""
+"""Validate a submission result and retain a compact workflow summary."""
 import argparse
 import json
 from pathlib import Path
@@ -6,11 +6,11 @@ from pathlib import Path
 
 def render(body, http_status, master):
     if not isinstance(body, dict):
-        return False, 'Preparation FAILED: invalid API response. Nothing submitted by this workflow.'
+        return False, 'Submission FAILED: invalid API response. Broker acceptance is unknown; check before retrying.'
     expected = body.get('expectedForms'); results = body.get('results')
     valid = (http_status == '200' and body.get('masterAccount') == master
-             and body.get('mode') == 'preparation' and body.get('ready') is True
-             and body.get('submitted') is False and body.get('accepted') == 0
+             and body.get('mode') == 'submission' and body.get('ok') is True
+             and body.get('submitted') is True and body.get('accepted') == 24
              and body.get('formsRequested') == 24 and body.get('documentsPrepared') == 24
              and body.get('skipped') == 0 and body.get('rejected') == 0
              and isinstance(expected, list) and len(expected) == 24
@@ -20,11 +20,11 @@ def render(body, http_status, master):
     if valid:
         numbers = [str(row.get('formNumber')) for row in results]
         valid = (len(set(numbers)) == 24 and set(numbers) == {str(n) for n in expected}
-                 and all(row.get('status') == 'Prepared' for row in results))
-    lines = [f'Agreement preparation: {"PASSED" if valid else "FAILED"}',
+                 and all(str(row.get('status', '')).lower() in ('accepted', 'submitted', 'processed', 'success') for row in results))
+    lines = [f'Agreement submission: {"PASSED" if valid else "FAILED"}',
              f'Master: {master}; HTTP: {http_status}',
              f'Requested: {body.get("formsRequested", "unknown")}; prepared: {body.get("documentsPrepared", "unknown")}; skipped: {body.get("skipped", "unknown")}',
-             'Nothing submitted to IBKR; no documents signed. This is not broker acceptance.']
+             'All 24 forms have explicit successful IBKR outcomes.' if valid else 'Broker acceptance incomplete or unknown; check before retrying.']
     if isinstance(results, list):
         for row in results[:24]:
             if isinstance(row, dict):
