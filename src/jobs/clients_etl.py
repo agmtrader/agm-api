@@ -15,15 +15,35 @@ def evaluate(result, accepted):
     if not stages or any(stages.get(name, {}).get('status') != 'success' for name in ('backup', 'transform')):
         return 'failed'
     extract = stages.get('extract', {})
+    # Only IBKR's explicit generation-in-progress response may use a published backup.
+    result['warnings'] = []
+    reports = stages['transform'].get('reports', [])
+    fallback_steps = set()
+    for step in extract.get('steps', []):
+        error = step.get('error', '')
+        matching = [r for r in reports if r.get('name') == step.get('name')]
+        if (step.get('name') in ('742588', '734782', '732383', '794867')
+                and step.get('status') == 'failed'
+                and 'Error Code: 1019,' in error
+                and 'Statement generation in progress' in error
+                and len(matching) == 1 and matching[0].get('status') == 'success'
+                and matching[0].get('backup_file')):
+            fallback_steps.add(step['name'])
+            result['warnings'].append({
+                'name': step['name'], 'reason': 'statement_generation_in_progress',
+                'message': 'New file was not generated; existing backup was published.',
+                'backup_file': matching[0]['backup_file'], 'error': error})
     detail_steps = [s for s in extract.get('steps', []) if s.get('name') == 'account_details']
     if len(detail_steps) != 1 or any(s.get('status') not in ('success', 'skipped')
-        for s in extract.get('steps', []) if s.get('name') != 'account_details'):
+        for s in extract.get('steps', []) if s.get('name') != 'account_details' and s.get('name') not in fallback_steps):
         return 'failed'
     details = detail_steps[0]
     failures = [o for o in details.get('outcomes', []) if o.get('status') == 'failed']
     expected = {(o['account_id'], o['error']) for o in accepted}
-    if details.get('summary', {}).get('successful', 0) <= 0 or not failures:
+    if details.get('summary', {}).get('successful', 0) <= 0:
         return 'failed'
+    if not failures:
+        return 'success' if details.get('status') == 'success' else 'failed'
     if all((o.get('account_id'), o.get('error')) in expected for o in failures):
         return 'completed_with_accepted_coverage_gaps'
     return 'failed'

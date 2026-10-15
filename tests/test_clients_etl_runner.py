@@ -298,3 +298,24 @@ else: raise SystemExit(2)
     assert subprocess.run(['bash','-e','-o','pipefail','-c',script],env=env,capture_output=True).returncode==0
     env['TEST_COMPLETED']='False'
     assert subprocess.run(['bash','-e','-o','pipefail','-c',script],env=env,capture_output=True).returncode!=0
+
+
+def test_flex_generation_pending_accepts_only_successfully_published_backup():
+    from src.jobs.clients_etl import evaluate
+    r = {'status': 'partial', 'overview': {
+        'extract': {'steps': [
+            {'name': 'account_details', 'status': 'success',
+             'summary': {'successful': 1}, 'outcomes': []},
+            {'name': '794867', 'status': 'failed',
+             'error': 'Error Code: 1019, Message: Statement generation in progress.'}]},
+        'backup': {'status': 'success'},
+        'transform': {'status': 'success', 'reports': [
+            {'name': '794867', 'status': 'success', 'backup_file': 'prior.csv'}]}}}
+    assert evaluate(r, []) == 'success'
+    assert r['warnings'][0]['backup_file'] == 'prior.csv'
+    assert r['status'] == 'partial'
+    r['overview']['transform']['reports'][0].pop('backup_file')
+    assert evaluate(r, []) == 'failed'
+    r['overview']['transform']['reports'][0]['backup_file'] = 'prior.csv'
+    r['overview']['extract']['steps'][1]['error'] = 'HTTP 403'
+    assert evaluate(r, []) == 'failed'

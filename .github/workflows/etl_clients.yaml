@@ -42,7 +42,7 @@ jobs:
           done
           jq -e '.status.completionTime != null' "$RUNNER_TEMP/execution.json" > /dev/null
           gcloud storage cp "gs://agm-datalake-etl-runs/runs/$execution/overview.json" "$RUNNER_TEMP/overview.json"
-          jq '{status, operational_status, run_id, extract: .overview.extract.summary, backup: .overview.backup.status, transform: .overview.transform.status}' "$RUNNER_TEMP/overview.json" >> "$GITHUB_STEP_SUMMARY"
+          jq '{status, operational_status, run_id, warnings, extract: .overview.extract.summary, backup: .overview.backup.status, transform: .overview.transform.status}' "$RUNNER_TEMP/overview.json" >> "$GITHUB_STEP_SUMMARY"
           jq -e 'any(.status.conditions[]; .type == "Completed" and .status == "True")' "$RUNNER_TEMP/execution.json" > /dev/null
           jq -e '.operational_status == "success" or .operational_status == "completed_with_accepted_coverage_gaps"' "$RUNNER_TEMP/overview.json" > /dev/null
       - name: Prepare terminal summary
@@ -51,7 +51,7 @@ jobs:
         shell: bash
         run: |
           if [ -f "$RUNNER_TEMP/overview.json" ]; then
-            summary=$(jq -r '"Clients ETL: \(.operational_status)\nExecution: \(.run_id)\nRaw pipeline: \(.status)\nExtract: \(.overview.extract.status)\nBackup: \(.overview.backup.status)\nTransform: \(.overview.transform.status)\nIBKR refresh: " + ([.overview.extract.steps[]? | select(.name=="account_details") | .summary | "\(.successful) fresh, \(.failed) coverage gaps, \(.retained_stale) retained stale"] | join(""))' "$RUNNER_TEMP/overview.json")
+            summary=$(jq -r '"Clients ETL: \(.operational_status)\nExecution: \(.run_id)\nRaw pipeline: \(.status)\nExtract: \(.overview.extract.status)\nBackup: \(.overview.backup.status)\nTransform: \(.overview.transform.status)\nIBKR refresh: " + ([.overview.extract.steps[]? | select(.name=="account_details") | .summary | "\(.successful) fresh, \(.failed) coverage gaps, \(.retained_stale) retained stale"] | join("")) + "\nReport warnings: " + ((.warnings // []) | map("\(.name): \(.message) Backup: \(.backup_file)") | join("; "))' "$RUNNER_TEMP/overview.json")
           else
             summary="Clients job did not produce a retrievable terminal overview. Review execution and workflow logs; no API fallback or automatic retry was attempted."
           fi

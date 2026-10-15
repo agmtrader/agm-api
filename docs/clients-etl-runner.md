@@ -58,3 +58,7 @@ Deploy or update from the code workspace:
 ```
 
 The clients GitHub workflow is prepared to launch the job, poll that execution to terminal state, download its final overview, and preserve existing notifications. A workflow-only default-branch cutover commit uses `[skip ci]` to avoid triggering an unrelated API rebuild; the cloud execution itself is the acceptance test. First actual scheduled run remains a separate acceptance check. Deferred account discovery/contact reconciliation is API #294; market migration stays in #86.
+
+
+### Flex report generation pending
+When a configured clients Flex report (742588, 734782, 732383 or 794867) returns IBKR error 1019 with “Statement generation in progress”, the runner may complete successfully if backup and transformation succeed and the matching report identifies the existing backup it published. The overview warnings, GitHub summary and notification identify that no new file was generated and name the backup. Raw extraction failure evidence remains visible. A missing or failed fallback, another IBKR error, or an unaccepted details failure still fails the run.
