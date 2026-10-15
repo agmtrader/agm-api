@@ -56,6 +56,12 @@ def generate_route():
 @format_response
 def export_improsa_route():
     payload = request.get_json(force=True)
+    export_format = payload.get('format', 'xls')
+    if export_format != 'xls':
+        return {'error': 'Only the formatted Improsa XLS export is supported'}, 400
+    review_sample = payload.get('review_sample', False)
+    if not isinstance(review_sample, bool):
+        return {'error': 'review_sample must be a boolean'}, 400
     query_id = payload.get('query_id')
     if not query_id:
         return {'error': 'query_id is required'}, 400
@@ -63,7 +69,8 @@ def export_improsa_route():
     owner_query = {'query_id': query_id}
     if 'all' not in scopes:
         owner_query['user_id'] = str(g.current_user['id'])
-    if not list_trade_tickets(query=owner_query):
+    tickets = list_trade_tickets(query=owner_query)
+    if not tickets:
         return {'error': 'Trade ticket not found'}, 404
 
     execution_ids = payload.get('execution_ids') or []
@@ -82,12 +89,12 @@ def export_improsa_route():
     except KeyError as exc:
         return {'error': f'Execution not found: {exc.args[0]}'}, 400
     try:
-        workbook = generate_improsa_xls(flex_query_dict, indices)
+        workbook = generate_improsa_xls(flex_query_dict, indices, review_sample=review_sample)
     except ValueError as exc:
         return {'error': str(exc)}, 400
     return send_file(
         workbook,
         as_attachment=True,
-        download_name='improsa-trade-ticket.xls',
+        download_name='improsa-review-sample.xls' if review_sample else 'improsa-trade-ticket.xls',
         mimetype='application/vnd.ms-excel',
     )

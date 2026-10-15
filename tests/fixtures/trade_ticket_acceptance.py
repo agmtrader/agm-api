@@ -196,5 +196,113 @@ def test_missing_order_id_never_substitutes_account_or_instrument_id():
 def test_nonfinite_gross_product_rejected():
  with pytest.raises(ValueError,match='transaction value'):book([{**BASE,'Quantity':1e308,'Price':1e308}],[0])
 
+
+
+@pytest.mark.parametrize('currency',['GBP',' gbp '])
+def test_mixed_usd_gbp_xls_preserves_currency_and_source_amounts(boundary,currency):
+    http,h,lookup,reads,email=boundary
+    reads.return_value=[BASE,{**BASE,'ExecID':'execution-B','IBOrderID':'ORDER-GBP',
+                             'CurrencyPrimary':currency,'Quantity':'-7.5','Price':'12.25',
+                             'Commission':'-1.75','OtherCommission':'0','Buy/Sell':'SELL'}]
+    response=http.post('/trade_tickets/export_improsa',headers=h(),json={
+        'query_id':'owned-query','execution_ids':['execution-B','execution-A']})
+    assert response.status_code==200 and response.mimetype=='application/vnd.ms-excel'
+    sheet=xlrd.open_workbook(file_contents=response.data).sheet_by_index(0)
+    rows=[sheet.row_values(i) for i in (1,2)]
+    assert [row[0] for row in rows]==['ORDER-GBP','ORDER-A']
+    assert [row[18] for row in rows]==['GBP','dolares']
+    assert [float(rows[0][c]) for c in (8,10,13,27)]==[-7.5,12.25,91.875,1.75]
+    assert [float(rows[1][c]) for c in (8,10,13,27)]==[1000,98.25,98250,3]
+    email.assert_not_called()
+
+
+def test_removed_csv_format_is_rejected_before_flex(boundary):
+    http,h,lookup,reads,email=boundary
+    response=http.post('/trade_tickets/export_improsa',headers=h(),json={
+        'query_id':'owned-query','execution_ids':['execution-A'],'format':'csv'})
+    assert response.status_code==400 and 'XLS' in response.json['error']
+    reads.assert_not_called();email.assert_not_called()
+
+@pytest.mark.parametrize('contract',[None,'',float('nan')])
+def test_acobo_review_xls_allows_blank_contract_with_original_format(boundary,contract):
+    http,h,lookup,reads,email=boundary
+    lookup.side_effect=None;lookup.return_value=[{'query_id':'owned-query','user_id':'owner','name':'ACOBO'}]
+    reads.return_value=[{**BASE,'IBOrderID':contract,'CurrencyPrimary':'GBP'},
+                       {**BASE,'ExecID':'execution-B','IBOrderID':'ORDER-PRESENT'}]
+    request={'query_id':'owned-query','execution_ids':['execution-A','execution-B']}
+    response=http.post('/trade_tickets/export_improsa',headers=h(),json={**request,'review_sample':True})
+    assert response.status_code==200 and response.mimetype=='application/vnd.ms-excel'
+    assert 'improsa-review-sample.xls' in response.headers['Content-Disposition']
+    w=xlrd.open_workbook(file_contents=response.data,formatting_info=True);sheet=w.sheet_by_index(0)
+    assert [sheet.cell_value(r,0) for r in (1,2)]==['','ORDER-PRESENT']
+    assert sheet.cell_value(1,18)=='GBP'
+    reference=json.loads((Path(__file__).parent/'improsa_reference_fingerprints.json').read_text())
+    assert sheet.row_values(0)==reference['headers']
+    assert [sheet.colinfo_map[c].width for c in range(28)]==reference['widths']
+    assert [style_signature(w,sheet,0,c) for c in range(28)]==reference['header_styles']
+    assert [style_signature(w,sheet,1,c) for c in range(28)]==reference['data_styles']
+    assert sorted(sheet.merged_cells)==[(1,2,0,2),(2,3,0,2)]
+    strict=http.post('/trade_tickets/export_improsa',headers=h(),json=request)
+    assert strict.status_code==400 and 'contract number' in strict.json['error']
+    email.assert_not_called()
+
+
+@pytest.mark.parametrize('name',['Improsa','Unknown','ACOBO Improsa','notacobo'])
+def test_review_sample_accepts_any_authorized_ticket_name(boundary,name):
+    http,h,lookup,reads,email=boundary
+    lookup.side_effect=None;lookup.return_value=[{'query_id':'owned-query','name':name}]
+    response=http.post('/trade_tickets/export_improsa',headers=h(),json={
+        'query_id':'owned-query','execution_ids':['execution-A'],'review_sample':True,'name':'ACOBO'})
+    assert response.status_code==200 and response.mimetype=='application/vnd.ms-excel'
+    reads.assert_called_once_with('owned-query');email.assert_not_called()
+
+
+def test_review_waiver_cannot_bypass_ownership_or_other_required_fields(boundary):
+    http,h,lookup,reads,email=boundary
+    request={'query_id':'owned-query','execution_ids':['execution-A'],'review_sample':True}
+    assert http.post('/trade_tickets/export_improsa',headers=h('other'),json=request).status_code==404
+    reads.assert_not_called()
+    lookup.side_effect=None;lookup.return_value=[{'name':'ACOBO'}]
+    reads.return_value=[{k:v for k,v in BASE.items() if k not in ('IBOrderID','ISIN')}]
+    response=http.post('/trade_tickets/export_improsa',headers=h(),json=request)
+    assert response.status_code==400 and 'issue' in response.json['error']
+    email.assert_not_called()
+
+
+@pytest.mark.parametrize('flag',['true',1,None])
+def test_review_flag_must_be_boolean(boundary,flag):
+    http,h,lookup,reads,email=boundary
+    response=http.post('/trade_tickets/export_improsa',headers=h(),json={
+        'query_id':'owned-query','execution_ids':['execution-A'],'review_sample':flag})
+    assert response.status_code==400
+    lookup.assert_not_called();reads.assert_not_called()
+
+def test_admin_review_of_observed_shared_acobo_query(boundary):
+    # Read-only live metadata showed one ACOBO query assigned to four users.
+    # Admin ownership lookup legitimately returns all four matching rows.
+    http,h,lookup,reads,email=boundary
+    lookup.side_effect=None
+    lookup.return_value=[{'query_id':'owned-query','user_id':f'fixture-owner-{i}',
+                          'name':'ACOBO'} for i in range(4)]
+    reads.return_value=[{k:v for k,v in BASE.items() if k!='IBOrderID'}]
+    response=http.post('/trade_tickets/export_improsa',headers=h('admin'),json={
+        'query_id':'owned-query','execution_ids':['execution-A'],'review_sample':True})
+    assert response.status_code==200, response.get_json()
+    lookup.assert_called_once_with(query={'query_id':'owned-query'})
+    sheet=xlrd.open_workbook(file_contents=response.data).sheet_by_index(0)
+    assert sheet.nrows==2 and sheet.cell_value(1,0)==''
+    email.assert_not_called()
+
+
+def test_admin_review_accepts_shared_authorized_query_regardless_of_names(boundary):
+    http,h,lookup,reads,email=boundary
+    lookup.side_effect=None
+    lookup.return_value=[{'query_id':'owned-query','name':'ACOBO'},
+                         {'query_id':'owned-query','name':'Improsa'}]
+    response=http.post('/trade_tickets/export_improsa',headers=h('admin'),json={
+        'query_id':'owned-query','execution_ids':['execution-A'],'review_sample':True})
+    assert response.status_code==200
+    reads.assert_called_once_with('owned-query');email.assert_not_called()
+
 if __name__=='__main__':
  raise SystemExit(pytest.main([__file__,'-q']))

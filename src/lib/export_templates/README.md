@@ -1,5 +1,27 @@
 # Improsa execution export
 
+## Required output and remaining work (2026-10-15)
+
+Use the original Improsa email and its `04-09 FM.xls` and Vestima PDF attachments
+as the reference. Output must be a real formatted XLS: retain all 28 columns,
+original highlighted fills, fonts, widths, number/date formats and merged cells.
+The owner removed the temporary ACOBO CSV path. The API rejects CSV requests;
+ACOBO retains its existing email flow and now offers a separate Download
+Improsa Excel (.xls) action; Improsa retains its original XLS download.
+
+Remaining backend work is tracked in API #87: resolve the missing
+contract identifier in the ACOBO source, establish the bond trade/settlement
+amount and accrued/fee mapping from authoritative evidence. The ACOBO sample
+shortcut tracked in Dashboard #17 uses this same styled XLS exporter and still
+enforces its other required fields. ACOBO sends `review_sample: true`; the server
+checks query ownership/scopes and allows a missing contract to remain blank in
+review XLS for any authorized ticket. Shared assignment rows and ticket names
+do not restrict this owner-approved testing mode. It never substitutes account or
+instrument IDs. The download is named `improsa-review-sample.xls`; normal Improsa
+XLS still requires the contract and remains `improsa-trade-ticket.xls`.
+Review the completed workbook against the attachments and obtain recipient
+acceptance. Preserve approved USD/GBP labels; do not silently convert amounts.
+
 `improsa_layout.json` contains only formatting extracted from the owner-supplied
 legacy XLS sample, SHA-256
 `1d58e45dc11cb44b22d524aa782383bf3f9dd7ff95b53b53d60f34eb1501e983`.
@@ -14,8 +36,9 @@ verify styles, dimensions, headers and merges across multiple exported rows.
 - Gross price: IBKR Price.
 - Transaction value: positive gross `abs(Quantity * Price)`, following the
   original sample's product; NetCash, commissions and accruals do not alter it.
-- Currency: USD is written as `dolares`. Other currencies fail explicitly until
-  an authoritative mapping is provided.
+- Currency: USD is written as `dolares`. On 2026-10-15 the owner approved GBP
+  as `GBP`, preserving source amounts with no FX conversion. Other currencies
+  fail explicitly until an authoritative mapping is provided.
 - Exchange and market: Improsa output codes `BXV` and `S`.
 - Transaction type: BUY -> C, SELL -> V, preferring IBKR Buy/Sell over the
   generic TransactionType field (which can contain ExchTrade).

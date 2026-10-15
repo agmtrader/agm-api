@@ -12,6 +12,7 @@ from datetime import datetime
 from src.utils.connectors.supabase import db
 from src.utils.connectors.flex_query_api import getFlexQuery
 from src.utils.connectors.gmail import GmailConnector
+from src.components.tools.public.bond_accrual import verified_accrued_days
 
 logger.announcement('Initializing Trade Tickets Service', type='info')
 agmToken = "t=419584539155539272816800"
@@ -93,8 +94,9 @@ def _date(value):
 def _improsa_currency(value):
     if value == '':
         return ''
-    if str(value).strip().upper() == 'USD':
-        return 'dolares'
+    currency = str(value).strip().upper()
+    if currency in {'USD', 'GBP'}:
+        return {'USD': 'dolares', 'GBP': 'GBP'}[currency]
     raise ValueError(f'Unsupported Improsa currency mapping: {value}')
 
 
@@ -171,11 +173,28 @@ def _improsa_template_style(spec):
     return style
 
 
-def generate_improsa_xls(flex_query_dict, indices):
-    """Build the legacy Excel workbook required by the Improsa export."""
+def _validated_improsa_rows(flex_query_dict, indices, *, require_contract=True):
     rows = pd.DataFrame(flex_query_dict).iloc[indices].to_dict(orient='records')
     if not rows:
         raise ValueError('At least one execution must be selected.')
+    output = []
+    for row in rows:
+        values = _improsa_row(row)
+        required = {0: 'contract number', 3: 'operation date', 5: 'settlement date',
+                    6: 'issue', 8: 'face value', 10: 'gross price',
+                    13: 'transaction value', 18: 'currency', 26: 'transaction type'}
+        if not require_contract:
+            required.pop(0)
+        missing = [label for column, label in required.items() if values[column] in (None, '')]
+        if missing:
+            raise ValueError(f'Missing required Improsa fields: {", ".join(missing)}')
+        output.append(values)
+    return output
+
+
+def generate_improsa_xls(flex_query_dict, indices, *, review_sample=False):
+    """Build the legacy Excel workbook required by the Improsa export."""
+    rows = _validated_improsa_rows(flex_query_dict, indices, require_contract=not review_sample)
 
     workbook = xlwt.Workbook()
     # This profile contains only formatting extracted from the approved sample;
@@ -193,22 +212,7 @@ def generate_improsa_xls(flex_query_dict, indices):
     for column in range(len(layout['widths'])):
         worksheet.write(0, column, IMPROSA_HEADERS.get(column, ''), styles[layout['header_styles'][column]])
 
-    for row_number, source_row in enumerate(rows, start=1):
-        values = _improsa_row(source_row)
-        required_columns = {
-            0: 'contract number',
-            3: 'operation date',
-            5: 'settlement date',
-            6: 'issue',
-            8: 'face value',
-            10: 'gross price',
-            13: 'transaction value',
-            18: 'currency',
-            26: 'transaction type',
-        }
-        missing = [label for column, label in required_columns.items() if values[column] in (None, '')]
-        if missing:
-            raise ValueError(f'Missing required Improsa fields: {", ".join(missing)}')
+    for row_number, values in enumerate(rows, start=1):
         worksheet.row(row_number).height = layout['data_height']
         worksheet.write_merge(row_number, row_number, 0, 1, values[0], styles[layout['data_styles'][0]])
         for column in range(len(layout['widths'])):
@@ -243,8 +247,9 @@ def generate_trade_confirmation_message(flex_query_dict, indices):
     # Use extracted bond details
     coupon = bond_details.get('coupon')
     maturity = bond_details.get('maturity')
+    accrued_days = verified_accrued_days(df_indexed.to_dict(orient='records'))
 
-    if (df_indexed.loc[:,'AccruedInterest'] == 0).any():
+    if accrued_days is None and (df_indexed.loc[:,'AccruedInterest'] == 0).any():
         logger.error('At least one row has AccruedInterest value of 0.')
         raise Exception('At least one row has AccruedInterest value of 0.')
 
@@ -256,10 +261,13 @@ def generate_trade_confirmation_message(flex_query_dict, indices):
     df_indexed.loc[:,'NetCash'] = df_indexed['NetCash'].astype(float).abs()
     df_indexed.loc[:,'Amount'] = df_indexed['NetCash'].astype(float).abs()
 
-    try:
-        df_indexed.loc[:,'Accrued (Days)'] = round((df_indexed['AccruedInterest'].astype(float)) / (df_indexed['Coupon'].astype(float)/100 * df_indexed['Quantity'].astype(float)) * 360).astype(float)
-    except:
-        df_indexed.loc[:,'Accrued (Days)'] = 0
+    if accrued_days is not None:
+        df_indexed.loc[:, 'Accrued (Days)'] = accrued_days
+    else:
+        try:
+            df_indexed.loc[:,'Accrued (Days)'] = round((df_indexed['AccruedInterest'].astype(float)) / (df_indexed['Coupon'].astype(float)/100 * df_indexed['Quantity'].astype(float)) * 360).astype(float)
+        except:
+            df_indexed.loc[:,'Accrued (Days)'] = 0
 
     df_indexed.loc[:,'TotalAmount'] = round(df_indexed['AccruedInterest'] + df_indexed['NetCash'], 2).astype(float)
 
@@ -279,7 +287,8 @@ def generate_trade_confirmation_message(flex_query_dict, indices):
         df_consolidated.loc[:, 'Amount'] = df_indexed['NetCash'].sum()
         df_consolidated.loc[:, 'Price'] = df_indexed['Price'].sum()/len(df_indexed)
         df_consolidated.loc[:, 'Exchange'] = ''
-        df_consolidated.loc[:,'Accrued (Days)'] = round((df_consolidated['AccruedInterest'].astype(float)) / (df_consolidated['Coupon'].astype(float)/100 * df_consolidated['Quantity'].astype(float)) * 360).astype(float)
+        if accrued_days is None:
+            df_consolidated.loc[:,'Accrued (Days)'] = round((df_consolidated['AccruedInterest'].astype(float)) / (df_consolidated['Coupon'].astype(float)/100 * df_consolidated['Quantity'].astype(float)) * 360).astype(float)
         df_consolidated.loc[:,'TotalAmount'] = round(df_consolidated['AccruedInterest'] + df_consolidated['NetCash'], 2).astype(float)
         df_consolidated.loc[:,'Price (including Commissions)'] = round((df_consolidated['NetCash']/df_consolidated['Quantity']) * 100, 4).astype(float)
 
