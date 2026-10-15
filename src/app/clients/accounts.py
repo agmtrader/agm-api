@@ -6,6 +6,7 @@ from src.components.clients.accounts import read_account_details, get_forms, sub
 
 from src.components.clients.accounts import get_account_statements
 from src.components.clients.account_holder_service import get_account_holder_edit_context, change_account_holder_detail
+from src.components.clients.accounts import get_registration_tasks, get_login_messages
 from src.utils.exception import ServiceError
 
 from src.utils.response import format_response
@@ -213,6 +214,28 @@ def pending_tasks_route():
     if not account_id:
         return {"error": "Missing account_id"}, 400
     return get_pending_tasks(account_id=account_id, master_account=master_account)
+
+@bp.route('/ibkr/registration_tasks', methods=['GET'])
+@format_response
+def registration_tasks_route():
+    """Read the full IBKR registration-task inventory, including completed tasks."""
+    account_id = request.args.get('account_id', '').strip()
+    master_account = request.args.get('master_account', '').strip()
+    if not account_id or not master_account:
+        raise ServiceError('account_id and master_account are required', 400)
+    return get_registration_tasks(account_id=account_id, master_account=master_account)
+
+
+@bp.route('/ibkr/login_messages', methods=['GET'])
+@format_response
+def login_messages_route():
+    """Read Account Management login messages for the selected account."""
+    account_id = request.args.get('account_id', '').strip()
+    master_account = request.args.get('master_account', '').strip()
+    if not account_id or not master_account:
+        raise ServiceError('account_id and master_account are required', 400)
+    return get_login_messages(account_id=account_id, master_account=master_account)
+
 
 @bp.route('/ibkr/documents', methods=['POST'])
 @format_response

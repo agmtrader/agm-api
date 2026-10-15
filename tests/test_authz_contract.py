@@ -54,3 +54,36 @@ def test_actual_advisor_quote_route_filters_before_enrichment(client,monkeypatch
     assert response.status_code==200
     assert response.json==[{'ClientAccountID':'U-OWN','OpenDateTime':'20261010','Bid':99}]
     assert calls==[{'advisor_code':7}]
+
+
+@pytest.mark.parametrize('dependency', ['user', 'advisor'])
+def test_identity_store_outage_returns_503_without_executing_route(monkeypatch, dependency):
+    from src.utils.exception import ServiceError, build_error_payload
+    app = Flask(__name__)
+    app.config['JWT_SECRET_KEY'] = 'synthetic-test-signing-key-at-least-32-bytes'
+    JWTManager(app)
+    app.before_request(authz.authenticate_request)
+    app.before_request(authz.enforce_route_scope)
+    reached = []
+    def route():
+        reached.append(True)
+        return {'ok': True}
+    app.add_url_rule('/advisors/me/accounts', 'advisor_accounts', route)
+    @app.errorhandler(ServiceError)
+    def unavailable(exc):
+        return build_error_payload(exc), exc.status_code
+    def read(table, query):
+        if dependency == 'user' or table != 'user':
+            raise ServiceError('Database temporarily unavailable', status_code=503, code='database_unavailable')
+        return [{'id': 'synthetic', 'email': 'advisor@example.test', 'scopes': 'advisor'}]
+    class IdentityStore:
+        pass
+    store = IdentityStore()
+    store.read = read
+    monkeypatch.setattr(authz, 'db', store)
+    with app.app_context():
+        token = create_access_token(identity='synthetic')
+    response = app.test_client().get('/advisors/me/accounts', headers={'Authorization': 'Bearer ' + token})
+    assert response.status_code == 503
+    assert response.json['code'] == 'database_unavailable'
+    assert reached == []

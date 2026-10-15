@@ -16,6 +16,7 @@ dev/*
 !dev/backfill_risk_profile_contacts.py
 !dev/generate_qr.py
 !dev/schema_preflight.py
+!dev/check_database_capacity.py
 !dev/deploy_api.sh
 contact_document_category_analysis/
 *.csv

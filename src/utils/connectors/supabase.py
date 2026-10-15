@@ -1,5 +1,5 @@
 from sqlalchemy import BigInteger, Boolean, ForeignKey, Text, create_engine, Column, Integer, BIGINT, Numeric
-from sqlalchemy.engine import URL
+from sqlalchemy.engine import URL, make_url
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 import uuid
 from sqlalchemy.ext.declarative import declarative_base
@@ -8,6 +8,25 @@ import os
 from src.utils.managers.database_manager import DatabaseManager
 from src.utils.logger import logger
 from src.utils.managers.secret_manager import get_secret
+
+
+def application_database_url(value):
+    """Multiplex shared Supabase application connections; preserve other endpoints.
+
+    psycopg2 does not automatically prepare statements. Application operations
+    must finish their transactions and cannot depend on session-level state.
+    Maintenance tools can explicitly select DB_POOL_MODE=session or preserve.
+    """
+    mode = os.getenv('DB_POOL_MODE', 'transaction').lower()
+    if mode not in {'transaction', 'session', 'preserve'}:
+        raise ValueError('DB_POOL_MODE must be transaction, session, or preserve')
+    url = make_url(value)
+    if mode == 'preserve' or not (url.host or '').endswith('.pooler.supabase.com'):
+        return url
+    if url.port not in (None, 5432, 6543):
+        raise ValueError('Unrecognized shared Supabase pooler port')
+    return url.set(port=6543 if mode == 'transaction' else 5432)
+
 
 class Supabase:
     _instance = None
@@ -22,7 +41,7 @@ class Supabase:
         if not self._initialized:
             logger.announcement('Initializing Database Service', 'info')
 
-            self.db_url = self._resolve_db_url()
+            self.db_url = application_database_url(self._resolve_db_url())
             self.engine = self._create_engine()
             
             self.Base = declarative_base()
@@ -49,7 +68,7 @@ class Supabase:
                 logger.info('Using SUPABASE_DB_URL from Secret Manager')
                 return secret_db_url
         except Exception:
-            logger.warning('SUPABASE_DB_URL secret not found. Falling back to session pooler credentials.')
+            logger.warning('SUPABASE_DB_URL secret not found. Falling back to transaction pooler credentials.')
 
         supabase_user = get_secret('SUPABASE_USER')
         supabase_password = get_secret('SUPABASE_PASSWORD')
@@ -65,9 +84,14 @@ class Supabase:
         ).render_as_string(hide_password=False)
 
     def _create_engine(self):
-        pool_size = int(os.getenv('DB_POOL_SIZE', '3'))
+        default_size = '1' if os.getenv('DEV_MODE', '').lower() == 'true' else '3'
+        pool_size = int(os.getenv('DB_POOL_SIZE', default_size))
         max_overflow = int(os.getenv('DB_MAX_OVERFLOW', '0'))
         pool_timeout = int(os.getenv('DB_POOL_TIMEOUT', '15'))
+        if pool_size < 1 or max_overflow < 0 or pool_timeout < 1:
+            raise ValueError('DB_POOL_SIZE and DB_POOL_TIMEOUT must be positive; DB_MAX_OVERFLOW must be non-negative')
+
+        runtime = os.getenv('K_SERVICE') or os.getenv('CLOUD_RUN_JOB') or 'dev'
 
         engine = create_engine(
             self.db_url,
@@ -81,11 +105,13 @@ class Supabase:
                 'connect_timeout': 10,
                 'sslmode': 'require',
                 'gssencmode': 'disable',
+                'application_name': f'agm:{runtime}:{os.getpid()}'[:63],
             },
         )
         logger.info(
             'Created Supabase engine '
-            f'(pool_size={pool_size}, max_overflow={max_overflow}, pool_timeout={pool_timeout})'
+            f'(port={make_url(self.db_url).port}, pool_size={pool_size}, '
+            f'max_overflow={max_overflow}, pool_timeout={pool_timeout})'
         )
         return engine
 

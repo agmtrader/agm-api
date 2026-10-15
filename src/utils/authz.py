@@ -14,6 +14,7 @@ from flask_jwt_extended import get_jwt, get_jwt_identity, verify_jwt_in_request
 
 from src.utils.connectors.supabase import db
 from src.utils.logger import logger
+from src.utils.exception import ServiceError
 
 
 PUBLIC_ENDPOINTS = {"index", "docs", "token", "users.login", "application_providers.read_route"}
@@ -52,6 +53,10 @@ def _load_user(identity: object) -> dict | None:
         return None
     try:
         users = db.read(table="user", query={"id": str(identity)})
+    except ServiceError as exc:
+        if exc.status_code == 503:
+            raise
+        return None
     except Exception:
         # Authentication must fail closed if the identity store is unavailable
         # or the token contains a malformed identifier.
@@ -87,6 +92,10 @@ def get_current_advisor() -> dict | None:
             return None
         advisors = db.read(table="advisor", query={"contact_id": contacts[0]["id"]}) or []
         g.current_advisor = advisors[0] if len(advisors) == 1 else None
+    except ServiceError as exc:
+        if exc.status_code == 503:
+            raise
+        g.current_advisor = None
     except Exception:
         g.current_advisor = None
     return g.current_advisor

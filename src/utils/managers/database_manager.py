@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, Table, MetaData
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, TimeoutError as PoolTimeout, OperationalError, InterfaceError
 from sqlalchemy.orm import Session
 from datetime import datetime
 from functools import wraps
@@ -61,11 +61,11 @@ class DatabaseManager:
         code = 'database_operation_failed'
 
         error_msg = str(exc).lower()
-        if 'emaxconnsession' in error_msg or 'max clients reached' in error_msg or 'too many connections' in error_msg:
+        if isinstance(exc, PoolTimeout) or 'emaxconnsession' in error_msg or 'max clients reached' in error_msg or 'too many connections' in error_msg:
             message = 'Database connection pool exhausted. Retry later.'
             status_code = 503
             code = 'database_pool_exhausted'
-        elif 'operationalerror' in error_msg or 'could not connect' in error_msg or 'connection refused' in error_msg:
+        elif isinstance(exc, (OperationalError, InterfaceError)) or 'operationalerror' in error_msg or 'could not connect' in error_msg or 'connection refused' in error_msg:
             message = 'Database temporarily unavailable'
             status_code = 503
             code = 'database_unavailable'
@@ -181,15 +181,15 @@ class DatabaseManager:
     
 
     def with_session(self, func=None, max_retries: int = 3, delay: int = 1, commit: bool = True):
-        """Decorator to manage a SQLAlchemy session with automatic reconnection logic.
+        """Close every transaction; retry transient reads without replacing the pool.
 
         Parameters
         ----------
         func : callable
             The target function that receives a SQLAlchemy `Session` as its first argument.
         max_retries : int, optional
-            How many times to retry the wrapped function when a connection-related error
-            is detected. Defaults to 3.
+            Maximum read attempts for transient connection errors. Writes and
+            capacity failures are not replayed. Defaults to 3.
         delay : int, optional
             Seconds to wait before each retry (with simple exponential back-off). Defaults to 1.
         """
@@ -245,26 +245,21 @@ class DatabaseManager:
                     ]
 
                     is_connection_error = any(indicator in error_msg for indicator in connection_error_indicators)
-                    is_pool_exhaustion = any(
+                    is_pool_exhaustion = isinstance(e, PoolTimeout) or any(
                         indicator in error_msg
                         for indicator in ("emaxconnsession", "max clients reached", "too many connections")
                     )
 
-                    if is_connection_error and attempt < max_retries - 1:
+                    if not commit and is_connection_error and not is_pool_exhaustion and attempt < max_retries - 1:
                         retry_message = (
                             f"Connection error when executing {func.__name__} (attempt {attempt + 1}/{max_retries}): {e}. "
-                            f"pool_status={self._pool_status()}. Disposing pooled connections and retrying."
+                            f"pool_status={self._pool_status()}. Retrying read with the existing pool."
                         )
-                        if is_pool_exhaustion:
-                            logger.error(retry_message)
-                        else:
-                            logger.warning(retry_message)
-
-                        # Fully dispose of the existing engine (closes all pooled connections)
-                        try:
-                            self.engine.dispose()
-                        except Exception:
-                            pass  # Best-effort
+                        logger.warning(retry_message)
+                        # pre_ping / SQLAlchemy invalidation replace broken
+                        # connections. Disposing here would create overlapping
+                        # pools while other request threads still hold leases.
+                        session.close()
 
                         # Simple exponential back-off
                         import time  # Local import to keep module-level imports minimal

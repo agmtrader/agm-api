@@ -347,6 +347,28 @@ def get_pending_tasks(account_id: str = None, master_account: str = None) -> lis
     return ibkr_web_api.get_pending_tasks(account_id=account_id, master_account=master_account)
 
 @handle_exception
+def get_registration_tasks(account_id: str = None, master_account: str = None) -> dict:
+    result = ibkr_web_api.get_registration_tasks(account_id=account_id, master_account=master_account)
+    if result.get('hasError'):
+        raise ServiceError('IBKR could not retrieve registration tasks.', 502, code='ibkr_tasks_unavailable')
+    return result
+
+@handle_exception
+def get_login_messages(account_id: str = None, master_account: str = None) -> dict:
+    result = ibkr_web_api.get_login_messages(account_id=account_id, master_account=master_account)
+    if not isinstance(result, dict) or result.get('hasError'):
+        raise ServiceError('IBKR could not retrieve login messages.', 502, code='ibkr_login_messages_unavailable')
+    if result.get('accountId') != account_id:
+        raise ServiceError('IBKR login messages do not match the requested account.', 502, code='ibkr_account_mismatch')
+    messages = result.get('loginMessages')
+    invalid_messages = messages is not None and (
+        not isinstance(messages, list) or any(not isinstance(message, dict) for message in messages)
+    )
+    if invalid_messages or (result.get('loginMessagePresent') and not messages):
+        raise ServiceError('IBKR returned an invalid login-message response.', 502, code='ibkr_login_messages_unavailable')
+    return result
+
+@handle_exception
 def get_account_statements(
     account_id: str = None,
     start_date: str = None,

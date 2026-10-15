@@ -9,6 +9,7 @@ from src.utils.logger import logger
 from src.utils.ibkr_errors import raise_ibkr_response_error
 from functools import wraps
 from threading import RLock
+from urllib.parse import quote
 import hashlib
 import inspect
 
@@ -385,6 +386,23 @@ class IBKRWebAPI:
             if response.status_code != 200:
                 raise_ibkr_response_error(response, account_access="/accounts" in url)
             logger.success(f"Pending tasks fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @credential_locked
+    @handle_exception
+    def get_login_messages(self, account_id, master_account: str = None):
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
+        try:
+            original_creds = self._apply_credentials(master_account)
+            url = f"{self.BASE_URL}/gw/api/v1/accounts/{quote(str(account_id), safe='')}/login-messages"
+            token = self.get_bearer_token()
+            if not token:
+                raise Exception("No token found")
+            response = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=30)
+            if response.status_code != 200:
+                raise_ibkr_response_error(response, account_access=True)
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
