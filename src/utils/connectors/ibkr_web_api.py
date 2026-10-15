@@ -7,6 +7,7 @@ from src.utils.managers.secret_manager import get_secret
 from src.utils.exception import handle_exception, ServiceError
 from src.utils.logger import logger
 from src.utils.ibkr_errors import raise_ibkr_response_error
+from src.utils.ibkr_statements import statement_document
 from functools import wraps
 from threading import RLock
 from urllib.parse import quote
@@ -1440,30 +1441,13 @@ class IBKRWebAPI:
                 "Content-Type": "application/jwt"
             }
 
-            response = requests.post(url, headers=headers, data=signed_jwt)
-            
+            response = requests.post(url, headers=headers, data=signed_jwt, timeout=(10, 120))
             if response.status_code != 200:
-                 raise_ibkr_response_error(response, account_access="/accounts" in url)
+                raise_ibkr_response_error(response, account_access="/accounts" in url)
 
+            document = statement_document(response)
             logger.success("Statements fetched successfully")
-            
-            # Check content type to decide how to return
-            content_type = response.headers.get("Content-Type", "")
-            if "application/json" in content_type:
-                 return response.json()
-            else:
-                 # Return raw bytes for PDF/other formats, encoded in base64 to be JSON serializable if needed, 
-                 # or just return the raw bytes/response object depending on how this is used.
-                 # The user just asked to call it. existing functions return dicts (json).
-                 # If I return bytes, it might break callers expecting dicts if they blindly serialize.
-                 # For now, I'll return the raw content, but wrapped in a helper or just return as is?
-                 # Given the other methods return dicts, maybe I should return a dict with base64 data if it's a file.
-                 import base64
-                 return {
-                     "data": base64.b64encode(response.content).decode('utf-8'),
-                     "mime_type": content_type,
-                     "file_name": f"statement_{account_id}_{start_date}_{end_date}.{content_type.split('/')[-1]}"
-                 }
+            return document
 
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
