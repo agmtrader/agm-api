@@ -829,10 +829,11 @@ class IBKRWebAPI:
         settle_date: str,
         master_account: str = None,
         client_instruction_id: int | None = None,
+        pset_bic: str = None,
     ) -> dict:
         """Submit a COMPLEX_ASSET_TRANSFER / Basic FOP request to IBKR."""
-        if not account_id or not positions or not contra_broker_info or not currency or not trade_date or not settle_date:
-            raise ValueError("account_id, positions, contra_broker_info, currency, trade_date, and settle_date are required")
+        if not account_id or not positions or not contra_broker_info or not currency or not trade_date or not settle_date or not pset_bic:
+            raise ValueError("account_id, positions, contra_broker_info, currency, trade_date, settle_date, and pset_bic are required")
 
         try:
             parsed_trade_date = date.fromisoformat(trade_date)
@@ -900,6 +901,7 @@ class IBKRWebAPI:
                     "nonDisclosedDetail": {
                         "tradeDate": trade_date,
                         "settleDate": settle_date,
+                        "psetBic": pset_bic,
                     },
                 },
             }
@@ -912,8 +914,12 @@ class IBKRWebAPI:
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/jwt",
             }
-            response = requests.post(url, headers=headers, data=signed_jwt)
+            response = requests.post(url, headers=headers, data=signed_jwt, timeout=120)
             if response.status_code != 202:
+                if response.status_code == 422:
+                    rejected = response.json()
+                    if isinstance(rejected.get('instructionResult'), dict) and rejected['instructionResult'].get('instructionStatus') == 'REJECTED':
+                        return rejected
                 raise_ibkr_response_error(response, account_access="/accounts" in url)
             logger.success("Complex asset transfer submitted successfully")
             return response.json()
@@ -1343,6 +1349,27 @@ class IBKRWebAPI:
             if response.status_code not in (200, 208):
                 raise_ibkr_response_error(response, account_access="/accounts" in url)
             logger.success(f"Status of instruction fetched successfully")
+            return response.json()
+        finally:
+            self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @credential_locked
+    @handle_exception
+    def get_external_transfer_status(self, master_account: str, instruction_id: str = None, client_instruction_id: str = None):
+        """Read a persisted transfer identity, including recovery after a lost POST response."""
+        original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
+        try:
+            original_creds = self._apply_credentials(master_account)
+            identity = instruction_id or client_instruction_id
+            if not identity or not str(identity).isdigit():
+                raise ServiceError('A numeric saved instruction reference is required', 400)
+            resource = 'instructions' if instruction_id else 'client-instructions'
+            response = requests.get(
+                f'{self.BASE_URL}/gw/api/v1/{resource}/{identity}',
+                headers={'Authorization': f'Bearer {self.get_bearer_token()}'}, timeout=40,
+            )
+            if response.status_code not in (200, 208):
+                raise_ibkr_response_error(response)
             return response.json()
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds

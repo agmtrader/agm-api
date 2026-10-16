@@ -7,6 +7,7 @@ from src.components.clients.accounts import read_account_details, get_forms, sub
 from src.components.clients.accounts import get_account_statements
 from src.components.clients.account_holder_service import get_account_holder_edit_context, change_account_holder_detail
 from src.components.clients.accounts import get_registration_tasks, get_login_messages
+from src.components.clients import external_transfers
 from src.utils.exception import ServiceError
 
 from src.utils.response import format_response
@@ -457,28 +458,26 @@ def read_ibkr_account_positions_route():
 @bp.route('/ibkr/external_asset_transfer', methods=['POST'])
 @format_response
 def transfer_positions_externally_complex_route():
-    """Submit a COMPLEX_ASSET_TRANSFER request to IBKR."""
-    payload = request.get_json(force=True) or {}
-    account_id = payload.get('account_id')
-    master_account = payload.get('master_account')
-    positions = payload.get('positions')
-    contra_broker_info = payload.get('contra_broker_info')
-    currency = payload.get('currency')
-    trade_date = payload.get('trade_date')
-    settle_date = payload.get('settle_date')
-    if not account_id or not master_account or not positions or not contra_broker_info or not currency or not trade_date or not settle_date:
-        return {
-            'error': 'account_id, master_account, positions, contra_broker_info, currency, trade_date, and settle_date are required'
-        }, 400
-    return transfer_positions_externally_complex(
-        account_id=account_id,
-        master_account=master_account,
-        positions=positions,
-        contra_broker_info=contra_broker_info,
-        currency=currency,
-        trade_date=trade_date,
-        settle_date=settle_date,
-    )
+    """Persist and submit one outbound request using stored account/master context."""
+    return external_transfers.submit_transfer(request.get_json(force=True))
+
+
+@bp.route('/ibkr/external_asset_transfers', methods=['GET'])
+@format_response
+def external_asset_transfers_route():
+    return external_transfers.list_transfers(request.args.get('account_id'))
+
+
+@bp.route('/ibkr/external_asset_transfer/status', methods=['POST'])
+@format_response
+def external_asset_transfer_status_route():
+    return external_transfers.refresh_transfer(request.get_json(force=True) or {})
+
+
+@bp.route('/ibkr/external_asset_transfer/ticket', methods=['POST'])
+@format_response
+def external_asset_transfer_ticket_route():
+    return external_transfers.save_ticket(request.get_json(force=True) or {})
 
 @bp.route('/ibkr/financial_ranges', methods=['GET'])
 @format_response

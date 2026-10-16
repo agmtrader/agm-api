@@ -503,6 +503,8 @@ def transfer_positions_externally_complex(
     currency: str,
     trade_date: str,
     settle_date: str,
+    pset_bic: str,
+    client_instruction_id: int = None,
 ) -> dict:
     """Submit a Treasury bill Basic FOP request through IBKR."""
     return ibkr_web_api.transfer_positions_externally_complex(
@@ -513,6 +515,8 @@ def transfer_positions_externally_complex(
         currency=currency,
         trade_date=trade_date,
         settle_date=settle_date,
+        pset_bic=pset_bic,
+        client_instruction_id=client_instruction_id,
     )
 
 @handle_exception

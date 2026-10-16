@@ -32,3 +32,39 @@ def test_contact_profile_route_filters_by_id_and_contact_without_global_fallback
     response=app.test_client().get('/risk_profiles/read?contact_id=selected&id=profile')
     assert response.status_code==200
     loader.assert_called_once_with(query={'contact_id':'selected','id':'profile'})
+
+
+def test_bulk_contact_and_screening_routes_apply_one_filtered_database_read(monkeypatch):
+    from src.app.clients import contacts as routes
+    db = Mock()
+    db.read.return_value = []
+    monkeypatch.setattr(contacts, 'db', db)
+    app = Flask(__name__)
+    app.register_blueprint(routes.bp, url_prefix='/contacts')
+    client = app.test_client()
+    for url, table, query in [
+        ('/contacts/read?id=one&id=two&id=one', 'contact', {'id': ['one', 'two']}),
+        ('/contacts/read?id=one&email=own@example.com', 'contact', {'id': 'one', 'email': 'own@example.com'}),
+        ('/contacts/read', 'contact', {}),
+        ('/contacts/screening?contact_id=one&contact_id=two', 'contact_screening', {'contact_id': ['one', 'two']}),
+        ('/contacts/screening?contact_id=one', 'contact_screening', {'contact_id': 'one'}),
+        ('/contacts/screening', 'contact_screening', {}),
+    ]:
+        db.read.reset_mock()
+        response = client.get(url)
+        assert response.status_code == 200
+        assert response.get_json() == []
+        db.read.assert_called_once_with(table=table, query=query)
+
+
+def test_bulk_id_filters_reject_blank_and_oversized_selections_without_reading(monkeypatch):
+    from src.app.clients import contacts as routes
+    db = Mock()
+    monkeypatch.setattr(contacts, 'db', db)
+    app = Flask(__name__)
+    app.register_blueprint(routes.bp, url_prefix='/contacts')
+    for path, parameter in [('/read', 'id'), ('/screening', 'contact_id')]:
+        for values in [[''], ['one', ' '], ['one'] * 101]:
+            response = app.test_client().get('/contacts' + path, query_string=[(parameter, value) for value in values])
+            assert response.status_code == 400
+    db.read.assert_not_called()

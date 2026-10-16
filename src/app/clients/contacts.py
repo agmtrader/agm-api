@@ -11,8 +11,19 @@ from src.components.clients.contacts import (
     read_contact_screenings
 )
 from src.utils.response import format_response
+from src.utils.exception import ServiceError
 
 bp = Blueprint('contacts', __name__)
+
+def _read_id_filter(name, values):
+    """Accept one ID or up to 100 repeated IDs; blank filters never read all rows."""
+    if not values:
+        return None
+    if len(values) > 100 or any(not value.strip() for value in values):
+        raise ServiceError(f'{name} requires 1 to 100 nonblank IDs', status_code=400)
+    ids = list(dict.fromkeys(value.strip() for value in values))
+    return ids[0] if len(ids) == 1 else ids
+
 
 @bp.route('/create', methods=['POST'])
 @format_response
@@ -25,9 +36,9 @@ def create_contact_route():
 @bp.route('/read', methods=['GET'])
 @format_response
 def contacts_route():
-    """Read contacts from the database filtered by id or email address."""
+    """Read contacts by id (repeat up to 100 for bulk reads) and/or email."""
     query = {}
-    id = request.args.get('id', None)
+    id = _read_id_filter('id', request.args.getlist('id'))
     email = request.args.get('email', None)
     if id:
         query['id'] = id
@@ -114,8 +125,8 @@ def delete_contact_document_route():
 @bp.route('/screening', methods=['GET'])
 @format_response
 def read_contact_screenings_route():
-    """Read screening results associated with a contact."""
-    contact_id = request.args.get('contact_id', None)
+    """Read screening results by contact_id (repeat up to 100 for bulk reads)."""
+    contact_id = _read_id_filter('contact_id', request.args.getlist('contact_id'))
     return read_contact_screenings(contact_id=contact_id)
 
 

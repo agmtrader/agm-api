@@ -1011,6 +1011,6 @@ def create_contact_screenings_batch_from_contact_ids(
 
 
 @handle_exception
-def read_contact_screenings(contact_id: str = None):
+def read_contact_screenings(contact_id: str | list[str] = None):
     query = {'contact_id': contact_id} if contact_id else {}
     return db.read(table=contact_screening_table, query=query) or []

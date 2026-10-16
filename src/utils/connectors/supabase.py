@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Boolean, ForeignKey, Text, create_engine, Column, Integer, BIGINT, Numeric
+from sqlalchemy import BigInteger, Boolean, ForeignKey, Text, create_engine, Column, Integer, BIGINT, Numeric, Identity
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 import uuid
@@ -185,6 +185,30 @@ class Supabase:
             account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
+
+        class ExternalAssetTransfer(self.Base):
+            __tablename__ = 'external_asset_transfer'
+            id = Column(UUID(as_uuid=True), primary_key=True)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id'), nullable=False)
+            master_account = Column(Text, nullable=False)
+            ibkr_account_id = Column(Text, nullable=False)
+            client_instruction_id = Column(BigInteger, Identity(start=1000000000000000), nullable=False, unique=True)
+            submission_state = Column(Text, nullable=False)
+            request_data = Column(JSONB, nullable=False)
+            instruction_id = Column(Text, nullable=True)
+            instruction_set_id = Column(Text, nullable=True)
+            ib_reference_id = Column(Text, nullable=True)
+            instruction_status = Column(Text, nullable=True)
+            clearing_state = Column(Text, nullable=True)
+            last_error = Column(JSONB, nullable=True)
+            message_center_ticket_reference = Column(Text, nullable=True)
+            ticket_created_at = Column(Text, nullable=True)
+            ticket_recorded_at = Column(Text, nullable=True)
+            ticket_url = Column(Text, nullable=True)
+            portal_transfer_reference = Column(Text, nullable=True)
+            receiving_broker_bmo_acceptance = Column(Boolean, nullable=True)
+            created = Column(Text, nullable=False)
+            updated = Column(Text, nullable=False)
 
         class Advisor(self.Base):
             __tablename__ = 'advisor'
