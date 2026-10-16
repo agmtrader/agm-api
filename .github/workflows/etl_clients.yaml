@@ -16,6 +16,7 @@ jobs:
     outputs:
       summary: ${{ steps.summary.outputs.summary }}
     steps:
+      - uses: actions/checkout@v4
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -49,13 +50,10 @@ jobs:
         id: summary
         if: ${{ always() }}
         shell: bash
+        env:
+          CLIENTS_ETL_EXECUTION: ${{ steps.execute.outputs.execution }}
         run: |
-          if [ -f "$RUNNER_TEMP/overview.json" ]; then
-            summary=$(jq -r '"Clients ETL: \(.operational_status)\nExecution: \(.run_id)\nRaw pipeline: \(.status)\nExtract: \(.overview.extract.status)\nBackup: \(.overview.backup.status)\nTransform: \(.overview.transform.status)\nIBKR refresh: " + ([.overview.extract.steps[]? | select(.name=="account_details") | .summary | "\(.successful) fresh, \(.failed) coverage gaps, \(.retained_stale) retained stale"] | join("")) + "\nReport warnings: " + ((.warnings // []) | map("\(.name): \(.message) Backup: \(.backup_file)") | join("; "))' "$RUNNER_TEMP/overview.json")
-          else
-            summary="Clients job did not produce a retrievable terminal overview. Review execution and workflow logs; no API fallback or automatic retry was attempted."
-          fi
-          printf 'summary<<EOF\n%s\nEOF\n' "$summary" >> "$GITHUB_OUTPUT"
+          python3 .github/scripts/clients_etl_summary.py
 
   notify-success:
     needs: etl
