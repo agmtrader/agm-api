@@ -13,7 +13,7 @@ def _run_daily_agreements(payload, *, dry_run):
     started = datetime.now(timezone.utc).isoformat()
     result = IBKRWebAPI().submit_all_agreements(master_account=master.strip().upper(), dry_run=dry_run)
     keys = ('ok','ready','submitted','masterAccount','formsRequested','documentsPrepared',
-            'accepted','rejected','skipped','requestBytes','results')
+            'accepted','rejected','skipped','requestBytes','results','requestId','dateSubmitted')
     return {**{key: result[key] for key in keys if key in result},
             'mode': 'preparation' if dry_run else 'submission', 'expectedForms': list(DAILY_AGREEMENT_FORM_NUMBERS),
             'startedAt': started, 'completedAt': datetime.now(timezone.utc).isoformat()}

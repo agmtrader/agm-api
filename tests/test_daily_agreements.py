@@ -28,10 +28,12 @@ def agreement_client(monkeypatch):
 
 def test_complete_batch_preserves_payload_and_explicit_acceptance(agreement_client):
     api,post,response,forms,raw=agreement_client
+    response.json.return_value.update(requestId=12345,dateSubmitted='2026-10-20T11:00:00Z')
     result=api.submit_all_agreements(master_account='I6413690')
-    assert result['ok'] and result['accepted']==24
+    assert result['ok'] and result['accepted']==len(module.DAILY_AGREEMENT_FORM_NUMBERS)
+    assert result['requestId']==12345 and result['dateSubmitted']=='2026-10-20T11:00:00Z'
     body=api.sign_request.call_args.args[0]
-    assert len(body['processDocuments']['documents'])==24
+    assert len(body['processDocuments']['documents'])==len(module.DAILY_AGREEMENT_FORM_NUMBERS)
     for doc in body['processDocuments']['documents']:
         assert base64.b64decode(doc['payload']['data'])==raw
         assert int(doc['attachedFile']['fileLength'])==len(raw)
@@ -46,7 +48,7 @@ def test_complete_batch_preserves_payload_and_explicit_acceptance(agreement_clie
 def test_incomplete_or_empty_acknowledgement_never_means_all_accepted(agreement_client,body):
     api,post,response,_,_=agreement_client;response.json.return_value=body
     result=api.submit_all_agreements(master_account='I6413690')
-    assert result['ok'] is False and result['accepted']<24
+    assert result['ok'] is False and result['accepted']<len(module.DAILY_AGREEMENT_FORM_NUMBERS)
     assert post.call_count==1
 
 
@@ -66,7 +68,7 @@ def test_invalid_pdf_identity_aborts_whole_batch_before_post(agreement_client,mu
         return result
     api.get_forms.side_effect=corrupt
     result=api.submit_all_agreements(master_account='I6413690')
-    assert result['ok'] is False and result['skipped']==1 and result['documentsPrepared']==23
+    assert result['ok'] is False and result['skipped']==1 and result['documentsPrepared']==len(module.DAILY_AGREEMENT_FORM_NUMBERS)-1
     post.assert_not_called();api.sign_request.assert_not_called()
 
 
@@ -74,7 +76,7 @@ def test_dry_run_is_no_submit_and_not_acceptance(agreement_client):
     api,post,_,_,_=agreement_client
     result=api.submit_all_agreements(master_account='I6413690',dry_run=True)
     assert result['ready'] and result['submitted'] is False and result['ok'] is False
-    assert result['documentsPrepared']==24 and result['accepted']==0
+    assert result['documentsPrepared']==len(module.DAILY_AGREEMENT_FORM_NUMBERS) and result['accepted']==0
     post.assert_not_called();api.get_bearer_token.assert_not_called();api.sign_request.assert_not_called()
 
 
@@ -110,3 +112,15 @@ def test_provider_batch_error_cannot_be_overridden_by_document_statuses(agreemen
     response.json.return_value['hasError']=True
     result=api.submit_all_agreements(master_account='I6413690')
     assert not result['ok'] and result['accepted']==0
+
+
+def test_daily_preload_includes_all_five_new_agreements(agreement_client):
+    api,post,_,_,_=agreement_client
+    required={3230,3044,4615,4155,4402}
+    assert len(module.DAILY_AGREEMENT_FORM_NUMBERS)==29
+    assert required.issubset(module.DAILY_AGREEMENT_FORM_NUMBERS)
+    assert not {5001,9902,8001,8002}.intersection(module.DAILY_AGREEMENT_FORM_NUMBERS)
+    api.submit_all_agreements(master_account='I6413690')
+    submitted={int(document['formNumber']) for document in api.sign_request.call_args.args[0]['processDocuments']['documents']}
+    assert submitted==set(module.DAILY_AGREEMENT_FORM_NUMBERS)
+    assert required.issubset({int(call.kwargs['forms'][0]) for call in api.get_forms.call_args_list})

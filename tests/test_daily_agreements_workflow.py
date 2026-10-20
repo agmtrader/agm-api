@@ -21,12 +21,12 @@ STEPS=WORKFLOW['jobs']['prepare']['steps']
 def preparation():
     numbers=daily_agreements.DAILY_AGREEMENT_FORM_NUMBERS
     return {'ok':False,'ready':True,'submitted':False,'masterAccount':'I6413690','mode':'preparation',
-            'formsRequested':24,'documentsPrepared':24,'accepted':0,'rejected':0,'skipped':0,
+            'formsRequested':len(numbers),'documentsPrepared':len(numbers),'accepted':0,'rejected':0,'skipped':0,
             'expectedForms':numbers,'results':[{'formNumber':str(n),'status':'Prepared'} for n in numbers]}
 
 
 def submission():
-    return {**preparation(), 'ok': True, 'submitted': True, 'mode': 'submission', 'accepted': 24,
+    return {**preparation(), 'ok': True, 'submitted': True, 'mode': 'submission', 'accepted': len(daily_agreements.DAILY_AGREEMENT_FORM_NUMBERS),
             'results': [{'formNumber': str(n), 'status': 'Accepted'} for n in daily_agreements.DAILY_AGREEMENT_FORM_NUMBERS]}
 
 
@@ -123,10 +123,11 @@ def test_route_requires_verified_identity_and_scope(route):
 
 def test_live_route_submits_once_and_strips_raw_response(route):
     http,headers,_,client=route
-    client.submit_all_agreements.return_value = {**submission(), 'ibkrResponse': {'private': 'omitted'}}
+    client.submit_all_agreements.return_value = {**submission(), 'requestId':12345, 'dateSubmitted':'2026-10-20T11:00:00Z', 'ibkrResponse': {'private': 'omitted'}}
     response=http.post('/actions/submit_daily_agreements',headers=headers,json={'master_account':'I6413690'})
     assert response.status_code==200 and response.json['mode']=='submission'
-    assert response.json['accepted']==24 and 'ibkrResponse' not in response.json
+    assert response.json['accepted']==len(daily_agreements.DAILY_AGREEMENT_FORM_NUMBERS) and 'ibkrResponse' not in response.json
+    assert response.json['requestId']==12345 and response.json['dateSubmitted']=='2026-10-20T11:00:00Z'
     client.submit_all_agreements.assert_called_once_with(master_account='I6413690',dry_run=False)
 
 
@@ -136,3 +137,26 @@ def test_live_route_auth_scope_and_payload_validation(route):
     assert http.post('/actions/submit_daily_agreements',headers=denied,json={'master_account':'I6413690'}).status_code==403
     assert http.post('/actions/submit_daily_agreements',headers=headers,json={'master_account':'UNKNOWN'}).status_code==422
     client.submit_all_agreements.assert_not_called()
+
+
+def test_workflow_requires_expanded_coverage_not_an_old_successful_batch(tmp_path):
+    payload=submission()
+    old_numbers=[n for n in payload['expectedForms'] if n not in {3230,3044,4615,4155,4402}]
+    payload.update(expectedForms=old_numbers,formsRequested=24,documentsPrepared=24,accepted=24,
+                   results=[{'formNumber':str(n),'status':'ACCEPTED'} for n in old_numbers])
+    result,summary,_=execute(tmp_path,payload)
+    assert result.returncode==1 and 'FAILED' in summary
+
+
+def test_workflow_retains_a_verified_preload_receipt(tmp_path):
+    payload={**submission(),'requestId':12345,'dateSubmitted':'2026-10-20T11:00:00Z','ibkrResponse':{'private':'must-not-retain'},'payload':{'data':'must-not-retain'}}
+    for row in payload['results']:row['status']=' ACCEPTED '
+    result,summary,_=execute(tmp_path,payload)
+    assert result.returncode==0,result.stderr
+    receipt=json.loads((tmp_path/'daily-agreements-receipt.json').read_text())
+    assert receipt['verified'] is True and receipt['masterAccount']=='I6413690'
+    assert receipt['requestId']==12345 and len(receipt['results'])==29
+    assert 'must-not-retain' not in json.dumps(receipt)
+    assert 'Request ID: 12345' in summary and 'All 29 forms' in summary
+    artifact=next(step for step in STEPS if step.get('uses','').startswith('actions/upload-artifact@'))
+    assert 'daily-agreements-receipt.json' in artifact['with']['path']

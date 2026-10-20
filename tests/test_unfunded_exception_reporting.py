@@ -203,3 +203,43 @@ def test_no_candidates_returns_empty_success(batch_client):
     assert response.json == {'status': 'success', 'summary': {'total': 0, 'sent': 0, 'failed': 0, 'skipped': 0},
                              'recipients': []}
     execute.assert_not_called()
+
+
+@pytest.mark.parametrize('primary_email,secondary_email,expected', [
+    (None, 'second@example.test', 'second@example.test'),
+    ('first@example.test', 'second@example.test', 'first@example.test'),
+    (None, None, None),
+])
+def test_requested_joint_holder_fallback_and_account_exclusion(batch_client, primary_email, secondary_email, expected):
+    import inspect
+    import sys
+    from src.components.tools.private.actions import UNFUNDED_ACCOUNT_EXCLUSIONS
+    client, execute, connector = batch_client
+    ns = inspect.unwrap(client.application.view_functions['unfunded']).__globals__
+    ns['UNFUNDED_ACCOUNT_EXCLUSIONS'] = UNFUNDED_ACCOUNT_EXCLUSIONS
+    account_module = sys.modules['src.components.clients.accounts']
+    account_module.read_accounts.return_value = [
+        {'id': 'joint', 'ibkr_account_number': 'U28420921', 'contact_id': 'first', 'advisor_code': 1,
+         'application_json': {'customer': {'jointHolders': {'secondHolderDetails': [{'externalId': 'second-holder'}]}}}},
+        {'id': 'excluded', 'ibkr_account_number': 'U27090911', 'contact_id': 'second', 'advisor_code': 1}]
+    account_module.read_account_contacts.return_value = [
+        {'account_id': 'joint', 'contact_id': 'first', 'external_id': 'first-holder'},
+        {'account_id': 'joint', 'contact_id': 'second', 'external_id': 'second-holder'},
+        {'account_id': 'joint', 'contact_id': 'trusted', 'external_id': 'trusted-contact'}]
+    sys.modules['src.components.clients.contacts'].read_contacts.return_value = [
+        {'id': 'first', 'name': 'Synthetic First', 'email': primary_email},
+        {'id': 'second', 'name': 'Synthetic Second', 'email': secondary_email},
+        {'id': 'trusted', 'name': 'Synthetic Trusted', 'email': 'trusted@example.test'},
+        {'id': 'ad', 'name': 'Synthetic Advisor', 'email': 'advisor@example.test'}]
+    ns['get_nav_report'] = lambda: [{'ClientAccountID': n, 'Total': 0} for n in ('U28420921', 'U27090911')]
+    ns['get_clients_report'] = lambda: [{'Account ID': n, 'Status': 'Open', 'Date Opened': '2026-10-01'} for n in ('U28420921', 'U27090911')]
+    response = client.get('/actions/send_unfunded_emails')
+    assert response.status_code == 200
+    assert len(response.json['recipients']) == 1
+    recipient = response.json['recipients'][0]
+    assert recipient['ibkr_account_number'] == 'U28420921'
+    assert recipient['email'] == expected
+    assert recipient['status'] == ('sent' if expected else 'skipped')
+    assert execute.call_count == (1 if expected else 0)
+    if expected:
+        assert connector.create_html_email.call_args.args[2] == expected

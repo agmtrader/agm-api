@@ -137,12 +137,12 @@ def test_stable_transform_ignores_newer_companion_report():
          {'id': 'details', 'name': 'account_details_20261014.json'}], []]
     fake.get_most_recent_file.side_effect = lambda files: files[0]
     fake.download_file.return_value = [detail(name='fresh')]
-    with patch.object(etl, 'Drive', fake):
+    with patch.object(etl, 'Drive', fake), patch.object(etl, '_publish_report') as publish:
         result = etl.process_report({'name': 'account_details', 'backup_folder_id': 'folder',
             'backup_name': 'account_details_20261014.json', 'output_filename': 'ibkr_account_details.json'})
     assert result['status'] == 'success'
     assert fake.download_file.call_args.kwargs['file_id'] == 'details'
-    saved = json.loads(base64.b64decode(fake.upload_file.call_args.kwargs['file_data']))
+    saved = json.loads(base64.b64decode(publish.call_args.args[2]))
     assert saved[0]['associatedPersons'][0]['firstName'] == 'fresh'
 
 

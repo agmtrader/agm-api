@@ -53,6 +53,7 @@ UNFUNDED_ACCOUNT_EXCLUSIONS = frozenset({
     'U6170355',
     'U26450466',
     'U26540841',
+    'U27090911',
 })
 
 # Accounts page rounds NAV to whole currency units. Treat values below half a
@@ -99,6 +100,8 @@ def run_screenings(apply_screenings: bool = True) -> dict:
     if comparison.get('all_available') and comparison.get('all_same'):
         return {
             'apply_screenings': apply_screenings,
+            'status': 'skipped',
+            'screening_errors_count': 0,
             'screenings_skipped': True,
             'skip_reason': 'OFAC, UK, and UN sanctions lists unchanged vs yesterday',
             'sanctions_comparison': compact_comparison,
@@ -117,6 +120,8 @@ def run_screenings(apply_screenings: bool = True) -> dict:
             reason += f" (comparison unavailable for: {', '.join(unavailable)})"
         return {
             'apply_screenings': apply_screenings,
+            'status': 'skipped',
+            'screening_errors_count': 0,
             'screenings_skipped': True,
             'skip_reason': reason,
             'sanctions_comparison': compact_comparison,
@@ -153,7 +158,25 @@ def run_screenings(apply_screenings: bool = True) -> dict:
     }
     contact_ids = [contact_id for contact_id in contact_ids if contact_id not in screened_today]
     result['contacts_targeted'] = len(contact_ids)
+    result['total_screenings_planned'] = len(contact_ids)
+    historical_ids = {row.get('contact_id') for row in screenings if row.get('contact_id')}
+    account_contacts = {}
+    for link in links:
+        if link.get('account_id') and link.get('contact_id'):
+            account_contacts.setdefault(link['account_id'], set()).add(link['contact_id'])
+    targets = set(contact_ids)
+    result['contacts_with_no_screenings'] = len(targets - historical_ids)
+    relevant = [ids for ids in account_contacts.values() if ids & targets]
+    result['accounts_targeted'] = len(relevant)
+    result['accounts_with_no_screenings_at_all'] = sum(not ids & historical_ids for ids in relevant)
+    result['accounts_with_some_contacts_no_screenings'] = sum(bool(ids & historical_ids) and bool(ids - historical_ids) for ids in relevant)
+    result['screening_errors_count'] = 0
+    result['status'] = 'success'
+    if not contact_ids:
+        result.update(status='skipped', screenings_skipped=True, skip_reason='All linked contacts already screened today')
+        return result
     if not apply_screenings:
+        result['status'] = 'preview'
         return result
 
     batch_result = create_contact_screenings_batch_from_contact_ids(
@@ -163,6 +186,10 @@ def run_screenings(apply_screenings: bool = True) -> dict:
     result['screenings_executed'] = batch_result.get('inserted', 0)
     result['screening_errors'] = batch_result.get('screening_errors', [])
     result['screening_error_contact_ids'] = batch_result.get('screening_error_contact_ids', [])
+    result['screening_errors_count'] = len(result['screening_errors'])
+    result.update(batch_result.get('match_summary', {}))
+    if result['screening_errors_count'] or result['screenings_executed'] != len(contact_ids):
+        result['status'] = 'partial' if result['screenings_executed'] else 'failed'
     return result
 
 @handle_exception
@@ -294,6 +321,33 @@ def send_unfunded_emails():
     )
 
     contacts_to_email = total_accounts.merge(contacts_df, left_on='contact_id', right_on='id', how='left')
+    # A missing selected-holder email must not hide the other linked holder.
+    # Resolve the second holder by stored application identity, never any linked contact.
+    valid_email = lambda value: isinstance(value, str) and bool(re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', value.strip()))
+    for index, recipient in contacts_to_email.iterrows():
+        if recipient['ibkr_account_number'] != 'U28420921' or valid_email(recipient.get('email')):
+            continue
+        joint_accounts = [a for a in accounts_data if a.get('ibkr_account_number') == 'U28420921']
+        if len(joint_accounts) != 1:
+            continue
+        joint_account = joint_accounts[0]
+        application = joint_account.get('application_json') or {}
+        joint = (application.get('customer') or {}).get('jointHolders') or {}
+        holders = joint.get('secondHolderDetails') or []
+        if not isinstance(holders, list) or len(holders) != 1 or not isinstance(holders[0], dict):
+            continue
+        holder = holders[0]
+        external_id = str(holder.get('externalId') or '').strip()
+        entity_id = holder.get('entityId')
+        linked_ids = {link.get('contact_id') for link in account_contacts_data
+            if link.get('account_id') == joint_account['id'] and (
+                (external_id and str(link.get('external_id') or '').strip() == external_id)
+                or (entity_id is not None and str(link.get('entity_id')) == str(entity_id)))}
+        alternatives = [c for c in contacts_data if c.get('id') in linked_ids and valid_email(c.get('email'))]
+        # Do not guess if more than one alternative recipient is present.
+        if len(alternatives) == 1:
+            contacts_to_email.at[index, 'email'] = alternatives[0]['email'].strip()
+            contacts_to_email.at[index, 'name'] = alternatives[0].get('name')
     contacts_to_email = contacts_to_email[['ibkr_account_number', 'email', 'name', 'advisor_email', 'business_days_since_date_opened', 'notice_number']]
 
     with_client_email = int(contacts_to_email['email'].map(lambda value: isinstance(value, str) and bool(value.strip())).sum())

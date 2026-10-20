@@ -12,7 +12,10 @@ import json
 from functools import wraps
 from copy import deepcopy
 import xml.etree.ElementTree as ET
-from io import StringIO
+from io import StringIO, BytesIO
+import hashlib
+import uuid
+from googleapiclient.http import MediaIoBaseUpload
 
 from src.utils.connectors.drive import GoogleDrive
 from src.utils.connectors.flex_query_api import getFlexQuery
@@ -154,8 +157,23 @@ def extract_data(etl_config) -> dict:
             continue
         try:
             result = extract_func(file_config)
-            steps.append(dict(result or {}, name=step_name,
-                              status=(result or {}).get('status', 'success')))
+            # DataFrames are data, never boolean execution metadata.
+            if isinstance(result, pd.DataFrame):
+                outcome = {'status': 'success', 'row_count': len(result)}
+            elif isinstance(result, dict):
+                outcome = dict(result)
+                outcome.setdefault('status', 'success')
+            elif result is None:
+                outcome = {'status': 'success'}
+            else:
+                raise TypeError('Unsupported extractor result type')
+            if file_config.get('pipeline') == 'market_data':
+                source = file_config.get('_extracted_source')
+                if not isinstance(source, dict) or not source.get('id'):
+                    raise ValueError('Market extract did not record its uploaded source')
+                outcome['source_file_id'] = source['id']
+                outcome['source_file'] = source['name']
+            steps.append(dict(outcome, name=step_name))
         except Exception as e:
             logger.error(f'Error during {step_name}: {e}')
             steps.append({'name': step_name, 'status': 'failed', 'error': str(e)})
@@ -498,9 +516,7 @@ def extract_bond_snapshot(config=None):
         report_config = config or _get_file_config('bonds_snapshot', [market_data_etl])
         if report_config is None:
             raise Exception('Missing report config for bonds_snapshot')
-        file_name = report_config['backup_name']
-        backup_folder_id = report_config['backup_folder_id']
-        Drive.upload_file(file_name=file_name, mime_type='text/csv', file_data=df.to_dict(orient='records'), parent_folder_id=backup_folder_id)
+        _upload_market_snapshot(report_config, df)
         return df
 
     except Exception as e:
@@ -829,13 +845,7 @@ def _extract_equity_like_snapshot(
         if market_data_snapshot_config is None:
             raise Exception(f'Missing report config for {config_name}')
 
-        file_name = market_data_snapshot_config['backup_name']
-        Drive.upload_file(
-            file_name=file_name,
-            mime_type='text/csv',
-            file_data=df.to_dict(orient='records'),
-            parent_folder_id=market_data_snapshot_config['backup_folder_id']
-        )
+        _upload_market_snapshot(market_data_snapshot_config, df)
     return df
 
 @_with_ibkr_market_data_session
@@ -990,13 +1000,7 @@ def extract_ust_bond_snapshot(config=None):
     if market_data_snapshot_config is None:
         raise Exception('Missing report config for ust_bonds_snapshot')
 
-    file_name = market_data_snapshot_config['backup_name']
-    Drive.upload_file(
-        file_name=file_name,
-        mime_type='text/csv',
-        file_data=df.to_dict(orient='records'),
-        parent_folder_id=market_data_snapshot_config['backup_folder_id']
-    )
+    _upload_market_snapshot(market_data_snapshot_config, df)
     return df
 
 @_with_ibkr_market_data_session
@@ -1226,6 +1230,60 @@ def transform_data(etl_config) -> dict:
         'reports': processed_reports
     }
 
+def _upload_market_snapshot(config, frame):
+    """Retain the exact uploaded source for this request, separately from its rows."""
+    uploaded = Drive.upload_file(file_name=config['backup_name'], mime_type='text/csv',
+        file_data=frame.to_dict(orient='records'), parent_folder_id=config['backup_folder_id'])
+    if not isinstance(uploaded, dict) or not uploaded.get('id'):
+        raise ValueError('Market snapshot upload returned no file ID')
+    config['_extracted_source'] = {'id': uploaded['id'], 'name': config['backup_name']}
+
+
+def _publish_report(filename, mime_type, payload):
+    """Verify a staged upload before updating the stable resource, without pre-delete.
+
+    An interrupted update has an uncertain outcome; never replay it automatically.
+    The old stable file is never deleted, so its identity/permissions survive.
+    Uncertain staging files use a noncanonical name and are left for inspection.
+    """
+    if isinstance(payload, list):
+        raw = pd.DataFrame(payload).to_csv(index=False).encode('utf-8')
+    else:
+        raw = base64.b64decode(payload, validate=True)
+    checksum = hashlib.md5(raw).hexdigest()
+    existing = [f for f in Drive.get_files_in_folder(resources_folder_id)
+                if f.get('name') == filename]
+    if len(existing) > 1:
+        raise ValueError(f'Ambiguous reporting resource: {filename}')
+    # Existing readers use substring matching; never put a canonical basename in a stage name.
+    stage_name = f'.etl-pending-{uuid.uuid4().hex}'
+    stage = Drive.upload_file(file_name=stage_name, mime_type=mime_type,
+        file_data=base64.b64encode(raw).decode('ascii'), parent_folder_id=resources_folder_id)
+    stage_id = stage['id']
+    fields = 'id,name,size,md5Checksum'
+
+    def verify(metadata):
+        if metadata.get('size') != str(len(raw)) or metadata.get('md5Checksum') != checksum:
+            raise ValueError(f'Report upload verification failed: {filename}')
+
+    verify(Drive.service.files().get(fileId=stage_id, supportsAllDrives=True, fields=fields).execute())
+    if existing:
+        result = Drive.service.files().update(fileId=existing[0]['id'], supportsAllDrives=True,
+            media_body=MediaIoBaseUpload(BytesIO(raw), mimetype=mime_type, resumable=True),
+            fields=fields).execute()
+    else:
+        result = Drive.service.files().update(fileId=stage_id, supportsAllDrives=True,
+            body={'name': filename}, fields=fields).execute()
+    verify(result)
+    if existing:
+        try:
+            Drive.delete_file(file_id=stage_id)
+        except Exception:
+            # Publication is verified; a noncanonical staging file is cleanup only.
+            logger.warning(f'Published {filename}; staging cleanup remains pending')
+    return result
+
+
 def process_report(config):
     """
     Process a single report according to its configuration.
@@ -1256,7 +1314,13 @@ def process_report(config):
             logger.error(f'No files found in backup folder.')
             raise Exception('No files found in backup folder.')
 
-        # Get most recent file
+        if config.get('pipeline') == 'market_data':
+            source = config.get('_extracted_source')
+            if not isinstance(source, dict) or not source.get('id'):
+                raise ValueError('No source from this market ETL run; previous report preserved')
+            files = [file for file in files if file.get('id') == source['id']]
+            if len(files) != 1:
+                raise ValueError('Current-run market source is missing or ambiguous')
         most_recent_file = Drive.get_most_recent_file(files)
 
         # For very large files that do not require row-level transformations,
@@ -1278,26 +1342,12 @@ def process_report(config):
             output_mime_type = 'application/json' if output_filename.lower().endswith('.json') else 'text/csv'
             file_payload = base64.b64encode(raw_file).decode('utf-8')
 
-            try:
-                existing_files = [
-                    file for file in Drive.get_files_in_folder(resources_folder_id)
-                    if file.get('name') == output_filename
-                ]
-                for existing_file in existing_files:
-                    Drive.delete_file(file_id=existing_file['id'])
-            except:
-                pass
-
-            Drive.upload_file(
-                file_name=output_filename,
-                mime_type=output_mime_type,
-                file_data=file_payload,
-                parent_folder_id=resources_folder_id
-            )
+            _publish_report(output_filename, output_mime_type, file_payload)
             return {
                 'name': config_name,
                 'status': 'success',
                 'backup_file': most_recent_file.get('name'),
+                'source_file_id': most_recent_file.get('id'),
                 'output_file': output_filename
             }
 
@@ -1339,26 +1389,17 @@ def process_report(config):
                 csv_content = pd.DataFrame(transformed_content).to_dict(orient='records')
             file_payload = csv_content
         
-        # Delete all existing output files with the same name to avoid duplicates.
-        try:
-            existing_files = [
-                file for file in Drive.get_files_in_folder(resources_folder_id)
-                if file.get('name') == output_filename
-            ]
-            for existing_file in existing_files:
-                Drive.delete_file(file_id=existing_file['id'])
-        except:
-            pass
-
-        Drive.upload_file(file_name=output_filename, mime_type=output_mime_type, file_data=file_payload, parent_folder_id=resources_folder_id)
-    except:
-        logger.error(f'Error processing {config} file.')
-        raise Exception(f'Error processing {config} file.')
+        _publish_report(output_filename, output_mime_type, file_payload)
+    except Exception:
+        # Preserve traceback/cause without interpolating the complete config.
+        logger.exception(f'Error processing report {config.get("name", "unknown")}')
+        raise
     logger.announcement(f'{config} successfully processed.', type='success')
     return {
         'name': config_name,
         'status': 'success',
         'backup_file': most_recent_file.get('name'),
+        'source_file_id': most_recent_file.get('id'),
         'output_file': output_filename
     }
 
@@ -1897,6 +1938,7 @@ def _runtime_etl_config(etl_config, now=None):
     runtime_first = runtime_time.replace(day=1).strftime('%Y%m%d')
 
     for file_config in runtime_config.get('files', []):
+        file_config.pop('_extracted_source', None)
         backup_name = file_config.get('backup_name')
         if not backup_name:
             continue

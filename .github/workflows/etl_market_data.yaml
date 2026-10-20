@@ -12,163 +12,47 @@ jobs:
       AGM_API_EMAIL: ${{ secrets.AGM_API_EMAIL }}
       AGM_API_PASSWORD: ${{ secrets.AGM_API_PASSWORD }}
     outputs:
-      summary: ${{ steps.email-output.outputs.summary }}
+      summary: ${{ steps.terminal-summary.outputs.summary }}
 
     steps:
-      # ─────────────────────────────────────────────────────────────
-      - name: Request token and trigger reporting run
-        id: reporting
-        uses: Wandalen/wretry.action@v2
-        env:
-          AGM_API_EMAIL: ${{ secrets.AGM_API_EMAIL }}
-          AGM_API_PASSWORD: ${{ secrets.AGM_API_PASSWORD }}
-        with:
-          command: |
-            output_file="$RUNNER_TEMP/etl_market_data_output.txt"
-
-            publish_output() {
-              printf '%s\n' "$1" | tee "$output_file"
-            }
-
-            test -n "$AGM_API_EMAIL" && test -n "$AGM_API_PASSWORD" || { publish_output "AGM_API_EMAIL/AGM_API_PASSWORD secrets are missing"; exit 1; }
-
-            # Fetch access token
-            response=$(curl -s -w "\n%{http_code}" -X POST \
-              -H "Content-Type: application/json" \
-              -d "$(jq -n --arg email "$AGM_API_EMAIL" --arg password "$AGM_API_PASSWORD" '{email: $email, password: $password}')" \
-              https://api.agmtechnology.com/token)
-
-            http_status=$(echo "$response" | tail -n1)
-            body=$(echo "$response" | sed '$d')
-
-            if [ "$http_status" != "200" ]; then
-              publish_output "Token request failed with status $http_status"
-              exit 1
-            fi
-
-            access_token=$(echo "$body" | jq -r '.access_token')
-            if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
-              publish_output "access_token not found in response"
-              exit 1
-            fi
-
-            # Trigger market data reporting run
-            response=$(curl -s -w "\n%{http_code}" -X GET \
-              -H "Authorization: Bearer $access_token" \
-              https://api.agmtechnology.com/etl/market_data)
-
-            status_market=$(echo "$response" | tail -n1)
-            body=$(echo "$response" | sed '$d')
-
-            if [ "$status_market" != "200" ]; then
-              error_output=$(cat <<EOF
-            Market data reporting run request failed with status $status_market
-            $body
-            EOF
-              )
-              publish_output "$error_output"
-              exit 1
-            fi
-
-            overall_status=$(echo "$body" | jq -r '.status // "unknown"')
-            extract_status=$(echo "$body" | jq -r '.overview.extract.status // "unknown"')
-            backup_status=$(echo "$body" | jq -r '.overview.backup.status // "unknown"')
-            transform_status=$(echo "$body" | jq -r '.overview.transform.status // "unknown"')
-
-            extract_total=$(echo "$body" | jq -r '.overview.extract.summary.total // 0')
-            extract_success=$(echo "$body" | jq -r '.overview.extract.summary.successful // 0')
-            extract_skipped=$(echo "$body" | jq -r '.overview.extract.summary.skipped // 0')
-            extract_failed=$(echo "$body" | jq -r '.overview.extract.summary.failed // 0')
-            extract_failed_details=$(echo "$body" | jq -r '
-              [
-                (if .overview.extract.status == "failed" then
-                  ["extract stage: \(.overview.extract.error // "No error details returned")"]
-                else [] end),
-                ([.overview.extract.steps[]? | select(.status == "failed") |
-                  "\(.name): \(.error // "No error details returned")"])
-              ] | add |
-              if length == 0 then "none" else join("\n  - ") end
-            ')
-
-            backup_rename_status=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="rename_batch_files") | .status // empty' | head -n1)
-            backup_rename_status=${backup_rename_status:-unknown}
-            backup_rename_count=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="rename_batch_files") | .summary.renamed // 0' | head -n1)
-            backup_rename_failed=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="rename_batch_files") | .summary.failed // 0' | head -n1)
-            backup_sort_status=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="sort_batch_files") | .status // empty' | head -n1)
-            backup_sort_status=${backup_sort_status:-unknown}
-            backup_sort_count=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="sort_batch_files") | .summary.moved // 0' | head -n1)
-            backup_sort_failed=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="sort_batch_files") | .summary.failed // 0' | head -n1)
-            backup_failed_details=$(echo "$body" | jq -r '
-              [
-                (if .overview.backup.status == "failed" then
-                  ["backup stage: \(.overview.backup.error // "No error details returned")"]
-                else [] end),
-                ([.overview.backup.steps[]? |
-                  (.failed_files[]? // (select(.status == "failed") | .)) |
-                  if .from then "rename \(.from): \(.error // "No error details returned")"
-                  elif .file then "sort \(.file): \(.error // "No error details returned")"
-                  elif .name then "\(.name): \(.error // "No error details returned")"
-                  else empty end])
-              ] | add |
-              if length == 0 then "none" else join("\n  - ") end
-            ')
-            backup_clear_status=$(echo "$body" | jq -r '.overview.backup.steps[]? | select(.name=="clear_batch_folder") | .status // empty' | head -n1)
-            backup_clear_status=${backup_clear_status:-unknown}
-
-            transform_total=$(echo "$body" | jq -r '.overview.transform.summary.total // 0')
-            transform_success=$(echo "$body" | jq -r '.overview.transform.summary.successful // 0')
-            transform_failed=$(echo "$body" | jq -r '.overview.transform.summary.failed // 0')
-            transform_failed_details=$(echo "$body" | jq -r '
-              [
-                (if .overview.transform.status == "failed" then
-                  ["transform stage: \(.overview.transform.error // "No error details returned")"]
-                else [] end),
-                ([.overview.transform.reports[]? | select(.status == "failed") |
-                  "\(.name): \(.error // "No error details returned")"])
-              ] | add |
-              if length == 0 then "none" else join("\n  - ") end
-            ')
-
-            summary=$(cat <<EOF
-            Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
-            Completed (UTC): $(date -u '+%Y-%m-%d %H:%M:%S')
-            Market Data ETL status: $overall_status
-            Extract status: $extract_status (total: $extract_total, successful: $extract_success, skipped: $extract_skipped, failed: $extract_failed)
-            Extract failures:
-              - $extract_failed_details
-            Backup status: $backup_status
-              - Rename batch files: $backup_rename_status (renamed: $backup_rename_count, failed: $backup_rename_failed)
-              - Sort batch files: $backup_sort_status (moved: $backup_sort_count, failed: $backup_sort_failed)
-              - Clear batch folder: $backup_clear_status
-            Backup failures:
-              - $backup_failed_details
-            Transform status: $transform_status (total: $transform_total, successful: $transform_success, failed: $transform_failed)
-            Transform failures:
-              - $transform_failed_details
-            EOF
-            )
-
-            publish_output "$summary"
-            
-            echo "http_status=200" >> "$GITHUB_OUTPUT"
-          attempt_limit: 1 # 1 original + 1 retry (10 minutos)
-          attempt_delay: 600000 # 10-minute pause (ms)
-
-      - name: Prepare console output for email
-        id: email-output
+      - uses: actions/checkout@v4
+      - name: Request token and run scheduled operation
+        id: operation
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' 'Operation did not produce a validated result; counts unavailable.' > "$RUNNER_TEMP/scheduled-summary.txt"
+          test -n "$AGM_API_EMAIL" && test -n "$AGM_API_PASSWORD"
+          response=$(curl --silent --show-error --max-time 30 -w "\n%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg email "$AGM_API_EMAIL" --arg password "$AGM_API_PASSWORD" '{email: $email, password: $password}')" \
+            https://api.agmtechnology.com/token)
+          test "$(echo "$response" | tail -n1)" = 200
+          access_token=$(echo "$response" | sed '$d' | jq -er '.access_token | select(type == "string" and length > 0)')
+          # One call only: an interrupted operation may have already written results.
+          response=$(curl --silent --show-error --max-time 290 -w "\n%{http_code}" \
+            -H "Authorization: Bearer $access_token" \
+            https://api.agmtechnology.com/etl/market_data)
+          http_status=$(echo "$response" | tail -n1)
+          echo "$response" | sed '$d' > "$RUNNER_TEMP/scheduled-response.json"
+          python3 .github/scripts/scheduled_summary.py market --body "$RUNNER_TEMP/scheduled-response.json" --http-status "$http_status"
+      - name: Publish terminal summary
+        id: terminal-summary
         if: ${{ always() }}
         shell: bash
         run: |
-          output_file="$RUNNER_TEMP/etl_market_data_output.txt"
+          python3 - <<'PYCODE'
+          import os, uuid
+          from pathlib import Path
+          path = Path(os.environ['RUNNER_TEMP'], 'scheduled-summary.txt')
+          summary = path.read_text() if path.exists() else 'Operation failed before producing a result; counts unavailable.'
+          delimiter = 'SUMMARY_' + uuid.uuid4().hex
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+              stream.write(f'summary<<{delimiter}\n{summary}\n{delimiter}\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+              stream.write(summary + '\n')
+          PYCODE
 
-          if [ -s "$output_file" ]; then
-            summary=$(cat "$output_file")
-          else
-            summary="The workflow failed before the Market Data ETL command produced output. Review the GitHub Actions console for runner or action errors."
-          fi
-
-          printf "summary<<EOF\n%s\nEOF\n" "$summary" >> "$GITHUB_OUTPUT"
-          
   notify-success:
     needs: etl
     if: ${{ success() }}

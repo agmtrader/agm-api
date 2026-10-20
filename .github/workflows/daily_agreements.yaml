@@ -58,7 +58,8 @@ jobs:
           printf '%s' "$body" > "$RUNNER_TEMP/daily-agreements-response.json"
           python3 .github/scripts/daily_agreements_summary.py \
             --body "$RUNNER_TEMP/daily-agreements-response.json" --http-status "$http_status" \
-            --master "$AGREEMENT_MASTER" --summary "$summary_file"
+            --master "$AGREEMENT_MASTER" --summary "$summary_file" \
+            --receipt "$RUNNER_TEMP/daily-agreements-receipt.json"
 
       - name: Publish final summary
         id: publish
@@ -70,6 +71,17 @@ jobs:
           delimiter="AGREEMENTS_$(python3 -c 'import uuid; print(uuid.uuid4())')"
           printf 'summary<<%s\n%s\n%s\n' "$delimiter" "$summary" "$delimiter" >> "$GITHUB_OUTPUT"
           printf '## Daily IBKR agreement submission\n\n%s\n' "$summary" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain preload receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-agreements-receipt
+          path: |
+            ${{ runner.temp }}/daily-agreements-summary.txt
+            ${{ runner.temp }}/daily-agreements-receipt.json
+          retention-days: 30
+          if-no-files-found: warn
 
   notify-success:
     needs: prepare

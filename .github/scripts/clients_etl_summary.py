@@ -4,10 +4,35 @@ import json
 import os
 from pathlib import Path
 import uuid
+import re
 
 
 def text(value):
     return 'unknown' if value is None else ' '.join(str(value).split())
+
+
+def safe_error(value):
+    """Never export raw exceptions/configuration/provider payloads as job outputs."""
+    value = str(value or '')
+    if value in {'missing_master_account', 'details_master_mismatch', 'details_account_mismatch',
+                 'invalid_account_number', 'unsupported_master_account', 'conflicting_master_account',
+                 'PermissionError', 'TimeoutError', 'PreconditionFailed', 'NonZeroExitCode', 'DeadlineExceeded'}:
+        return value
+    if re.fullmatch(r'\d{3}', value):
+        return value
+    status = re.fullmatch(r'HTTP (\d{3})', value)
+    if status:
+        return value
+    if re.search(r'(?:Error Code: ?|error ?code.? ?)(1019)', value, re.I):
+        return 'IBKR 1019: statement generation in progress'
+    if re.fullmatch(r'\d+ account failures \(details below\)', value):
+        return value
+    return 'Failure details withheld from notifications; see private overview and runtime logs'
+
+
+def safe_name(value):
+    value = str(value or 'unknown')
+    return value if re.fullmatch(r'[A-Za-z0-9_. -]{1,80}', value) else 'report'
 
 
 def section(lines, title, details, empty='none'):
@@ -18,17 +43,17 @@ def section(lines, title, details, empty='none'):
 def failures(stage, name, key):
     details = []
     if stage.get('error') or stage.get('status') == 'failed':
-        details.append(f'{name} stage: {text(stage.get("error") or "No error details returned")}')
+        details.append(f'{name} stage: {safe_error(stage.get("error"))}')
     for item in stage.get(key, []):
         failed_files = item.get('failed_files', [])
         for file in failed_files:
-            details.append(f'{item.get("name", name)} / {file.get("from") or file.get("file") or "unknown file"}: '
-                           f'{text(file.get("error") or "No error details returned")}')
+            details.append(f'{safe_name(item.get("name", name))} / {safe_name(file.get("from") or file.get("file"))}: '
+                           f'{safe_error(file.get("error"))}')
         if item.get('status') in ('failed', 'partial') and not failed_files:
             error = item.get('error')
             if not error and item.get('name') == 'account_details' and item.get('summary'):
                 error = f'{item["summary"].get("failed", "unknown")} account failures (details below)'
-            details.append(f'{item.get("name", "unknown")}: {error or "No error details returned"}')
+            details.append(f'{safe_name(item.get("name"))}: {safe_error(error)}')
     return details
 
 
@@ -80,28 +105,25 @@ def render(payload, execution):
         groups = defaultdict(list)
         for outcome in step.get('outcomes', []):
             if outcome.get('status') == 'failed':
-                groups[text(outcome.get('error') or 'No error details returned')].append(text(outcome.get('account_id')))
+                groups[safe_error(outcome.get('error'))].append(text(outcome.get('account_id')))
         details = []
         for error, accounts in sorted(groups.items(), key=lambda pair: (-len(pair[1]), pair[0])):
-            sample = ', '.join(accounts[:5])
-            if len(accounts) > 5:
-                sample += f'; {len(accounts) - 5} more (see full overview)'
-            details.append(f'{error}: {len(accounts)} accounts (examples: {sample})')
+            details.append(f'{error}: {len(accounts)} accounts (identifiers in private overview)')
         section(lines, 'IBKR account failures', details,
                 empty='details unavailable; see full overview' if counts.get('failed') else 'none')
 
     warnings = []
     for warning in payload.get('warnings', []):
-        warnings.append(f'{warning.get("name", "unknown")}: {warning.get("message", "No message returned")} '
-                        f'Backup: {text(warning.get("backup_file"))}. Error: {text(warning.get("error"))}')
+        warnings.append(f'{safe_name(warning.get("name"))}: fallback warning; '
+                        f'Backup: {safe_name(warning.get("backup_file"))}. Error: {safe_error(warning.get("error"))}')
     section(lines, 'Report warnings', warnings)
 
-    errors = [f'{key}: {text(payload[key])}' for key in
+    errors = [f'{key}: {safe_error(payload[key])}' for key in
               ('error', 'error_type', 'error_code', 'error_id', 'overview_publication_error', 'lock_release_error')
               if payload.get(key) is not None]
     for condition in execution_status.get('conditions', []):
         if condition.get('type') == 'Completed' and condition.get('status') != 'True':
-            errors.append(f'Cloud Run: {text(condition.get("reason"))}: {text(condition.get("message"))}')
+            errors.append(f'Cloud Run: {safe_error(condition.get("reason"))}; inspect private execution logs')
     section(lines, 'Runner / execution errors', errors, empty='none' if payload else 'overview unavailable')
     return '\n'.join(lines)
 

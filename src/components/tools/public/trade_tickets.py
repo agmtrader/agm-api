@@ -139,7 +139,16 @@ def _improsa_row(row):
 
     quantity = _number(_first_value(row, 'Quantity'))
     price = _number(_first_value(row, 'Price'))
-    transaction_value = _number(abs(quantity * price)) if quantity != '' and price != '' else ''
+    asset_class = str(_first_value(row, 'AssetClass')).strip().upper()
+    if not asset_class:
+        raise ValueError('Missing required Improsa fields: asset class')
+    # IBKR bond/bill quotes are per 100 of face value. Preserve the quoted
+    # price in column K; scale only the monetary principal in column N.
+    price_divisor = 100 if asset_class in {'BOND', 'BILL'} else 1
+    transaction_value = (
+        _number(abs(quantity * (price / price_divisor)))
+        if quantity != '' and price != '' else ''
+    )
 
     return {
         0: _first_value(row, 'IBOrderID'),

@@ -3,6 +3,7 @@ import time
 import requests
 import json
 from datetime import date
+from pathlib import Path
 from src.utils.managers.secret_manager import get_secret
 from src.utils.exception import handle_exception, ServiceError
 from src.utils.logger import logger
@@ -17,11 +18,9 @@ import inspect
 logger.announcement('Initializing Interactive Brokers Web API Service', type='info')
 logger.announcement('Initialized Interactive Brokers Web API Service', type='success')
 
-DAILY_AGREEMENT_FORM_NUMBERS = [
-    3024, 4070, 3089, 4304, 4404, 6108, 5013, 6112,
-    4024, 9130, 3074, 3203, 3070, 3094, 3071, 4587, 4837, 2192,
-    4399, 2109, 4016, 4289, 4208, 3081,
-]
+DAILY_AGREEMENT_FORM_NUMBERS = json.loads(
+    (Path(__file__).resolve().parents[2] / 'lib' / 'ibkr_daily_agreements.json').read_text()
+)
 
 def credential_locked(func):
     """Serialize mutable credential context through the complete connector call.
@@ -1979,6 +1978,8 @@ class IBKRWebAPI:
             return {
                 "ok": accepted == len(form_numbers) and rejected == 0 and skipped == 0,
                 "submitted": True,
+                "requestId": ibkr_response.get('requestId') if isinstance(ibkr_response, dict) else None,
+                "dateSubmitted": ibkr_response.get('dateSubmitted') if isinstance(ibkr_response, dict) else None,
                 "masterAccount": resolved_master_account,
                 "formsRequested": len(form_numbers),
                 "documentsPrepared": len(documents),

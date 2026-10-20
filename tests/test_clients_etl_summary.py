@@ -62,7 +62,7 @@ def test_accepted_gaps_include_counts_reasons_and_run_links(tmp_path):
         'Sort batch files: success (moved: 8, failed: 0)', 'Clear batch folder: success',
         'Transform status: success (total: 11, successful: 11, failed: 0)',
         '617 fresh, 208 failed, 20 retained stale', 'missing_master_account: 208 accounts',
-        '203 more', 'Report warnings:\n  - none',
+        'identifiers in private overview', 'Report warnings:\n  - none',
         'gs://agm-datalake-etl-runs/runs/execution-fixture/overview.json',
     ):
         assert expected in output
@@ -86,9 +86,9 @@ def test_all_failure_levels_and_fallback_warning_are_preserved(tmp_path):
     payload['overview']['transform'] = {'status': 'partial',
         'reports': [{'name': 'clients', 'status': 'failed', 'error': 'invalid columns'}]}
     output, _ = run_summary(tmp_path, payload)
-    for expected in ('794867: Error Code: 1019', 'clients.xls: rename denied', 'renamed.xls: move denied',
-                     'clear_batch_folder: clear denied', 'clients: invalid columns',
-                     'New file was not generated', 'Backup: prior.csv'):
+    for expected in ('794867: IBKR 1019', 'clients.xls:', 'renamed.xls:',
+                     'clear_batch_folder:', 'clients:', 'fallback warning', 'Backup: prior.csv',
+                     'Failure details withheld'):
         assert expected in output
 
 
@@ -98,8 +98,8 @@ def test_stage_and_runner_errors_and_cloud_failure_survive(tmp_path):
                'overview': {'extract': {'status': 'failed', 'error': 'source unavailable'}}}
     output, _ = run_summary(tmp_path, payload, {'status': {'conditions': [
         {'type': 'Completed', 'status': 'False', 'reason': 'NonZeroExitCode', 'message': 'Task exited 1'}]}})
-    for expected in ('extract stage: source unavailable', 'PermissionError', '403', 'synthetic-error',
-                     'lock_release_error: PreconditionFailed', 'NonZeroExitCode', 'Task exited 1'):
+    for expected in ('extract stage: Failure details withheld', 'PermissionError', '403',
+                     'lock_release_error: PreconditionFailed', 'NonZeroExitCode', 'inspect private execution logs'):
         assert expected in output
     assert 'total: unknown' in output
     assert 'Transform failures:\n  - unavailable' in output
@@ -123,3 +123,16 @@ def test_clean_run_shows_explicit_empty_error_sections(tmp_path):
     output, _ = run_summary(tmp_path, payload)
     for stage in ('Extract', 'Backup', 'Transform'):
         assert f'{stage} failures:\n  - none' in output
+
+
+def test_notification_does_not_export_raw_config_or_provider_credentials(tmp_path):
+    payload = overview()
+    marker = 'sensitive-marker-fixture'
+    payload['overview']['transform'] = {'status': 'partial', 'reports': [
+        {'name': 'nav', 'status': 'failed', 'error': "Error processing {'backup_folder_id': '" + marker + "', 'token': '" + marker + "'}"}]}
+    payload['overview']['extract']['steps'][0]['outcomes'][0]['error'] = marker
+    output, step_summary = run_summary(tmp_path, payload)
+    assert marker not in output + step_summary
+    assert 'Failure details withheld' in output
+    assert 'nav:' in output
+    assert 'https://github.com/agmtrader/agm-api/actions/runs/12345' in output

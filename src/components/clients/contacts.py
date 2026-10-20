@@ -1005,6 +1005,13 @@ def create_contact_screenings_batch_from_contact_ids(
     return {
         'inserted': inserted,
         'payloads_built': len(payloads),
+        'match_summary': {
+            'screenings_with_list_matches': sum(any(p.get(k) for k in ('ofac_results', 'uk_status', 'un_status')) for p in payloads),
+            'screenings_without_list_matches': sum(not any(p.get(k) for k in ('ofac_results', 'uk_status', 'un_status')) for p in payloads),
+            'ofac_matches': sum(bool(p.get('ofac_results')) for p in payloads),
+            'uk_matches': sum(bool(p.get('uk_status')) for p in payloads),
+            'un_matches': sum(bool(p.get('un_status')) for p in payloads),
+        } if inserted == len(payloads) else {},
         'screening_errors': screening_errors,
         'screening_error_contact_ids': screening_error_contact_ids,
     }

@@ -16,7 +16,7 @@ from src.utils import authz
 from src.app.tools.public import trade_tickets as routes
 from src.components.tools.public.trade_tickets import generate_improsa_xls
 
-BASE={'ExecID':'execution-A','ClientAccountID':'TEST-ACCOUNT','IBOrderID':'ORDER-A','Description':'Synthetic bond','TradeDate':'2026-10-12','SettleDate':'2026-10-14','ISIN':'TEST-ISIN','Quantity':'1000','Price':'98.25','Yield':'5.125','AccruedInterest':'12.50','NetCash':'-995.00','CurrencyPrimary':'USD','Maturity':'2027-10-12','Exchange':'TEST-EXCHANGE','Market':'TEST-MARKET','TransactionType':'BUY','Commission':'-2.50','OtherCommission':'-0.50'}
+BASE={'ExecID':'execution-A','ClientAccountID':'TEST-ACCOUNT','IBOrderID':'ORDER-A','AssetClass':'STK','Description':'Synthetic stock','TradeDate':'2026-10-12','SettleDate':'2026-10-14','ISIN':'TEST-ISIN','Quantity':'1000','Price':'98.25','Yield':'5.125','AccruedInterest':'12.50','NetCash':'-995.00','CurrencyPrimary':'USD','Maturity':'2027-10-12','Exchange':'TEST-EXCHANGE','Market':'TEST-MARKET','TransactionType':'BUY','Commission':'-2.50','OtherCommission':'-0.50'}
 def book(rows,indices):
  return xlrd.open_workbook(file_contents=generate_improsa_xls(rows,indices).getvalue(),formatting_info=True)
 
@@ -34,7 +34,7 @@ def test_independent_synthetic_field_mapping_and_formats():
  for col in [2,14,15,16,17,21,22,23]:assert s.cell_value(0,col)=='N/A'
  assert w.format_map[w.xf_list[s.cell_xf_index(1,10)].format_key].format_str=='_-* #,##0.00_-;\\-* #,##0.00_-;_-* "-"??_-;_-@_-'
 
-@pytest.mark.parametrize('field',['IBOrderID','TradeDate','SettleDate','ISIN','Quantity','Price','CurrencyPrimary','TransactionType'])
+@pytest.mark.parametrize('field',['IBOrderID','AssetClass','TradeDate','SettleDate','ISIN','Quantity','Price','CurrencyPrimary','TransactionType'])
 def test_missing_required_fields_fail_explicitly(field):
  row={k:v for k,v in BASE.items() if k!=field}
  with pytest.raises(ValueError,match='Missing required Improsa fields'):book([row],[0])
@@ -185,6 +185,38 @@ def test_improsa_original_sample_value_convention():
 def test_sell_value_is_positive_gross_quantity_times_price():
  s=book([{**BASE,'Quantity':-10,'Price':12.5,'Buy/Sell':'SELL','NetCash':121}],[0]).sheet_by_index(0)
  assert s.cell_value(1,13)==125 and s.cell_value(1,8)==-10 and s.cell_value(1,26)=='V'
+
+
+@pytest.mark.parametrize('quantity,side', [(100000, 'BUY'), (-100000, 'SELL')])
+@pytest.mark.parametrize('asset_class', ['BOND', ' bond ', 'BILL'])
+def test_bond_face_value_uses_percentage_price_without_changing_quote(quantity, side, asset_class):
+ # Numeric inputs observed in the owner's review XLS; identifiers are synthetic.
+ row={**BASE,'AssetClass':asset_class,'Quantity':quantity,'Price':69.4193,
+      'CurrencyPrimary':'GBP','Buy/Sell':side,'AccruedInterest':-3297.95}
+ s=book([row],[0]).sheet_by_index(0)
+ assert s.cell_value(1,8)==quantity
+ assert s.cell_value(1,10)==69.4193
+ assert s.cell_value(1,13)==pytest.approx(69419.30)
+ assert s.cell_value(1,12)==-3297.95
+ assert s.cell_value(1,27)==3
+
+
+def test_mixed_fund_and_bond_http_export_scales_only_bond_rows(boundary):
+ http,h,lookup,reads,email=boundary
+ reads.return_value=[
+  {**BASE,'ExecID':'fund','AssetClass':'FUND','Quantity':5395,'Price':14.57},
+  {**BASE,'ExecID':'bond','AssetClass':'BOND','Quantity':100000,'Price':69.4193,
+   'CurrencyPrimary':'GBP'},
+ ]
+ response=http.post('/trade_tickets/export_improsa',headers=h(),json={
+  'query_id':'owned-query','execution_ids':['bond','fund'],'review_sample':True})
+ assert response.status_code==200
+ s=xlrd.open_workbook(file_contents=response.data).sheet_by_index(0)
+ assert s.cell_value(1,10)==69.4193
+ assert s.cell_value(1,13)==pytest.approx(69419.30)
+ assert s.cell_value(2,10)==14.57
+ assert s.cell_value(2,13)==pytest.approx(78605.15)
+ email.assert_not_called()
 
 
 def test_missing_order_id_never_substitutes_account_or_instrument_id():
