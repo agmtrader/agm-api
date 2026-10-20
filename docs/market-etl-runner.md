@@ -43,7 +43,7 @@ are part of the artifact. API route deployment requires the normal API release.
 Provision/verify the job before publishing the job-based scheduled workflow and
 the dispatch route. Confirm the caller identity has job invocation/execution-read
 permissions and overview read access; do not broaden credentials speculatively.
-Preserve the existing 01:00 UTC / previous-day 19:00 Costa Rica schedule and existing
+Run daily at 12:00 UTC / 06:00 CST (Costa Rica), alongside clients ETL; preserve existing
 notification recipients. The workflow polls its exact execution and requires
 Cloud Run terminal success plus a matching validated market overview. There is no
 HTTP fallback, no ETL replay, and no notification on mere dispatch acceptance.

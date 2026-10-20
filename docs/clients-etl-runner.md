@@ -68,3 +68,9 @@ When a configured clients Flex report (742588, 734782, 732383 or 794867) returns
 The workflow runs `.github/scripts/clients_etl_summary.py` against the downloaded terminal overview and Cloud Run execution metadata. The same plain-text summary appears in the Actions run summary and success/failure email. It includes the workflow URL, execution, actual Cloud Run completion time in UTC, operational and raw statuses, extract/transform counts, backup rename/move/clear outcomes, and stage/step/file errors. Missing evidence is labeled unknown or unavailable, rather than reported as zero failures.
 
 IBKR refresh failures are grouped by exact error with counts and up to five account examples per group; the private GCS overview URI points to the complete outcomes. Accepted coverage gaps and retained stale data remain explicit. Flex fallback warnings name the backup used and the original error; empty warnings say `none`. Runner errors and failed Cloud Run terminal conditions remain visible even if the overview is missing or invalid. Formatting does not change job acceptance, retries, scheduling, recipients, or pipeline execution.
+
+## Schedule revised — October 20, 2026
+
+Clients and market ETL workflows are both scheduled daily at 12:00 UTC / 06:00 CST
+(Costa Rica, UTC-6), as requested by the owner. Their separate jobs, staging folders
+and locks permit simultaneous execution. GitHub may start scheduled workflows late.
