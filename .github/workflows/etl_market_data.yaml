@@ -2,56 +2,56 @@ name: Market Data ETL Pipeline
 
 on:
   schedule:
-    - cron: '0 1 * * *'   # Every day at 01:00 UTC (7:00 PM the previous day in Costa Rica)
+    - cron: '0 1 * * *' # 7:00 PM on the previous Costa Rica calendar day
   workflow_dispatch:
+
+concurrency:
+  group: market-etl-job
+  cancel-in-progress: false
 
 jobs:
   etl:
     runs-on: ubuntu-latest
-    env:
-      AGM_API_EMAIL: ${{ secrets.AGM_API_EMAIL }}
-      AGM_API_PASSWORD: ${{ secrets.AGM_API_PASSWORD }}
+    timeout-minutes: 70
     outputs:
       summary: ${{ steps.terminal-summary.outputs.summary }}
-
     steps:
       - uses: actions/checkout@v4
-      - name: Request token and run scheduled operation
-        id: operation
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.AGM_API_SERVICE_ACCOUNT_KEY }}'
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: agm-datalake
+      - name: Execute market job and wait for its terminal outcome
+        id: execute
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s\n' 'Operation did not produce a validated result; counts unavailable.' > "$RUNNER_TEMP/scheduled-summary.txt"
-          test -n "$AGM_API_EMAIL" && test -n "$AGM_API_PASSWORD"
-          response=$(curl --silent --show-error --max-time 30 -w "\n%{http_code}" -X POST \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n --arg email "$AGM_API_EMAIL" --arg password "$AGM_API_PASSWORD" '{email: $email, password: $password}')" \
-            https://api.agmtechnology.com/token)
-          test "$(echo "$response" | tail -n1)" = 200
-          access_token=$(echo "$response" | sed '$d' | jq -er '.access_token | select(type == "string" and length > 0)')
-          # One call only: an interrupted operation may have already written results.
-          response=$(curl --silent --show-error --max-time 290 -w "\n%{http_code}" \
-            -H "Authorization: Bearer $access_token" \
-            https://api.agmtechnology.com/etl/market_data)
-          http_status=$(echo "$response" | tail -n1)
-          echo "$response" | sed '$d' > "$RUNNER_TEMP/scheduled-response.json"
-          python3 .github/scripts/scheduled_summary.py market --body "$RUNNER_TEMP/scheduled-response.json" --http-status "$http_status"
+          # A lost dispatch response is uncertain; never retry or fall back to HTTP.
+          execution=$(gcloud run jobs execute agm-market-etl --project=agm-datalake --region=us-central1 --async --format='value(metadata.name)')
+          [[ "$execution" =~ ^agm-market-etl-[a-z0-9-]+$ ]]
+          echo "execution=$execution" >> "$GITHUB_OUTPUT"
+          export MARKET_ETL_EXECUTION="$execution"
+          for attempt in $(seq 1 130); do
+            gcloud run jobs executions describe "$execution" --project=agm-datalake --region=us-central1 --format=json > "$RUNNER_TEMP/execution.json"
+            if jq -e '.status.completionTime != null' "$RUNNER_TEMP/execution.json" > /dev/null; then
+              break
+            fi
+            sleep 30
+          done
+          jq -e '.status.completionTime != null' "$RUNNER_TEMP/execution.json" > /dev/null
+          gcloud storage cp "gs://agm-datalake-etl-runs/runs/$execution/overview.json" "$RUNNER_TEMP/overview.json"
+          python3 .github/scripts/market_etl_summary.py --validate
       - name: Publish terminal summary
         id: terminal-summary
         if: ${{ always() }}
         shell: bash
-        run: |
-          python3 - <<'PYCODE'
-          import os, uuid
-          from pathlib import Path
-          path = Path(os.environ['RUNNER_TEMP'], 'scheduled-summary.txt')
-          summary = path.read_text() if path.exists() else 'Operation failed before producing a result; counts unavailable.'
-          delimiter = 'SUMMARY_' + uuid.uuid4().hex
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
-              stream.write(f'summary<<{delimiter}\n{summary}\n{delimiter}\n')
-          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
-              stream.write(summary + '\n')
-          PYCODE
+        env:
+          MARKET_ETL_EXECUTION: ${{ steps.execute.outputs.execution }}
+        run: python3 .github/scripts/market_etl_summary.py
 
   notify-success:
     needs: etl

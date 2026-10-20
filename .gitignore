@@ -194,3 +194,4 @@ cython_debug/
 !dev/refresh_ibkr_details.py
 
 !dev/deploy_clients_job.py
+!dev/deploy_market_job.py
