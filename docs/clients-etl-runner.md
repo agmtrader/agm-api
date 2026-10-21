@@ -69,8 +69,8 @@ The workflow runs `.github/scripts/clients_etl_summary.py` against the downloade
 
 IBKR refresh failures are grouped by exact error with counts and up to five account examples per group; the private GCS overview URI points to the complete outcomes. Accepted coverage gaps and retained stale data remain explicit. Flex fallback warnings name the backup used and the original error; empty warnings say `none`. Runner errors and failed Cloud Run terminal conditions remain visible even if the overview is missing or invalid. Formatting does not change job acceptance, retries, scheduling, recipients, or pipeline execution.
 
-## Schedule revised — October 20, 2026
+## Schedule revised — October 21, 2026
 
-Clients and market ETL workflows are both scheduled daily at 12:00 UTC / 06:00 CST
+Clients and market ETL workflows are both scheduled daily at 13:37 UTC / 07:37 CST
 (Costa Rica, UTC-6), as requested by the owner. Their separate jobs, staging folders
 and locks permit simultaneous execution. GitHub may start scheduled workflows late.
