@@ -1,6 +1,34 @@
 """Translate known IBKR outcomes without hiding dependency/configuration failures."""
 
 from src.utils.exception import ServiceError
+import re
+from src.utils.error_diagnostics import safe_diagnostic_text, safe_upstream_details
+
+
+def _response_diagnostics(response, payload):
+    error = payload.get('error')
+    error = error if isinstance(error, dict) else {}
+    message = next((value for value in (
+        payload.get('detail'), payload.get('message'), payload.get('error_description'),
+        payload.get('error'), error.get('message'), error.get('detail'), payload.get('title'),
+    ) if isinstance(value, str) and value.strip()), '')
+    if not message:
+        message = ' | '.join(_validation_messages(payload))
+    # Non-JSON gateway failures still need a useful, bounded explanation.
+    if not message:
+        raw = getattr(response, 'text', '')
+        if isinstance(raw, str) and len(raw) <= 2048:
+            message = re.sub(r'<[^>]*>', ' ', raw)
+    headers = getattr(response, 'headers', {})
+    request_id = payload.get('requestId') or payload.get('traceId')
+    if not request_id and hasattr(headers, 'get'):
+        request_id = next((headers.get(key) for key in ('X-Request-ID', 'X-Correlation-ID', 'request-id') if headers.get(key)), None)
+    return safe_upstream_details({
+        'ibkr_status': response.status_code,
+        'ibkr_message': message or getattr(response, 'reason', ''),
+        'ibkr_error_code': payload.get('code') or payload.get('errorCode') or error.get('code'),
+        'ibkr_request_id': request_id,
+    })
 
 
 def _validation_messages(payload):
@@ -33,7 +61,7 @@ def raise_ibkr_response_error(response, *, trading_session=False, account_access
     payload = payload if isinstance(payload, dict) else {}
     detail = next((payload[key] for key in ('detail', 'message', 'error')
                    if isinstance(payload.get(key), str) and payload[key].strip()), '')
-    details = {'ibkr_status': status}
+    details = _response_diagnostics(response, payload)
 
     if trading_session and status == 401:
         raise ServiceError(

@@ -1,6 +1,7 @@
 import functools
 import traceback
 import uuid
+import json
 from contextvars import ContextVar
 
 _component_depth = ContextVar("api_component_depth", default=0)
@@ -103,9 +104,11 @@ def log_service_error(err: ServiceError, source: str) -> None:
     err.__suppress_context__ = True
     error_id = ensure_error_id(err)
     context = get_request_context()
+    from src.utils.error_diagnostics import safe_upstream_details
+    diagnostics = safe_upstream_details(err.details)
     logger.error(
         f"{source} failed [error_id={error_id}, status={err.status_code}, code={err.code or 'n/a'}]. "
-        f"context={context}\n{_safe_traceback(err)}"
+        f"context={context} upstream={json.dumps(diagnostics, ensure_ascii=True)}\n{_safe_traceback(err)}"
     )
     err._logged = True
 

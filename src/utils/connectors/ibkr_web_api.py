@@ -8,6 +8,7 @@ from src.utils.managers.secret_manager import get_secret
 from src.utils.exception import handle_exception, ServiceError
 from src.utils.logger import logger
 from src.utils.ibkr_errors import raise_ibkr_response_error
+from src.utils.error_diagnostics import safe_diagnostic_text, safe_upstream_details
 from src.utils.ibkr_statements import statement_document
 from functools import wraps
 from threading import RLock
@@ -21,6 +22,46 @@ logger.announcement('Initialized Interactive Brokers Web API Service', type='suc
 DAILY_AGREEMENT_FORM_NUMBERS = json.loads(
     (Path(__file__).resolve().parents[2] / 'lib' / 'ibkr_daily_agreements.json').read_text()
 )
+# Conservative application ceiling on the final JWT, below IBKR's documented
+# 20 MB request maximum. The observed combined batch was rejected with 413.
+DAILY_AGREEMENT_MAX_SIGNED_BYTES = 4_000_000
+
+
+def _agreement_body(documents):
+    return {'processDocuments': {'documents': documents, 'inputLanguage': 'en', 'translation': False}}
+
+
+def _agreement_signed_bound(documents):
+    # The PDF is already base64; JWT adds a second base64url layer. Reserve
+    # 4 KiB for issuer/time claims, header and RSA signature. Check actual
+    # signed bytes as well, before sending the first batch.
+    size = len(json.dumps(_agreement_body(documents)).encode('ascii'))
+    return 4 * ((size + 2) // 3) + 4096
+
+
+def _agreement_failure_details(metadata, batches, outcomes):
+    sent = {doc['formNumber'] for batch in batches[:metadata['batch']] for doc in batch}
+    return {'agreement_batch': metadata['batch'], 'agreement_batches': len(batches),
+            'agreement_signed_bytes': metadata['signedBytes'],
+            'agreement_accepted_forms': [number for number, row in outcomes.items() if _is_accepted_status(row.get('status'))],
+            'agreement_failed_batch_forms': metadata['formNumbers'],
+            'agreement_unsubmitted_forms': [doc['formNumber'] for batch in batches for doc in batch if doc['formNumber'] not in sent]}
+
+
+def _agreement_batches(documents):
+    batches = []
+    current = []
+    for document in documents:
+        if _agreement_signed_bound([document]) > DAILY_AGREEMENT_MAX_SIGNED_BYTES:
+            raise ServiceError('One agreement exceeds the safe signed-request size; no batch submitted',
+                               422, code='ibkr_agreement_too_large')
+        if current and _agreement_signed_bound(current + [document]) > DAILY_AGREEMENT_MAX_SIGNED_BYTES:
+            batches.append(current)
+            current = []
+        current.append(document)
+    if current:
+        batches.append(current)
+    return batches
 
 def credential_locked(func):
     """Serialize mutable credential context through the complete connector call.
@@ -1930,65 +1971,85 @@ class IBKRWebAPI:
                     "ibkrResponse": None,
                 }
 
-            body = {
-                "processDocuments": {
-                    "documents": documents,
-                    "inputLanguage": "en",
-                    "translation": False
-                }
-            }
-
-            encoded_body_bytes = len(json.dumps(body).encode('ascii'))
-            if encoded_body_bytes > 20 * 1024 * 1024:
-                raise ServiceError('Daily agreement request exceeds the 20 MB limit', 422)
+            batches = _agreement_batches(documents)
+            batch_metadata = [
+                {'batch': index, 'formNumbers': [doc['formNumber'] for doc in batch],
+                 'requestBytes': len(json.dumps(_agreement_body(batch)).encode('ascii')),
+                 'signedBytesBound': _agreement_signed_bound(batch)}
+                for index, batch in enumerate(batches, 1)
+            ]
             if dry_run:
                 return {'ok': False, 'ready': True, 'submitted': False,
                         'masterAccount': resolved_master_account, 'formsRequested': len(form_numbers),
-                        'documentsPrepared': len(documents), 'requestBytes': encoded_body_bytes,
-                        'accepted': 0, 'rejected': 0, 'skipped': 0, 'results': results}
+                        'documentsPrepared': len(documents),
+                        'requestBytes': sum(row['requestBytes'] for row in batch_metadata),
+                        'batches': batch_metadata, 'accepted': 0, 'rejected': 0, 'skipped': 0, 'results': results}
 
+            # Sign and size-check the entire plan before making any broker POST.
+            signed_batches = [self.sign_request(_agreement_body(batch)) for batch in batches]
+            for signed, metadata in zip(signed_batches, batch_metadata):
+                metadata['signedBytes'] = len(signed.encode('ascii'))
+                if metadata['signedBytes'] > DAILY_AGREEMENT_MAX_SIGNED_BYTES:
+                    raise ServiceError('Signed agreement batch exceeds the safe request size; no batch submitted',
+                                       422, code='ibkr_agreement_too_large')
             token = self.get_bearer_token()
             if not token:
-                raise Exception("No token found")
-
-            signed_request = self.sign_request(body)
-            if len(signed_request.encode('ascii')) > 20 * 1024 * 1024:
-                raise ServiceError('Signed daily agreement request exceeds the 20 MB limit', 422)
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/jwt"
-            }
-
-            response = requests.post(url, headers=headers, data=signed_request, timeout=(10, 120))
-
-            if response.status_code != 200:
-                raise_ibkr_response_error(response, account_access="/accounts" in url)
-
-            ibkr_response = response.json()
-            logger.info(
-                f"submit_all_agreements success status=200 "
-                f"response_keys={list(ibkr_response.keys()) if isinstance(ibkr_response, dict) else type(ibkr_response)}"
-            )
-            results = self._merge_daily_agreement_response(results, ibkr_response)
-            accepted = sum(1 for result in results if _is_accepted_status(result.get('status')))
-            skipped = sum(1 for result in results if result.get('status') == 'Skipped')
-            rejected = sum(1 for result in results if result.get('status') != 'Skipped' and _is_rejected_status(result.get('status')))
-
-            logger.info(f"Daily agreements outcomes accepted={accepted} rejected_or_unconfirmed={rejected} skipped={skipped}")
-            return {
-                "ok": accepted == len(form_numbers) and rejected == 0 and skipped == 0,
-                "submitted": True,
-                "requestId": ibkr_response.get('requestId') if isinstance(ibkr_response, dict) else None,
-                "dateSubmitted": ibkr_response.get('dateSubmitted') if isinstance(ibkr_response, dict) else None,
-                "masterAccount": resolved_master_account,
-                "formsRequested": len(form_numbers),
-                "documentsPrepared": len(documents),
-                "accepted": accepted,
-                "rejected": rejected,
-                "skipped": skipped,
-                "results": results,
-                "ibkrResponse": ibkr_response,
-            }
+                raise ServiceError('IBKR authentication did not return a token', 502, code='ibkr_authentication_failed')
+            headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/jwt'}
+            prepared_by_form = {row['formNumber']: row for row in results}
+            results = [{**row, 'status': 'NotSubmitted', 'message': 'Batch has not been submitted.'} for row in results]
+            outcomes = {}
+            completed_batches = []
+            for signed, metadata, batch in zip(signed_batches, batch_metadata, batches):
+                logger.info(f"Daily agreement batch={metadata['batch']}/{len(batches)} "
+                            f"forms={len(batch)} signed_bytes={metadata['signedBytes']}")
+                try:
+                    response = requests.post(url, headers=headers, data=signed, timeout=(10, 120))
+                    if response.status_code != 200:
+                        raise_ibkr_response_error(response, account_access=True)
+                    ibkr_response = response.json()
+                    if not isinstance(ibkr_response, dict):
+                        ibkr_response = {}
+                except (requests.exceptions.RequestException, ValueError) as exc:
+                    failure = ServiceError('IBKR agreement submission outcome is unknown; reconcile before retrying',
+                                           502, code='ibkr_submission_unknown')
+                    failure.details['ibkr_message'] = safe_diagnostic_text(f'Submission transport/response failure: {type(exc).__name__}: {exc}')
+                    failure.details.update(_agreement_failure_details(metadata, batches, outcomes))
+                    failure.details['agreement_completed_batches'] = completed_batches
+                    raise failure from None
+                except ServiceError as exc:
+                    exc.details.update(_agreement_failure_details(metadata, batches, outcomes))
+                    exc.details['agreement_completed_batches'] = completed_batches
+                    if exc.status_code < 500:
+                        logger.warning('Daily agreement broker rejection: ' + json.dumps(safe_upstream_details(exc.details)))
+                    raise
+                batch_results = self._merge_daily_agreement_response(
+                    [prepared_by_form[doc['formNumber']] for doc in batch], ibkr_response)
+                outcomes.update({row['formNumber']: row for row in batch_results})
+                completed_batches.append({**metadata,
+                    'requestId': ibkr_response.get('requestId'), 'dateSubmitted': ibkr_response.get('dateSubmitted')})
+                if not all(_is_accepted_status(row.get('status')) for row in batch_results):
+                    for row in batch_results:
+                        if not _is_accepted_status(row.get('status')):
+                            logger.error('Daily agreement form outcome: ' + json.dumps({
+                                'batch': metadata['batch'], 'form': row['formNumber'],
+                                'status': safe_diagnostic_text(row.get('status'), 80),
+                                'message': safe_diagnostic_text(row.get('message'))}))
+                    logger.error(f"Daily agreement batch={metadata['batch']} has rejected/unconfirmed forms; "
+                                 'remaining batches were not submitted; reconcile before retrying')
+                    break
+            results = [outcomes.get(row['formNumber'], row) for row in results]
+            accepted = sum(_is_accepted_status(row.get('status')) for row in results)
+            rejected = sum(_is_rejected_status(row.get('status')) for row in results)
+            ok = accepted == len(form_numbers)
+            log = logger.info if ok else logger.error
+            log(f'Daily agreements outcomes accepted={accepted} rejected_or_unconfirmed={rejected} skipped=0')
+            single_receipt = completed_batches[0] if len(completed_batches) == 1 else {}
+            return {'ok': ok, 'submitted': True, 'masterAccount': resolved_master_account,
+                    'formsRequested': len(form_numbers), 'documentsPrepared': len(documents),
+                    'accepted': accepted, 'rejected': rejected, 'skipped': 0, 'results': results,
+                    'batches': completed_batches, 'requestId': single_receipt.get('requestId'),
+                    'dateSubmitted': single_receipt.get('dateSubmitted')}
 
         finally:
             if original_creds:

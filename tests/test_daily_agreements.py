@@ -124,3 +124,92 @@ def test_daily_preload_includes_all_five_new_agreements(agreement_client):
     submitted={int(document['formNumber']) for document in api.sign_request.call_args.args[0]['processDocuments']['documents']}
     assert submitted==set(module.DAILY_AGREEMENT_FORM_NUMBERS)
     assert required.issubset({int(call.kwargs['forms'][0]) for call in api.get_forms.call_args_list})
+
+
+def test_non_200_submission_retains_diagnostic_and_never_retries(agreement_client, caplog):
+    api,post,response,_,_=agreement_client
+    response.status_code=503
+    response.headers={'X-Request-ID':'provider-correlation'}
+    response.json.return_value={'code':'SERVICE_UNAVAILABLE','message':'Document service unavailable',
+                                'access_token':'private-token-marker','payload':'private-pdf-marker'}
+    with pytest.raises(module.ServiceError) as failure:
+        api.submit_all_agreements(master_account='I6413690')
+    assert post.call_count==1
+    assert failure.value.details['ibkr_status']==503
+    assert failure.value.details['ibkr_message']=='Document service unavailable'
+    assert failure.value.details['ibkr_request_id']=='provider-correlation'
+    assert 'private-token-marker' not in str(failure.value.details)
+    for expected in ('503','Document service unavailable','provider-correlation','ibkr_upstream_error'):
+        assert expected in caplog.text
+    assert 'private-token-marker' not in caplog.text and 'private-pdf-marker' not in caplog.text
+
+
+def test_provider_message_redacts_credentials_and_handles_gateway_html():
+    from src.utils.ibkr_errors import raise_ibkr_response_error
+    response=Mock(status_code=502, headers={'X-Request-ID':'provider-id'})
+    response.json.side_effect=ValueError('non-json gateway')
+    response.text='<html><body>Bad gateway. password="private password with spaces" bearer private-bearer user@example.test</body></html>'
+    with pytest.raises(module.ServiceError) as failure:
+        raise_ibkr_response_error(response)
+    message=failure.value.details['ibkr_message']
+    assert 'Bad gateway' in message and 'redacted' in message
+    for marker in ('private password','with spaces','private-bearer','user@example.test','<html>'):
+        assert marker not in message
+
+
+def test_byte_bounded_batches_cover_every_form_once(agreement_client, monkeypatch):
+    api,post,response,_,_=agreement_client
+    monkeypatch.setattr(module,'DAILY_AGREEMENT_MAX_SIGNED_BYTES',7000)
+    plan=api.submit_all_agreements(master_account='I6413690',dry_run=True)
+    assert len(plan['batches'])>1 and not plan['submitted']
+    post.assert_not_called();api.sign_request.assert_not_called()
+    signed={}
+    def sign(body):
+        key='batch-'+str(len(signed));signed[key]=body;return key
+    api.sign_request.side_effect=sign
+    def accept(url,**options):
+        documents=signed[options['data']]['processDocuments']['documents']
+        return SimpleNamespace(status_code=200,json=lambda:{'requestId':'request-'+options['data'],
+            'documents':[{'formNumber':doc['formNumber'],'status':'Accepted'} for doc in documents]})
+    post.side_effect=accept
+    result=api.submit_all_agreements(master_account='I6413690')
+    assert result['ok'] and result['accepted']==29 and post.call_count==len(plan['batches'])
+    numbers=[doc['formNumber'] for body in signed.values() for doc in body['processDocuments']['documents']]
+    assert numbers==[str(n) for n in module.DAILY_AGREEMENT_FORM_NUMBERS] and len(set(numbers))==29
+    assert all(row['signedBytesBound']<=7000 for row in result['batches'])
+    assert len({row['requestId'] for row in result['batches']})==len(plan['batches'])
+
+
+def test_later_batch_413_retains_prior_acceptance_and_stops(agreement_client, monkeypatch):
+    api,post,response,_,_=agreement_client
+    monkeypatch.setattr(module,'DAILY_AGREEMENT_MAX_SIGNED_BYTES',7000)
+    response.json.return_value.update(requestId='first-batch-receipt')
+    failure=SimpleNamespace(status_code=413,headers={},json=lambda:{'title':'Content Too Large','traceId':'observed-trace'})
+    post.side_effect=[response,failure]
+    with pytest.raises(module.ServiceError) as caught:
+        api.submit_all_agreements(master_account='I6413690')
+    details=caught.value.details
+    assert post.call_count==2 and details['ibkr_status']==413
+    assert details['ibkr_message']=='Content Too Large' and details['ibkr_request_id']=='observed-trace'
+    assert details['agreement_batch']==2 and details['agreement_accepted_forms']
+    assert details['agreement_unsubmitted_forms']
+    assert details['agreement_completed_batches'][0]['requestId']=='first-batch-receipt'
+
+
+def test_single_oversized_form_aborts_before_signing_or_submission(agreement_client, monkeypatch):
+    api,post,_,_,_=agreement_client
+    monkeypatch.setattr(module,'DAILY_AGREEMENT_MAX_SIGNED_BYTES',4100)
+    with pytest.raises(module.ServiceError) as caught:
+        api.submit_all_agreements(master_account='I6413690')
+    assert caught.value.code=='ibkr_agreement_too_large'
+    post.assert_not_called();api.sign_request.assert_not_called()
+
+
+def test_rejected_document_is_visible_in_log_and_stops_later_batches(agreement_client,monkeypatch,caplog):
+    api,post,response,_,_=agreement_client
+    monkeypatch.setattr(module,'DAILY_AGREEMENT_MAX_SIGNED_BYTES',7000)
+    response.json.return_value={'documents':[{'formNumber':3024,'status':'Rejected','message':'Unsupported PDF version'}]}
+    result=api.submit_all_agreements(master_account='I6413690')
+    assert not result['ok'] and post.call_count==1
+    assert any(row['status']=='NotSubmitted' for row in result['results'])
+    assert 'Unsupported PDF version' in caplog.text and '3024' in caplog.text

@@ -72,7 +72,7 @@ def test_partial_invalid_or_unsubmitted_result_fails_workflow(tmp_path,change):
 def test_auth_and_transport_failures_publish_summary_without_retry(tmp_path,options,expected_calls):
     result,summary,calls=execute(tmp_path,submission(),**options)
     assert result.returncode!=0 and len(calls)==expected_calls
-    assert 'acceptance' in summary
+    assert 'acceptance' in summary or 'No agreement submission was attempted' in summary
 
 
 def test_workflow_schedule_concurrency_and_standard_notifications():
@@ -160,3 +160,30 @@ def test_workflow_retains_a_verified_preload_receipt(tmp_path):
     assert 'Request ID: 12345' in summary and 'All 29 forms' in summary
     artifact=next(step for step in STEPS if step.get('uses','').startswith('actions/upload-artifact@'))
     assert 'daily-agreements-receipt.json' in artifact['with']['path']
+
+
+def test_upstream_failure_survives_shell_summary_receipt_and_console(tmp_path):
+    payload={'error':'The IBKR request could not be completed.', 'error_id':'observed-api-error',
+             'code':'ibkr_upstream_error', 'details':{'ibkr_status':503,
+             'ibkr_message':'Document service unavailable', 'ibkr_error_code':'SERVICE_UNAVAILABLE',
+             'ibkr_request_id':'provider-correlation', 'payload':'private-pdf-marker',
+             'access_token':'private-token-marker'}}
+    result,summary,calls=execute(tmp_path,payload,http='502')
+    receipt=json.loads((tmp_path/'daily-agreements-receipt.json').read_text())
+    assert result.returncode==1 and len(calls)==2
+    for evidence in (summary,json.dumps(receipt),result.stdout):
+        for expected in ('observed-api-error','ibkr_upstream_error','503','Document service unavailable','provider-correlation'):
+            assert expected in evidence
+        assert 'private-pdf-marker' not in evidence and 'private-token-marker' not in evidence
+
+
+def test_authentication_failure_preserves_diagnostic_without_submission(tmp_path):
+    result,summary,calls=execute(tmp_path,submission(),token_http='503',token_body={
+        'error':'Identity service unavailable','error_id':'auth-correlation','code':'identity_unavailable',
+        'access_token':'must-not-log-token'})
+    assert result.returncode!=0 and len(calls)==1
+    receipt=json.loads((tmp_path/'daily-agreements-receipt.json').read_text())
+    assert receipt['phase']=='authentication'
+    assert 'auth-correlation' in summary and 'Identity service unavailable' in summary
+    assert 'No agreement submission was attempted' in summary
+    assert 'must-not-log-token' not in summary+result.stdout+result.stderr+json.dumps(receipt)
