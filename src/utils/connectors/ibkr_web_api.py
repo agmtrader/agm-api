@@ -221,7 +221,7 @@ class IBKRWebAPI:
             "grant_type": "client_credentials",
             "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
             "client_assertion": client_assertion,
-            "scope": "accounts.read accounts.write bank-instructions.read bank-instructions.write clients.read clients.write echo.read echo.write fee-templates.read fee-templates.write instructions.read instructions.write statements.read transfers.read transfers.write sso-sessions.write sso-browser-sessions.write"
+            "scope": "accounts.read accounts.write bank-instructions.read bank-instructions.write clients.read clients.write echo.read echo.write enumerations.read fee-templates.read fee-templates.write instructions.read instructions.write statements.read transfers.read transfers.write sso-sessions.write sso-browser-sessions.write"
         }
 
         headers = {
