@@ -12,6 +12,7 @@ from src.components.clients.contacts import (
 )
 from src.utils.response import format_response
 from src.utils.exception import ServiceError
+from src.utils.authz import require_scope
 
 bp = Blueprint('contacts', __name__)
 
@@ -23,6 +24,19 @@ def _read_id_filter(name, values):
         raise ServiceError(f'{name} requires 1 to 100 nonblank IDs', status_code=400)
     ids = list(dict.fromkeys(value.strip() for value in values))
     return ids[0] if len(ids) == 1 else ids
+
+
+@bp.route('/reconcile_application', methods=['POST'])
+@require_scope('accounts/contact')
+@format_response
+def reconcile_application_route():
+    """Resolve contacts from the saved pending application; never return raw identity."""
+    from src.components.clients.contact_identity import reconcile_application_contacts
+    from src.utils.connectors.supabase import db
+    payload = request.get_json(force=True) or {}
+    if not isinstance(payload, dict) or set(payload) != {'account_id'}:
+        raise ServiceError('Only account_id is accepted for application contact setup.', 422, 'contact_identity_invalid')
+    return reconcile_application_contacts(db, payload.get('account_id'))
 
 
 @bp.route('/create', methods=['POST'])

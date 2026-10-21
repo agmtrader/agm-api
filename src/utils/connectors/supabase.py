@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Boolean, ForeignKey, Text, create_engine, Column, Integer, BIGINT, Numeric, Identity
+from sqlalchemy import CheckConstraint, Date, Index, BigInteger, Boolean, ForeignKey, Text, create_engine, Column, Integer, BIGINT, Numeric, Identity
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 import uuid
@@ -243,6 +243,44 @@ class Supabase:
             email = Column(Text, nullable=True)
             met_place = Column(Text, nullable=True)
 
+        class ContactIdentity(self.Base):
+            __tablename__ = 'contact_identity'
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='CASCADE', onupdate='CASCADE'), primary_key=True)
+            date_of_birth = Column(Date, nullable=False)
+            source_account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            source = Column(Text, nullable=False)
+            verification_status = Column(Text, nullable=False)
+            created = Column(Text, nullable=False)
+            updated = Column(Text, nullable=False)
+            __table_args__ = (
+                CheckConstraint("source = 'application'"),
+                CheckConstraint("verification_status = 'applicant_declared'"),
+                Index('contact_identity_source_account_idx', 'source_account_id'),
+            )
+
+        class ContactIdentityDocument(self.Base):
+            __tablename__ = 'contact_identity_document'
+            id = Column(UUID(as_uuid=True), primary_key=True)
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='CASCADE', onupdate='CASCADE'), nullable=False)
+            document_type = Column(Text, nullable=False)
+            issuing_country = Column(Text, nullable=False)
+            identifier = Column(Text, nullable=False)
+            source_account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=True)
+            source = Column(Text, nullable=False)
+            verification_status = Column(Text, nullable=False)
+            created = Column(Text, nullable=False)
+            updated = Column(Text, nullable=False)
+            __table_args__ = (
+                CheckConstraint("document_type in ('passport','nationalCard','driversLicense')"),
+                CheckConstraint("issuing_country ~ '^[A-Z]{3}$'"),
+                CheckConstraint("identifier ~ '^[A-Z0-9]{1,128}$'"),
+                CheckConstraint("source = 'application'"),
+                CheckConstraint("verification_status = 'applicant_declared'"),
+                Index('contact_identity_document_scoped_id_idx', 'document_type', 'issuing_country', 'identifier', unique=True),
+                Index('contact_identity_document_contact_idx', 'contact_id'),
+                Index('contact_identity_document_source_account_idx', 'source_account_id'),
+            )
+
         class ContactDocument(self.Base):
             __tablename__ = 'contact_document'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -429,6 +467,8 @@ class Supabase:
         self.Advisor = Advisor
         self.AdvisorChangeRequest = AdvisorChangeRequest
         self.Contact = Contact
+        self.ContactIdentity = ContactIdentity
+        self.ContactIdentityDocument = ContactIdentityDocument
         self.ContactScreening = ContactScreening
         self.ContactDocument = ContactDocument
         self.Document = Document
