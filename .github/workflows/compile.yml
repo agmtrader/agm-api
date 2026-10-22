@@ -50,18 +50,20 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-      - name: Compile application and schema preflight
-        run: python -m compileall -q src run.py dev/schema_preflight.py
+      - name: Validate application and deployment-helper syntax without writing bytecode
+        run: |
+          python -B - <<'PYTHON'
+          import ast
+          from pathlib import Path
+          sources = list(Path('src').rglob('*.py'))
+          sources += [Path('run.py'), Path('dev/schema_preflight.py'), Path('dev/sync_clients_job.py')]
+          for source in sources:
+              ast.parse(source.read_bytes(), filename=str(source))
+          print(f'Validated {len(sources)} Python sources without writing bytecode')
+          PYTHON
+          bash -n dev/deploy_api.sh
 
-      - name: Test accounting coverage, independent totals, downloads and PDF isolation
-        run: python -m pytest tests/test_accounting_statements.py tests/test_reporting_statements.py tests/test_trade_confirmations.py -q
-
-      # Proposal eligibility regressions must pass before Cloud Build deploys this commit.
-      - name: Test startup, deployment gating, reporting cache, exception privacy and proposals
+      - name: Run remaining repository tests without saved cache or bytecode
         env:
-          AGM_IDENTITY_TEST_DATABASE_URL: postgresql+psycopg2://upload_fixture:synthetic-fixture-password@localhost:5432/agm_upload_fixture
-          AGM_UPLOAD_TEST_DATABASE_URL: postgresql+psycopg2://upload_fixture:synthetic-fixture-password@localhost:5432/agm_upload_fixture
-        run: python -m pytest tests/test_database_startup.py tests/test_database_connections.py tests/test_report_cache.py tests/test_exception_reporting.py tests/test_unfunded_exception_reporting.py tests/test_unfunded_workflow.py tests/test_investment_proposals.py tests/test_position_quotes.py tests/test_ibkr_token_cache.py tests/test_authz_contract.py tests/test_contact_read_filters.py tests/test_contact_identity.py tests/test_contact_uploads.py tests/test_daily_agreements.py tests/test_daily_agreements_workflow.py tests/test_risk_profile_deposit.py -q
-
-      - name: Test ETL publication, scheduled outcomes and screening metrics
-        run: python -m pytest tests/test_scheduled_maintenance.py tests/test_scheduled_workflows.py tests/test_clients_etl_runner.py tests/test_clients_etl_summary.py tests/test_clients_job_source.py tests/test_market_etl_runner.py tests/test_clients_etl_failure_regressions.py -q
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -B -m pytest -p no:cacheprovider tests -q

@@ -61,6 +61,58 @@ HTTP fallback, no ETL replay, and no notification on mere dispatch acceptance.
 
 ## Verification
 
+### Historical equity returns — October 22, 2026 (local implementation)
+
+The background runner enables `historical_yields: true` only in the per-run
+`stocks_snapshot` and `etfs_snapshot` configurations. The job retains
+`DEV_MODE=false`; shared templates and foreground production extract defaults
+remain unchanged. API manual dispatch uses the same background runner.
+
+`Current Yield` retains the existing calculation: the arithmetic mean of five
+annual price returns, in percentage points, using the latest close on or before
+each of six annual boundaries. It is neither CAGR nor dividend/distribution or
+total return. Each daily-history request, including the backward page used for
+IBKR's 1,000-bar response cap, waits 1.25 seconds before sending. This paces this
+job below 50 history requests per minute. Requests stay sequential.
+The limit is documented in [IBKR Web API pacing limitations](https://ibkrcampus.com/docs/web-api/v1/pacing-limitations).
+
+Missing, invalid/nonfinite or insufficient history leaves that symbol's yield
+blank; other symbols continue. Real zero and negative returns are preserved.
+The terminal overview's equity extract steps contain `historical_yields` with
+the calculation method and requested/populated/unavailable counts. Pipeline
+success does not imply every instrument has five years of available history.
+
+Activation requires updating the pinned job source bundle while preserving
+the reviewed existing job template; an API release alone does not update this
+job's pinned overlay. Before applying,
+inspect current execution, staging and lock state; do not interrupt an active
+run or replay an uncertain one. After rollout, inspect the next execution's
+overview counts and exact stock/ETF resource values before claiming hosted
+acceptance. No rollout or live enrichment run is established by the local tests.
+
+Deployment was separately authorized and completed on October 22 at
+15:39:23 UTC / 09:39:23 Costa Rica. The reviewed source bundle SHA-256 is
+`838815507d442da9395e73c002da64e7cb0192b27e6cf59eb5307588915f1905`,
+GCS generation `1792683489605165`. Operation
+`0d3ac520-aa07-431a-8156-352c0eb2da8e` completed successfully. Independent job
+read-back confirms the new bundle references and preservation of all other
+template settings, labels and annotations, including the existing immutable
+image. Published workflow SHA `070da7b494aaeb05f0b9eeaafd7d57cf55a6b8f7`
+is unchanged and retains daily 13:37 UTC / 07:37 Costa Rica. The execution
+inventory is unchanged; no additional ETL run was started. Local validation:
+90 tests and 75 subtests passed. Live history availability and resource values
+remain awaiting the next scheduled execution.
+
+The targeted rollout preserved the existing job template rather than selecting
+a newer API image. The initial PATCH was rejected with HTTP 400 and left the
+job unchanged; the corrected request used Jobs.patch's full Job body, fresh
+etag and validate-only preflight. Jobs.patch does not accept the updateMask
+parameter used by the generic deployment helper's update branch. Do not use
+that branch unchanged for a subsequent rollout. Deployment evidence and the
+bounded rollout script are retained in
+`/private/tmp/agm-market-equity-yields-20261022/`; source and documentation
+changes remain local and uncommitted.
+
 Local checks exercise the actual runner/pipeline DataFrame-source handling, real
 Flask JWT/scope/dispatch boundary, and actual Actions shell with in-memory providers.
 Failures cover stale/missing sources, partial stages, concurrent lock rejection,

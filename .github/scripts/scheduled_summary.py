@@ -37,7 +37,17 @@ def render(mode, body, http_status):
             'accounts_with_some_contacts_no_screenings', 'screenings_with_list_matches',
             'screenings_without_list_matches', 'ofac_matches', 'uk_matches', 'un_matches')
     values = {key: count(body, key) for key in keys}
-    lines += [f'{key}: {show(value)}' for key, value in values.items()]
+    # Keep the complete metrics above for validation; display a compact overview.
+    display_fields = (
+        ('screenings_executed', 'Screenings executed'),
+        ('contacts_targeted', 'Contacts targeted'),
+        ('contacts_with_no_screenings', 'Contacts with no screenings'),
+        ('accounts_targeted', 'Accounts targeted'),
+        ('ofac_matches', 'OFAC matches'),
+        ('uk_matches', 'UK matches'),
+        ('un_matches', 'UN matches'),
+    )
+    lines += [f'{label}: {show(values[key])}' for key, label in display_fields]
     errors = body.get('screening_errors')
     error_count = len(errors) if isinstance(errors, list) else None
     lines.append(f'Screening errors: {show(error_count)}')

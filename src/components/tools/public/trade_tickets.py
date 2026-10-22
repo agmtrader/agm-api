@@ -109,6 +109,11 @@ def _improsa_transaction(value):
     return code
 
 
+def _confirmation_total_amount(net_cash, accrued_interest):
+    """ACOBO's established cash convention, shared with the bond XLS export."""
+    return np.round(abs(net_cash) + abs(accrued_interest), 2)
+
+
 def _improsa_row(row):
     operation_date = _date(_first_value(row, 'TradeDate', 'Date/Time', 'OrigTradeDate'))
     maturity_date = _date(_first_value(row, 'Maturity', 'Expiry', 'MaturityDate'))
@@ -142,13 +147,23 @@ def _improsa_row(row):
     asset_class = str(_first_value(row, 'AssetClass')).strip().upper()
     if not asset_class:
         raise ValueError('Missing required Improsa fields: asset class')
-    # IBKR bond/bill quotes are per 100 of face value. Preserve the quoted
-    # price in column K; scale only the monetary principal in column N.
-    price_divisor = 100 if asset_class in {'BOND', 'BILL'} else 1
-    transaction_value = (
-        _number(abs(quantity * (price / price_divisor)))
-        if quantity != '' and price != '' else ''
-    )
+    accrued_interest = _number(_first_value(row, 'AccruedInterest'))
+    if asset_class in {'BOND', 'BILL'}:
+        net_cash = _number(_first_value(row, 'NetCash'))
+        missing = [field for field, value in (
+            ('NetCash', net_cash), ('AccruedInterest', accrued_interest),
+        ) if value == '']
+        if missing:
+            raise ValueError(f'Missing required Improsa fields: {", ".join(missing)}')
+        # Match ACOBO TotalAmount, including its positive accrued-interest
+        # convention. Broker NetCash owns fees; never add commission again.
+        accrued_interest = abs(accrued_interest)
+        transaction_value = _number(_confirmation_total_amount(net_cash, accrued_interest))
+    else:
+        transaction_value = (
+            _number(abs(quantity * price))
+            if quantity != '' and price != '' else ''
+        )
 
     return {
         0: _first_value(row, 'IBOrderID'),
@@ -160,7 +175,7 @@ def _improsa_row(row):
         9: 0,
         10: price,
         11: _number(_first_value(row, 'Yield', 'Yield (Price + Interest)', 'YTM')),
-        12: _number(_first_value(row, 'AccruedInterest')),
+        12: accrued_interest,
         13: transaction_value,
         18: _improsa_currency(_first_value(row, 'CurrencyPrimary', 'Currency')),
         19: days_to_maturity,
@@ -214,6 +229,8 @@ def generate_improsa_xls(flex_query_dict, indices, *, review_sample=False):
         workbook.set_colour_RGB(int(index), *rgb)
     worksheet = workbook.add_sheet(layout['sheet_name'])
     styles = [_improsa_template_style(spec) for spec in layout['styles']]
+    quoted_price_style = _improsa_template_style(layout['styles'][layout['data_styles'][10]])
+    quoted_price_style.num_format_str = quoted_price_style.num_format_str.replace('0.00', '0.0000')
     for column, width in enumerate(layout['widths']):
         worksheet.col(column).width = width
 
@@ -227,7 +244,8 @@ def generate_improsa_xls(flex_query_dict, indices, *, review_sample=False):
         for column in range(len(layout['widths'])):
             if column in (0, 1):
                 continue
-            worksheet.write(row_number, column, values.get(column, ''), styles[layout['data_styles'][column]])
+            style = quoted_price_style if column == 10 else styles[layout['data_styles'][column]]
+            worksheet.write(row_number, column, values.get(column, ''), style)
     output = BytesIO()
     workbook.save(output)
     output.seek(0)
@@ -278,7 +296,7 @@ def generate_trade_confirmation_message(flex_query_dict, indices):
         except:
             df_indexed.loc[:,'Accrued (Days)'] = 0
 
-    df_indexed.loc[:,'TotalAmount'] = round(df_indexed['AccruedInterest'] + df_indexed['NetCash'], 2).astype(float)
+    df_indexed.loc[:,'TotalAmount'] = _confirmation_total_amount(df_indexed['NetCash'], df_indexed['AccruedInterest']).astype(float)
 
     df_indexed.loc[:,'Price (including Commissions)'] = round((df_indexed['NetCash']/df_indexed['Quantity']) * 100, 4).astype(float)
     
@@ -298,7 +316,7 @@ def generate_trade_confirmation_message(flex_query_dict, indices):
         df_consolidated.loc[:, 'Exchange'] = ''
         if accrued_days is None:
             df_consolidated.loc[:,'Accrued (Days)'] = round((df_consolidated['AccruedInterest'].astype(float)) / (df_consolidated['Coupon'].astype(float)/100 * df_consolidated['Quantity'].astype(float)) * 360).astype(float)
-        df_consolidated.loc[:,'TotalAmount'] = round(df_consolidated['AccruedInterest'] + df_consolidated['NetCash'], 2).astype(float)
+        df_consolidated.loc[:,'TotalAmount'] = _confirmation_total_amount(df_consolidated['NetCash'], df_consolidated['AccruedInterest']).astype(float)
         df_consolidated.loc[:,'Price (including Commissions)'] = round((df_consolidated['NetCash']/df_consolidated['Quantity']) * 100, 4).astype(float)
 
     if (len(df_consolidated) != 1):

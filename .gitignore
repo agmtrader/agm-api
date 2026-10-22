@@ -192,6 +192,7 @@ cython_debug/
 #.idea/
 
 !dev/refresh_ibkr_details.py
+!dev/add_us_bond_permission.py
 
 !dev/deploy_clients_job.py
 !dev/deploy_market_job.py
