@@ -412,6 +412,7 @@ class Supabase:
             created = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             updated = Column(Text, nullable=False, default=datetime.now().strftime('%Y%m%d%H%M%S'))
             score = Column(Text, nullable=False)
+            estimated_deposit = Column(Numeric(precision=18, scale=2), nullable=True)
             name = Column(Text, nullable=True)
             answers = Column(JSONB, nullable=True)
             raw_answers = Column(JSONB, nullable=True)

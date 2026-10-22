@@ -1,6 +1,7 @@
 from src.utils.logger import logger
 from src.utils.connectors.supabase import db
-from src.utils.exception import handle_exception
+from src.utils.exception import ServiceError, handle_exception
+from decimal import Decimal, InvalidOperation
 import re
 import unicodedata
 
@@ -126,6 +127,7 @@ def _with_derived_risk_archetype(risk_profile: dict) -> dict:
     derived_risk_archetype = get_risk_archetype_for_score(risk_profile.get('score'))
     return {
         **risk_profile,
+        'estimated_deposit': float(risk_profile['estimated_deposit']) if risk_profile.get('estimated_deposit') is not None else None,
         'assigned_risk_archetype': derived_risk_archetype.get('name') if derived_risk_archetype else None,
     }
 
@@ -161,6 +163,24 @@ def _resolve_or_create_contact(name: str, email: str) -> str:
 @handle_exception
 def create_risk_profile(data: dict):
     data_to_save = {**(data or {})}
+    deposit = data_to_save.get('estimated_deposit')
+    if deposit is not None:
+        try:
+            amount = Decimal(str(deposit))
+            valid = (
+                amount.is_finite()
+                and 0 < amount < Decimal('10000000000000000')
+                and amount == amount.quantize(Decimal('0.01'))
+            )
+        except (InvalidOperation, ValueError):
+            valid = False
+        if not valid:
+            raise ServiceError(
+                'Estimated deposit must be a positive USD amount with at most two decimal places.',
+                status_code=400,
+                code='invalid_estimated_deposit',
+            )
+        data_to_save['estimated_deposit'] = amount
     data_to_save.pop('assigned_risk_archetype', None)
     contact_id = data_to_save.pop('contact_id', None)
     email = data_to_save.pop('email', None)
