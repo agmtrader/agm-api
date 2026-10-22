@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 import types
 import unittest
+import pytest
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -64,10 +65,10 @@ class InvestmentProposalTests(unittest.TestCase):
         self.bonds = pd.DataFrame([
             {'Ticker': f'TEST{rating}{i}', 'Symbol_x': f'TEST{rating}{i}',
              'S&P Equivalent_x': rating, 'Current Yield_x': 6.0}
-            for rating in ['BBB', 'BB'] for i in range(12)
+            for rating in ['BBB', 'BB'] for i in range(24)
         ])
         self.context = {
-            'etfs_df': self.etfs,
+            'etfs_df': pd.DataFrame([{'Financial Instrument': f'ETF{i}', 'Current Yield': 8.0} for i in range(20)]),
             'proposal_equity_df': self.fallback,
             'bonds_df_no_duplicates': pd.DataFrame(),
             'merged_df': self.bonds,
@@ -104,7 +105,7 @@ class InvestmentProposalTests(unittest.TestCase):
     def test_aggressive_c_populates_etfs_with_estimate(self):
         proposal, _ = self.populate()
         assets = self.p._assets_from_investment_proposal(proposal)
-        self.assertEqual(len(assets['etfs']), 4)
+        self.assertEqual(len(assets['etfs']), 20)
         self.assertFalse(assets['bonds'])
         self.assertAlmostEqual(sum(asset['percentage'] for asset in assets['etfs']), 1.0)
 
@@ -114,7 +115,7 @@ class InvestmentProposalTests(unittest.TestCase):
                 proposal, expected = self.populate(score)
                 record = self.p._serialize_investment_proposal(proposal, None, 'risk_profile')
                 normalized = self.p._normalize_saved_investment_proposal(record)
-                self.assertEqual(len(normalized['assets']['etfs']), 4)
+                self.assertEqual(sum(len(normalized['assets'][key]) for key in ['treasury','aaa_a','bbb','bb','etfs']), 20)
                 for bucket, weight in expected.items():
                     self.assertAlmostEqual(normalized['derived_distribution'][bucket], weight)
                 self.p.db.create.assert_not_called()
@@ -196,7 +197,7 @@ class InvestmentProposalTests(unittest.TestCase):
             rows.append({'Ticker': f'VALID{i}', 'Symbol_x': f'VALID{i}', 'Current Yield_x': 6.0, **fields})
         self.context['merged_df'] = pd.DataFrame(rows)
         proposal = self.p._build_investment_proposal_template()
-        self.p._populate_investment_proposal_from_distribution(proposal, {'bonds_bb': 1}, self.context)
+        self.p._populate_investment_proposal_from_distribution(proposal, {'bonds_bb': 1}, self.context, total_assets=len(rows))
         record = self.p._normalize_saved_investment_proposal(self.p._serialize_investment_proposal(proposal, None, 'risk_profile'))
         assets = record['assets']['bb']
         self.assertEqual({a['symbol'] for a in assets}, {f'VALID{i}' for i in range(len(inputs))})
@@ -210,7 +211,7 @@ class InvestmentProposalTests(unittest.TestCase):
         rows.append({'Ticker': 'VALID', 'Symbol_x': 'VALID', 'S&P Equivalent_x': 'BB-', 'Current Yield_x': 6.0})
         self.context['merged_df'] = pd.DataFrame(rows)
         proposal = self.p._build_investment_proposal_template()
-        self.p._populate_investment_proposal_from_distribution(proposal, {'bonds_bb': 1}, self.context)
+        self.p._populate_investment_proposal_from_distribution(proposal, {'bonds_bb': 1}, self.context, total_assets=1)
         assets = self.p._assets_from_investment_proposal(proposal)['bb']
         self.assertEqual([a['symbol'] for a in assets], ['VALID'])
         self.assertEqual(assets[0]['percentage'], 1)
@@ -258,14 +259,14 @@ class InvestmentProposalTests(unittest.TestCase):
         proposal = self.p._build_investment_proposal_template()
         self.p._populate_investment_proposal_from_distribution(proposal, {'bonds_bbb': 0.99, 'etfs': 0.01}, self.context)
         etfs = next(bucket['bonds'] for bucket in proposal if bucket['name'] == 'etfs')
-        self.assertEqual(len(etfs), 1)
-        self.assertAlmostEqual(etfs[0]['percentage'], 0.01)
+        self.assertGreaterEqual(len(etfs), 1)
+        self.assertAlmostEqual(sum(asset['percentage'] for asset in etfs), 0.01)
 
     def test_bond_only_proposal_does_not_require_etf_yields(self):
         self.context.update(etfs_df=pd.DataFrame(), proposal_equity_df=pd.DataFrame())
         proposal = self.p._build_investment_proposal_template()
         self.p._populate_investment_proposal_from_distribution(proposal, {'bonds_bbb': 1}, self.context)
-        self.assertEqual(sum(len(bucket['bonds']) for bucket in proposal), 12)
+        self.assertEqual(sum(len(bucket['bonds']) for bucket in proposal), 20)
 
     def test_all_zero_distribution_fails(self):
         with self.assertRaises(self.errors.ServiceError):
@@ -280,7 +281,7 @@ class InvestmentProposalTests(unittest.TestCase):
              patch.object(self.p, '_persist_investment_proposal', side_effect=persist):
             response = app.test_client().post('/investment_proposals/create/risk', json={'risk_profile': {'score': 3.2, 'id': 'test'}})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.json['assets']['etfs']), 4)
+        self.assertEqual(len(response.json['assets']['etfs']), 20)
 
     def test_missing_eligible_bb_returns_422_without_persistence_on_all_routes(self):
         app = Flask(__name__)
@@ -322,7 +323,7 @@ class InvestmentProposalTests(unittest.TestCase):
             {'Ticker': 'VALID', 'Symbol_x': 'VALID', 'Moodys': 'Ba3', 'Current Yield_x': 6.0},
             {'Ticker': 'INVALID', 'Symbol_x': 'INVALID', 'S&P Equivalent_x': 'B', 'Current Yield_x': 6.0},
         ])
-        plan = {'allocation': {'bonds': 100}, 'bond_rating_allocation': {'bb': 100}}
+        plan = {'total_assets': 1, 'allocation': {'bonds': 100}, 'bond_rating_allocation': {'bb': 100}}
         with patch.object(self.p, '_load_investment_proposal_context', return_value=self.context), \
              patch.object(self.p, '_persist_investment_proposal') as persist:
             response = app.test_client().post('/investment_proposals/preview/plan', json={'portfolio_plan': plan})
@@ -356,3 +357,108 @@ class InvestmentProposalTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_total_count_optimizer_matches_exhaustive_weighted_return():
+    p, errors, _ = load_components()
+    context = {
+        'bonds_df_no_duplicates': pd.DataFrame(),
+        'merged_df': pd.DataFrame([{'Ticker': f'B{i}', 'Symbol_x': f'B{i}', 'S&P Equivalent_x': 'BBB', 'Current Yield_x': y} for i, y in enumerate([6, 5.9, 5.8, 5.7])]),
+        'etfs_df': pd.DataFrame([{'Financial Instrument': f'E{i}', 'Current Yield': y} for i, y in enumerate([10, 9.9, 9.8, 9.7])]),
+    }
+    proposal = p._build_investment_proposal_template()
+    p._populate_investment_proposal_from_distribution(proposal, {'etfs': .6, 'bonds_bbb': .4}, context, total_assets=5)
+    record = p._build_investment_proposal_preview(proposal, None, {'etfs': .6, 'bonds_bbb': .4})
+    # Independent enumeration of every feasible split; counts do not follow 60/40.
+    best = max(.6 * np.mean([10,9.9,9.8,9.7][:e]) + .4 * np.mean([6,5.9,5.8,5.7][:5-e]) for e in range(1,5))
+    assert record['total_assets'] == 5
+    assert abs(record['expected_average_yield'] - best) < 1e-6
+    assert sum(a['percentage'] for a in record['assets']['etfs']) == .6
+    assert record['assets']['treasury'] == []
+    assert all(bucket['weight'] > 0 for bucket in record['bucket_summaries'])
+    for invalid in [0, -1, 1.5, True, '5']:
+        with pytest.raises(errors.ServiceError):
+            p._populate_investment_proposal_from_distribution(p._build_investment_proposal_template(), {'etfs':1}, context, total_assets=invalid)
+    with pytest.raises(errors.ServiceError) as caught:
+        p._populate_investment_proposal_from_distribution(p._build_investment_proposal_template(), {'etfs':1}, context, total_assets=20)
+    assert caught.value.code == 'proposal_asset_count_unavailable'
+
+
+def test_plan_preview_and_save_share_requested_count_and_weighted_output():
+    p, _, routes = load_components()
+    app = Flask(__name__)
+    app.register_blueprint(routes.bp, url_prefix='/investment_proposals')
+    context = {
+        'bonds_df_no_duplicates': pd.DataFrame(),
+        'merged_df': pd.DataFrame([{'Ticker':f'BBB{i}', 'Symbol_x':f'BBB{i}', 'S&P Equivalent_x':'BBB', 'Current Yield_x':5.0} for i in range(30)]),
+        'etfs_df': pd.DataFrame([{'Financial Instrument':f'ETF{i}', 'Current Yield':8.0} for i in range(30)]),
+        'proposal_equity_df': pd.DataFrame(),
+    }
+    plan = {'total_assets': 13, 'starting_amount': 12345.67, 'allocation':{'bonds':40,'stocks':60}, 'bond_rating_allocation':{'bbb':100}}
+    def persist(portfolio, risk_id, source, **kwargs):
+        return p._normalize_saved_investment_proposal(p._serialize_investment_proposal(portfolio, risk_id, source, **kwargs))
+    with patch.object(p, '_load_investment_proposal_context', return_value=context), patch.object(p, '_persist_investment_proposal', side_effect=persist):
+        preview = app.test_client().post('/investment_proposals/preview/plan', json={'portfolio_plan':plan})
+        saved = app.test_client().post('/investment_proposals/create/plan', json={'portfolio_plan':plan})
+    assert preview.status_code == saved.status_code == 200
+    a,b = preview.get_json(),saved.get_json()
+    assert a['total_assets'] == 13
+    assert a['assets'] == b['assets']
+    assert a['starting_amount'] == b['starting_amount'] == 12345.67
+    assert abs(a['expected_average_yield'] - (5*.4+8*.6)) < 1e-6
+    assert abs(sum(asset['percentage']*asset['current_yield'] for key in ['bbb','etfs'] for asset in b['assets'][key]) - a['expected_average_yield']) < 1e-6
+
+
+def test_custom_preview_uses_selected_weights_and_matches_save_without_writing():
+    p, _, routes = load_components()
+    app = Flask(__name__)
+    app.register_blueprint(routes.bp, url_prefix='/investment_proposals')
+    context = {
+        'merged_universe_df': pd.DataFrame(), 'ust_df': pd.DataFrame(), 'stocks_df': pd.DataFrame(),
+        'rtd_df': pd.DataFrame([{'Symbol':'BOND','SP':'BBB','Current Yield':5}]),
+        'etfs_df': pd.DataFrame([{'Symbol':'ETF1','Current Yield':10}, {'Symbol':'ETF2','Current Yield':2}]),
+    }
+    payload = {'assets':[
+        {'symbol':'BOND','source_bucket':'BONDS','percentage':40},
+        {'symbol':'ETF1','source_bucket':'ETFS','percentage':50},
+        {'symbol':'ETF2','source_bucket':'ETFS','percentage':10},
+        {'symbol':'not-in-feed','source_bucket':'UST','percentage':0},
+    ]}
+    def persist(portfolio, risk_id, source, **kwargs):
+        return p._normalize_saved_investment_proposal(p._serialize_investment_proposal(portfolio, risk_id, source, **kwargs))
+    with patch.object(p, '_load_investment_proposal_context', return_value=context), patch.object(p, '_persist_investment_proposal', side_effect=persist) as write:
+        preview = app.test_client().post('/investment_proposals/preview/assets', json=payload)
+        assert preview.status_code == 200
+        write.assert_not_called()
+        p.db.create.assert_not_called()
+        saved = app.test_client().post('/investment_proposals/create/assets', json=payload)
+    assert saved.status_code == 200
+    a, b = preview.get_json(), saved.get_json()
+    assert a['assets'] == b['assets']
+    assert a['source_type'] == b['source_type'] == 'custom'
+    assert a['total_assets'] == 3
+    assert a['assets']['treasury'] == []
+    assert a['expected_average_yield'] == 7.2  # .4*5 + .5*10 + .1*2
+    assert a['derived_distribution']['etfs'] == pytest.approx(.6)
+    assert a['bucket_summaries'][1]['average_yield'] == pytest.approx(5.2/.6)
+
+
+def test_optimizer_does_not_reserve_unselected_issuers_or_depend_on_bucket_order():
+    from itertools import combinations, product
+    p, _, _ = load_components()
+    pools = [
+        [{'Ticker':t, 'Current Yield_x':y} for t,y in [('shared',10),('A',9),('B',8)]],
+        [{'Ticker':t, 'Current Yield_x':y} for t,y in [('shared',9),('C',5),('D',4)]],
+    ]
+    weights = [.2,.8]
+    best = -1
+    for first,second in product(range(1,4), repeat=2):
+        if first+second != 3: continue
+        for a,b in product(combinations(pools[0],first),combinations(pools[1],second)):
+            if len({row['Ticker'] for row in (*a,*b)}) != 3: continue
+            best = max(best, .2*np.mean([r['Current Yield_x'] for r in a])+.8*np.mean([r['Current Yield_x'] for r in b]))
+    for rows, shares in [(pools,weights),(pools[::-1],weights[::-1])]:
+        selected = p._optimize_bucket_asset_selection(rows,shares,3)
+        assert len({r['Ticker'] for sleeve in selected for r in sleeve}) == 3
+        actual = sum(w*np.mean([r['Current Yield_x'] for r in sleeve]) for w,sleeve in zip(shares,selected))
+        assert actual == pytest.approx(best)

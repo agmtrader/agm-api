@@ -16,6 +16,8 @@ import numpy as np
 import re
 import time
 import math
+import heapq
+from itertools import count
 
 TOTAL_ASSETS = 20
 INVESTMENT_PROPOSAL_CONTEXT_TTL_SECONDS = 300
@@ -586,6 +588,8 @@ def _distribution_from_saved_assets_payload(assets: dict) -> dict | None:
         return None
 
     bucket_assets = {
+        'cash': assets.get('cash') or [],
+        'stocks': assets.get('stocks') or [],
         'treasuries': assets.get('treasury') or [],
         'bonds_aaa_a': assets.get('aaa_a') or [],
         'bonds_bbb': assets.get('bbb') or [],
@@ -864,163 +868,108 @@ def _initialize_used_symbols(bonds_df_no_duplicates: pd.DataFrame) -> set[str]:
     return used_symbols
 
 
-def _asset_count_for_weight(weight: float) -> int:
-    # Every requested sleeve needs at least one security, even below 2.5%.
-    return max(1, int(round(TOTAL_ASSETS * weight))) if weight > 0 else 0
+def _optimize_bucket_asset_selection(pools: list[list[dict]], weights: list[float], total_assets: int):
+    """Maximize weighted sleeve means with exact count and unique issuers.
+
+    The independent-sleeve optimum bounds each search branch. Only branch when
+    its selected holdings conflict, so unused candidates never reserve issuers.
+    """
+    def solve(excluded):
+        available = [[row for row in rows if row['Ticker'] not in excluded[i]][:total_assets]
+                     for i, rows in enumerate(pools)]
+        if len({row['Ticker'] for rows in available for row in rows}) < total_assets:
+            return None
+        states = {0: (0.0, [])}
+        for weight, rows in zip(weights, available):
+            next_states = {}
+            prefix = np.cumsum([float(row['Current Yield_x']) for row in rows])
+            for size, (score, counts) in states.items():
+                for k in range(1, min(len(rows), total_assets - size) + 1):
+                    candidate = score + weight * float(prefix[k - 1]) / k
+                    if size + k not in next_states or candidate > next_states[size + k][0]:
+                        next_states[size + k] = (candidate, counts + [k])
+            states = next_states
+        if total_assets not in states:
+            return None
+        score, counts = states[total_assets]
+        return score, [rows[:k] for rows, k in zip(available, counts)]
+
+    excluded = tuple(frozenset() for _ in pools)
+    initial = solve(excluded)
+    if initial is None:
+        return None
+    sequence = count()
+    queue = [(-initial[0], next(sequence), excluded, initial[1])]
+    visited = {excluded}
+    while queue:
+        _, _, excluded, selected = heapq.heappop(queue)
+        seen = {}
+        conflict = None
+        for i, rows in enumerate(selected):
+            for row in rows:
+                issuer = row['Ticker']
+                if issuer in seen:
+                    conflict = (issuer, seen[issuer], i)
+                    break
+                seen[issuer] = i
+            if conflict:
+                break
+        if not conflict:
+            return selected  # Best bound is now feasible: global optimum.
+        issuer, first, second = conflict
+        for i in (first, second):
+            child = tuple(value | {issuer} if j == i else value for j, value in enumerate(excluded))
+            if child in visited:
+                continue
+            visited.add(child)
+            result = solve(child)
+            if result is not None:
+                heapq.heappush(queue, (-result[0], next(sequence), child, result[1]))
+    return None
 
 
 def _populate_investment_proposal_from_distribution(
-    investment_proposal: list[dict],
-    distribution: dict,
-    context: dict,
+    investment_proposal: list[dict], distribution: dict, context: dict,
+    total_assets: int = TOTAL_ASSETS,
 ):
-    bonds_df_no_duplicates = context['bonds_df_no_duplicates']
-    merged_df = context['merged_df'].copy()
-    merged_df['S&P Equivalent_x'] = merged_df.apply(lambda row: _resolve_rating(row.to_dict()), axis=1)
-    etf_candidates = _prepare_etf_candidates(
-        context['etfs_df'],
-        context.get('proposal_equity_df'),
-    )
-    normalized_distribution = _normalize_distribution(distribution)
-
-    used_symbols = _initialize_used_symbols(bonds_df_no_duplicates)
-    bucket_selection_profiles: dict[str, dict | None] = {}
-
-    for asset_type in investment_proposal:
-        percentage = float(normalized_distribution.get(asset_type['name'], 0) or 0)
-        assets_to_invest = _asset_count_for_weight(percentage)
-
-        logger.info(f"--- Processing bucket: {asset_type['name']} ---")
-        logger.info(f"Distribution percentage: {percentage}")
-        logger.info(f"Assets to invest: {assets_to_invest}")
-        logger.info(f"Current bonds in bucket: {len(asset_type['bonds'])}")
-
-        sanitized_equivalents = asset_type['equivalents']
-        if asset_type['name'] == 'etfs':
-            combined_df = etf_candidates
-        elif asset_type['name'] == 'treasuries':
-            combined_df = merged_df[
-                merged_df.apply(lambda row: _resolve_rating(row.to_dict()) == 'UST', axis=1)
-            ]
-        else:
-            combined_df = merged_df[
-                merged_df['S&P Equivalent_x']
-                    .astype(str)
-                    .str.replace(r'[+\-]', '', regex=True)
-                    .isin(sanitized_equivalents)
-            ]
-
-        ranked_candidates, selection_profile = _prepare_bucket_candidates(
-            candidate_df=combined_df,
-            used_symbols=used_symbols,
-        )
-        bucket_selection_profiles[asset_type['name']] = selection_profile
-        top_bonds = ranked_candidates.head(max(0, assets_to_invest - len(asset_type['bonds'])))
-
-        normalized_top_bonds = []
-        for _, row in top_bonds.iterrows():
-            row_data = row.to_dict()
-            normalized_top_bonds.append({
-                'Symbol_x': row['Symbol_x'],
-                'Current Yield_x': row['Current Yield_x'],
-                'S&P Equivalent_x': _resolve_rating(row_data) or row['S&P Equivalent_x'],
-                **_resolve_asset_metadata(row_data),
-            })
-
-        asset_type['bonds'].extend(normalized_top_bonds)
-        used_symbols.update(top_bonds['Ticker'].tolist())
-
-    rating_to_bucket = {}
+    if isinstance(total_assets, bool) or not isinstance(total_assets, int) or total_assets < 1:
+        raise ServiceError('Total assets must be a positive integer.', status_code=400, code='invalid_asset_count')
+    weights = _normalize_distribution(distribution)
+    active = [bucket for bucket in investment_proposal if weights.get(bucket['name'], 0) > 0]
+    if total_assets < len(active):
+        raise ServiceError('Total assets must cover every nonzero allocation class.', status_code=422, code='invalid_asset_count')
+    merged = context['merged_df'].copy()
+    merged['S&P Equivalent_x'] = merged.apply(lambda row: _resolve_rating(row.to_dict()), axis=1)
+    used = _initialize_used_symbols(context['bonds_df_no_duplicates'])
+    pools = []
     for bucket in investment_proposal:
-        for equiv in bucket['equivalents']:
-            rating_to_bucket[equiv.replace('+', '').replace('-', '')] = bucket
-
-    bucket_needs = {
-        bucket['name']: max(0, _asset_count_for_weight(float(normalized_distribution.get(bucket['name'], 0) or 0)) - len(bucket['bonds']))
-        for bucket in investment_proposal
-    }
-
-    remaining_needed = sum(bucket_needs.values())
-
-    if remaining_needed > 0:
-        remaining_pool = (
-            _clean_candidate_pool(merged_df[~merged_df['Ticker'].isin(used_symbols)])
-        )
-        scored_remaining_pool = []
-        for _, row in remaining_pool.iterrows():
-            rating_key = str(row['S&P Equivalent_x']).replace('+', '').replace('-', '')
-            bucket = rating_to_bucket.get(rating_key)
-            if not bucket:
-                continue
-
-            selection_profile = bucket_selection_profiles.get(bucket['name'])
-            target_yield = float(selection_profile['target_yield']) if selection_profile else float(row['Current Yield_x'])
-            spread = float(selection_profile['spread']) if selection_profile else 1.0
-            selector_score = max(0.0, 1.0 - (abs(float(row['Current Yield_x']) - target_yield) / spread))
-
-            scored_remaining_pool.append({
-                **row.to_dict(),
-                '_bucket_name': bucket['name'],
-                '_selector_score': selector_score,
-            })
-
-        remaining_pool = pd.DataFrame(scored_remaining_pool)
-        if not remaining_pool.empty:
-            remaining_pool = (
-                remaining_pool
-                    .sort_values(by=['_selector_score', 'Current Yield_x'], ascending=[False, False])
-                    .groupby('Ticker')
-                    .head(1)
-            )
-
-        for _, row in remaining_pool.iterrows():
-            if remaining_needed == 0:
-                break
-
-            bucket = next(
-                bucket_ref for bucket_ref in investment_proposal
-                if bucket_ref['name'] == row['_bucket_name']
-            )
-
-            if bucket_needs[bucket['name']] <= 0:
-                continue
-
-            row_data = row.to_dict()
+        bucket['bonds'] = []
+    for bucket in active:
+        if bucket['name'] == 'etfs':
+            candidates = _prepare_etf_candidates(context['etfs_df'], context.get('proposal_equity_df'))
+        else:
+            equivalents = bucket['equivalents']
+            candidates = merged[merged['S&P Equivalent_x'].astype(str).str.replace(r'[+\-]', '', regex=True).isin(equivalents)]
+        cleaned = _clean_candidate_pool(candidates)
+        screened = _screen_outliers_for_bucket(cleaned, _bucket_selection_profile(cleaned))
+        ranked = screened.sort_values(['Current Yield_x', 'Ticker'], ascending=[False, True])
+        ranked = ranked.groupby('Ticker').head(1)
+        ranked = ranked[~ranked['Ticker'].isin(used)]
+        rows = ranked.to_dict(orient='records')
+        if not rows:
+            raise ServiceError(f"Unable to generate investment proposal: no eligible assets for {bucket['name']}.", status_code=422, code='proposal_assets_unavailable', details={'missing_buckets': [bucket['name']]})
+        pools.append(rows)
+    selected = _optimize_bucket_asset_selection(pools, [weights[bucket['name']] for bucket in active], total_assets)
+    if selected is None:
+        raise ServiceError(f'Cannot build exactly {total_assets} distinct eligible assets. Reduce the total or refresh market data.', status_code=422, code='proposal_asset_count_unavailable')
+    for bucket, rows in zip(active, selected):
+        for row in rows:
             bucket['bonds'].append({
-                'Symbol_x': row['Symbol_x'],
-                'Current Yield_x': row['Current Yield_x'],
-                'S&P Equivalent_x': row['S&P Equivalent_x'],
-                **_resolve_asset_metadata(row_data),
+                'Symbol_x': row['Symbol_x'], 'Current Yield_x': row['Current Yield_x'],
+                'S&P Equivalent_x': _resolve_rating(row) or row['S&P Equivalent_x'],
+                'percentage': weights[bucket['name']] / len(rows),
+                **_resolve_asset_metadata(row),
             })
-            used_symbols.add(row['Ticker'])
-            bucket_needs[bucket['name']] -= 1
-            remaining_needed -= 1
-
-    missing_buckets = [
-        bucket['name'] for bucket in investment_proposal
-        if normalized_distribution.get(bucket['name'], 0) > 0 and not bucket['bonds']
-    ]
-    if missing_buckets or not any(bucket['bonds'] for bucket in investment_proposal):
-        missing_names = ', '.join(missing_buckets) or 'all requested asset classes'
-        raise ServiceError(
-            f'Unable to generate investment proposal: no eligible assets for {missing_names}. '
-            'Refresh the market data and yield estimates before trying again.',
-            status_code=422,
-            code='proposal_assets_unavailable',
-            details={'missing_buckets': missing_buckets},
-        )
-
-    for asset_type in investment_proposal:
-        weight = float(normalized_distribution.get(asset_type['name'], 0) or 0)
-        # Available securities may be fewer than the target. Persist weights
-        # rather than silently changing the allocation to match their counts.
-        for asset in asset_type['bonds']:
-            asset['percentage'] = weight / len(asset_type['bonds'])
-        logger.announcement(f'Asset Type: {asset_type["name"]}')
-        logger.announcement(f'Percentage: {normalized_distribution.get(asset_type["name"], 0)}')
-        logger.announcement(f'Assets to invest: {len(asset_type["bonds"])}')
-        for bond in asset_type['bonds']:
-            logger.info(f'Bond: {bond["Symbol_x"]} - {bond["Current Yield_x"]} - {bond["S&P Equivalent_x"]}')
 
 
 def _persist_investment_proposal(
@@ -1087,6 +1036,9 @@ def _serialize_investment_proposal(
 def _average_bucket_yield(bonds: list[dict]) -> float:
     if not bonds:
         return 0.0
+    weight = sum(float(bond.get('percentage') or 0) for bond in bonds)
+    if weight > 0 and all(bond.get('percentage') is not None for bond in bonds):
+        return sum(float(bond['percentage']) * float(bond.get('current_yield') or 0) for bond in bonds) / weight
     return sum(float(bond.get('current_yield') or 0) for bond in bonds) / len(bonds)
 
 
@@ -1095,16 +1047,19 @@ def _build_investment_proposal_preview(
     risk_profile_id,
     distribution: dict,
     starting_amount=None,
+    source_type='portfolio_plan',
 ):
     normalized_distribution = _normalize_distribution(distribution)
     proposal_record = _serialize_investment_proposal(
         investment_proposal=investment_proposal,
         risk_profile_id=risk_profile_id,
-        source_type='portfolio_plan',
+        source_type=source_type,
         starting_amount=starting_amount,
     )
 
     bucket_mapping = [
+        ('cash', 'cash'),
+        ('stocks', 'stocks'),
         ('treasury', 'treasuries'),
         ('aaa_a', 'bonds_aaa_a'),
         ('bbb', 'bonds_bbb'),
@@ -1122,6 +1077,8 @@ def _build_investment_proposal_preview(
         weight = float(normalized_distribution.get(distribution_key, 0) or 0)
         total_assets += len(bonds)
         expected_average_yield += average_yield * weight
+        if weight <= 0:
+            continue
         bucket_summaries.append({
             'key': distribution_key,
             'weight': weight,
@@ -1178,8 +1135,7 @@ def _normalize_saved_investment_proposal(proposal: dict) -> dict:
         'derived_distribution': _derive_distribution_for_saved_proposal({**proposal, 'source_type': normalized_source_type}),
     }
 
-@handle_exception
-def create_investment_proposal_with_assets(assets: list[dict], risk_profile_id=None, contact_id=None, starting_amount=None):
+def _build_investment_proposal_with_assets(assets: list[dict]):
     logger.announcement('Generating investment proposal from assets...')
 
     try:
@@ -1203,14 +1159,17 @@ def create_investment_proposal_with_assets(assets: list[dict], risk_profile_id=N
             percentage = asset.get('percentage')
             if percentage is None:
                 raise Exception('Each asset must include symbol and percentage.')
-            raw_percentages.append(float(percentage))
+            value = float(percentage)
+            if not math.isfinite(value) or value < 0:
+                raise ServiceError('Asset weights must be finite and nonnegative.', status_code=400, code='invalid_asset_weight')
+            raw_percentages.append(value)
 
         total_percentage = sum(raw_percentages)
         if total_percentage <= 0:
             raise Exception('Asset percentages must include at least one positive value.')
 
         # Normalize to 1.0; accept either 0-1 fractions or 0-100 percentages
-        assets = [{**asset} for asset in assets]
+        assets = [{**asset} for asset in assets if float(asset['percentage']) > 0]
         if total_percentage > 1.5:
             for asset in assets:
                 asset['percentage'] = float(asset.get('percentage', 0)) / 100.0
@@ -1327,11 +1286,26 @@ def create_investment_proposal_with_assets(assets: list[dict], risk_profile_id=N
                 logger.info(
                     f'Bond: {bond["Symbol_x"]} - {bond.get("percentage", 0)} - {bond["S&P Equivalent_x"]}'
                 )
+    except ServiceError:
+        raise
     except Exception as exc:
         logger.error(f'Failed creating investment proposal: {exc}')
         raise Exception(f'Failed creating investment proposal: {exc}')
 
+    return investment_proposal
+
+
+@handle_exception
+def create_investment_proposal_with_assets(assets: list[dict], risk_profile_id=None, contact_id=None, starting_amount=None):
+    investment_proposal = _build_investment_proposal_with_assets(assets)
     return _persist_investment_proposal(investment_proposal, risk_profile_id, 'custom', contact_id=contact_id, starting_amount=starting_amount)
+
+
+@handle_exception
+def preview_investment_proposal_with_assets(assets: list[dict], risk_profile_id=None, starting_amount=None):
+    investment_proposal = _build_investment_proposal_with_assets(assets)
+    distribution = _distribution_from_saved_assets_payload(_assets_from_investment_proposal(investment_proposal))
+    return _build_investment_proposal_preview(investment_proposal, risk_profile_id, distribution, starting_amount, source_type='custom')
 
 
 @handle_exception
@@ -1386,6 +1360,7 @@ def create_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
             investment_proposal=investment_proposal,
             distribution=distribution,
             context=context,
+            total_assets=portfolio_plan.get('total_assets', TOTAL_ASSETS),
         )
 
     except ServiceError:
@@ -1420,6 +1395,7 @@ def preview_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
             investment_proposal=investment_proposal,
             distribution=distribution,
             context=context,
+            total_assets=portfolio_plan.get('total_assets', TOTAL_ASSETS),
         )
     except ServiceError:
         raise

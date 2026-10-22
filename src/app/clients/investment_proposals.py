@@ -4,6 +4,7 @@ from src.components.clients.investment_proposals import (
     create_investment_proposal_with_portfolio_plan,
     create_investment_proposal_with_risk_profile,
     preview_investment_proposal_with_portfolio_plan,
+    preview_investment_proposal_with_assets,
     read_investment_proposals,
 )
 from src.utils.response import format_response
@@ -35,6 +36,17 @@ def create_with_assets_route():
         risk_profile_id=risk_profile_id,
         contact_id=contact_id,
         starting_amount=starting_amount,
+    )
+
+
+@bp.route('/preview/assets', methods=['POST'])
+@format_response
+def preview_with_assets_route():
+    payload = request.get_json(force=True)
+    return preview_investment_proposal_with_assets(
+        assets=payload.get('assets'),
+        risk_profile_id=payload.get('risk_profile_id'),
+        starting_amount=payload.get('starting_amount'),
     )
 
 
