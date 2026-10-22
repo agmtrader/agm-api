@@ -138,3 +138,11 @@ documented initialization settlement interval before this complete retest. The
 observed improvement does not establish why IBKR invalidated the earlier sessions.
 Future persistent session failures remain failures; no retry budget was increased.
 The broader first automatic-run/manual Clients dispatch scope remains in API #86.
+
+## ETF universe change — October 22, 2026
+
+At the owner's request, VWRA is removed from the configured ETF universe after
+its older-history request remained unavailable. Subsequent extracts request the
+remaining 60 ETFs. The next successful market publication removes its row from
+the canonical ETF report; historical backup files remain unchanged. The 60/61
+coverage above describes the preceding run before this exclusion.
