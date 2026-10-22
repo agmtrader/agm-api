@@ -106,6 +106,12 @@ counted as isolated unavailable symbols. `session_recoveries` remains in the
 private overview and a nonzero count is shown in the workflow summary. Existing
 strict source provenance, publication checks and zero whole-job retries remain.
 
+Brokerage initialization, including a recovered SSO session, waits IBKR's documented
+two seconds before the accounts bootstrap. Known session errors retain sanitized
+provider diagnostics and authentication-status flags in private `session_failures`,
+including the final error after the recovery budget is exhausted. A diagnostic
+request failure stays unavailable and cannot replace the original read error.
+
 The previously deployed background stock/ETF historical enrichment is preserved
 in committed source: `historical_yields: true`, `DEV_MODE=false`, sequential daily
 history pages with 1.25-second pacing, including recovery reads. `Current Yield`

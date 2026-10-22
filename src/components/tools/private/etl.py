@@ -43,6 +43,8 @@ def _with_ibkr_market_data_session(func):
                 context = getattr(ibkr_trading_api, '_market_data_context', None)
                 if isinstance(config, dict) and isinstance(context, dict) and context.get('recoveries'):
                     config['_session_recoveries'] = deepcopy(context['recoveries'])
+                if isinstance(config, dict) and isinstance(context, dict) and context.get('failures'):
+                    config['_session_failures'] = deepcopy(context['failures'])
     return wrapped
 
 batch_folder_id = os.getenv('ETL_BATCH_FOLDER_ID', '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8')
@@ -188,6 +190,8 @@ def extract_data(etl_config) -> dict:
             steps.append({'name': step_name, 'status': 'failed', 'error': str(e)})
         if file_config.get('_session_recoveries'):
             steps[-1]['session_recoveries'] = deepcopy(file_config['_session_recoveries'])
+        if file_config.get('_session_failures'):
+            steps[-1]['session_failures'] = deepcopy(file_config['_session_failures'])
 
     failed_steps = [step for step in steps if step.get('status') not in ('success', 'skipped')]
     overall_status = 'success' if not failed_steps else 'partial'
@@ -1966,6 +1970,7 @@ def _runtime_etl_config(etl_config, now=None):
     for file_config in runtime_config.get('files', []):
         file_config.pop('_extracted_source', None)
         file_config.pop('_session_recoveries', None)
+        file_config.pop('_session_failures', None)
         backup_name = file_config.get('backup_name')
         if not backup_name:
             continue

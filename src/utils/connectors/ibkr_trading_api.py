@@ -102,10 +102,12 @@ class IBKRTradingAPI(IBKRWebAPI):
         context prevents callers from using a half-ready session or leaking a
         brokerage session when an ETL step fails.
         """
-        self._market_data_context = {'credential': credential, 'ip': ip, 'recoveries': []}
+        self._market_data_context = {'credential': credential, 'ip': ip, 'recoveries': [], 'failures': []}
         try:
             self.create_sso_session(credential=credential, ip=ip)
             self.initialize_brokerage_session()
+            # IBKR documents this settlement interval before further /iserver calls.
+            time.sleep(2)
             accounts = self.get_brokerage_accounts()
             logger.info(
                 f"IBKR market-data session ready: selected_account={accounts.get('selectedAccount')}"
@@ -120,6 +122,18 @@ class IBKRTradingAPI(IBKRWebAPI):
                 finally:
                     self.sso_token = None
             self._market_data_context = None
+
+    def _market_auth_snapshot(self):
+        """Retain only authentication flags; diagnostic failure cannot replace the read error."""
+        try:
+            response = requests.post(self.BASE_URL + '/v1/api/iserver/auth/status',
+                                     headers=self._require_sso_headers(), timeout=(10, 10))
+            payload = response.json()
+            flags = {key: payload[key] for key in ('authenticated', 'connected', 'competing')
+                     if isinstance(payload, dict) and type(payload.get(key)) is bool}
+            return {'http_status': response.status_code, **flags}
+        except (requests.RequestException, ValueError, ServiceError):
+            return {'unavailable': True}
 
     def _request_market_data_json(self, method: str, url: str, **kwargs):
         """Recover one explicitly safe read per extract, retaining its warning.
@@ -143,6 +157,9 @@ class IBKRTradingAPI(IBKRWebAPI):
                 raise_ibkr_response_error(response, trading_session=True, account_access=True)
             except ServiceError as error:
                 context = getattr(self, '_market_data_context', None)
+                if context and error.code in ('ibkr_session_expired', 'ibkr_session_not_ready'):
+                    context['failures'].append({'reason': error.code, 'endpoint': endpoint,
+                        'provider_diagnostics': error.details, 'auth_status': self._market_auth_snapshot()})
                 if (attempt or not context or context['recoveries']
                         or error.code not in ('ibkr_session_expired', 'ibkr_session_not_ready')):
                     raise
@@ -152,6 +169,7 @@ class IBKRTradingAPI(IBKRWebAPI):
                 if error.code == 'ibkr_session_expired':
                     self.create_sso_session(credential=context['credential'], ip=context['ip'])
                     self.initialize_brokerage_session()
+                    time.sleep(2)
                 self.get_brokerage_accounts()
                 if endpoint == 'marketdata/history':
                     time.sleep(1.25)

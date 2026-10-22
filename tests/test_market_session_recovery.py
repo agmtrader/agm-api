@@ -48,6 +48,8 @@ def test_lost_session_read_recovers_once_and_retains_warning(client, monkeypatch
     with client.market_data_session():
         assert client.get_securities_by_symbol('SYNTHETIC', 'STK') == [{'conid': 101}]
         assert len(client._market_data_context['recoveries']) == 1
+        assert client._market_data_context['failures'][0]['auth_status'] == {
+            'http_status': 200, 'authenticated': True, 'connected': True, 'competing': False}
     assert len(calls) == 2
     assert calls[0][2]['timeout'] == (10, 45)
     assert calls[-1][2]['headers']['Authorization'] == 'Bearer ' + client.sessions[-1]
@@ -64,6 +66,18 @@ def test_persistent_session_failure_is_not_hidden_or_replayed_forever(client, mo
     assert error.value.code == 'ibkr_session_not_ready'
     assert request.call_count == 2
     client.logout_of_brokerage_session.assert_called_once()
+
+
+def test_market_session_waits_for_documented_settlement_before_accounts(client, monkeypatch):
+    events = []
+    monkeypatch.setattr(client, 'initialize_brokerage_session', lambda: events.append('initialize'))
+    monkeypatch.setattr('src.utils.connectors.ibkr_trading_api.time.sleep', lambda seconds: events.append(('sleep', seconds)))
+    def accounts():
+        assert events[-2:] == ['initialize', ('sleep', 2)]
+        return {'selectedAccount': 'I1'}
+    monkeypatch.setattr(client, 'get_brokerage_accounts', accounts)
+    with client.market_data_session():
+        pass
 
 
 @pytest.mark.parametrize('status,payload', [(403, {}), (500, {'error': 'different upstream failure'})])
@@ -111,7 +125,7 @@ def test_history_recovery_retains_pacing_and_does_not_replay_other_reads(client,
     monkeypatch.setattr('src.utils.connectors.ibkr_trading_api.requests.request', request)
     with client.market_data_session():
         assert client.get_historical_market_data('101', '5y', '1d') == {'data': []}
-    assert sleeps == [1.25] and request.call_count == 2
+    assert sleeps == [2, 2, 1.25] and request.call_count == 2
 
 
 def test_snapshot_read_recovers_after_warmup_with_fields_and_new_token(client, monkeypatch):
