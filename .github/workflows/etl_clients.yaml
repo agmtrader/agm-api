@@ -25,6 +25,8 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: agm-datalake
+      - name: Synchronize committed Clients job source before dispatch
+        run: python3 dev/sync_clients_job.py --source-ref "$GITHUB_SHA" --apply
       - name: Execute clients job and wait for terminal outcome
         id: execute
         shell: bash

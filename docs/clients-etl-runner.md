@@ -74,3 +74,27 @@ IBKR refresh failures are grouped by exact error with counts and up to five acco
 Clients and market ETL workflows are both scheduled daily at 13:37 UTC / 07:37 CST
 (Costa Rica, UTC-6), as requested by the owner. Their separate jobs, staging folders
 and locks permit simultaneous execution. GitHub may start scheduled workflows late.
+
+## Automatic source synchronization — October 22, 2026
+
+The Clients job is synchronized after successful API deployment and before every
+scheduled/manual Clients workflow dispatch by `dev/sync_clients_job.py`. The script
+reads the exact committed source, builds a reproducible immutable overlay, verifies
+the uploaded bytes, patches the existing job with its etag, waits for completion,
+and reads the configuration back. A failed synchronization stops workflow dispatch.
+The deployment workflow checks out the triggering compile run's commit and uses
+that commit for the image tag, avoiding a newer default-branch checkout race.
+
+The accepted coverage JSON is copied byte-for-byte from the previous checksum- and
+generation-verified bundle. New account failures are never added to that baseline.
+Staging, service identity, networking, resource limits, timeout, retry policy and
+unrelated environment entries are preserved. The base image is the API revision
+serving 100% traffic, pinned by digest; the job is labeled with its source commit.
+No job is executed by synchronization. The old provisioning command above remains
+for initial provisioning or explicitly authorized baseline changes, not routine
+source refreshes.
+
+Read-only plan: `python3 dev/sync_clients_job.py --source-ref HEAD`.
+Apply configuration only: add `--apply`. Uncommitted local files are excluded.
+Successful synchronization proves deployment provenance; ordinary-run outcomes
+remain a separate acceptance check.
