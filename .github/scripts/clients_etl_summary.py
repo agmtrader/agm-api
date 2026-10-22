@@ -35,9 +35,13 @@ def safe_name(value):
     return value if re.fullmatch(r'[A-Za-z0-9_. -]{1,80}', value) else 'report'
 
 
-def section(lines, title, details, empty='none'):
+def section(lines, title, details):
+    if not details:
+        return
+    if lines and lines[-1]:
+        lines.append('')
     lines.append(f'{title}:')
-    lines.extend(f'  - {text(item)}' for item in (details or [empty]))
+    lines.extend(f'  - {text(item)}' for item in details)
 
 
 def failures(stage, name, key):
@@ -80,6 +84,7 @@ def render(payload, execution):
         ('Transform', transform, ('total', 'successful', 'failed')),
     ):
         counts = ', '.join(f'{key}: {text(stage.get("summary", {}).get(key))}' for key in keys)
+        lines.append('')
         lines.append(f'{name} status: {text(stage.get("status"))}' + (f' ({counts})' if keys else ''))
         if name == 'Backup':
             steps = {s.get('name'): s for s in stage.get('steps', [])}
@@ -92,12 +97,12 @@ def render(payload, execution):
                 suffix = (f' ({count}: {text(step.get("summary", {}).get(count))}, '
                           f'failed: {text(step.get("summary", {}).get("failed"))})') if count else ''
                 lines.append(f'  - {label}: {text(step.get("status"))}{suffix}')
-        section(lines, f'{name} failures', failures(stage, name.lower(), 'reports' if name == 'Transform' else 'steps'),
-                empty='none' if stage else 'unavailable')
+        section(lines, f'{name} failures', failures(stage, name.lower(), 'reports' if name == 'Transform' else 'steps'))
 
     detail_steps = [s for s in extract.get('steps', []) if s.get('name') == 'account_details']
     for step in detail_steps:
         counts = step.get('summary', {})
+        lines.append('')
         lines.append(f'IBKR refresh: {text(counts.get("successful"))} fresh, '
                      f'{text(counts.get("failed"))} failed, {text(counts.get("retained_stale"))} retained stale')
         delinked = sum(outcome.get('status') == 'skipped' and outcome.get('reason') == 'account_delinked'
@@ -114,8 +119,9 @@ def render(payload, execution):
         details = []
         for error, accounts in sorted(groups.items(), key=lambda pair: (-len(pair[1]), pair[0])):
             details.append(f'{error}: {len(accounts)} accounts (identifiers in private overview)')
-        section(lines, 'IBKR account failures', details,
-                empty='details unavailable; see full overview' if counts.get('failed') else 'none')
+        if not details and counts.get('failed'):
+            details.append('details unavailable; see full overview')
+        section(lines, 'IBKR account failures', details)
 
     warnings = []
     for warning in payload.get('warnings', []):
@@ -126,10 +132,12 @@ def render(payload, execution):
     errors = [f'{key}: {safe_error(payload[key])}' for key in
               ('error', 'error_type', 'error_code', 'error_id', 'overview_publication_error', 'lock_release_error')
               if payload.get(key) is not None]
+    if not payload:
+        errors.append('overview unavailable')
     for condition in execution_status.get('conditions', []):
         if condition.get('type') == 'Completed' and condition.get('status') != 'True':
             errors.append(f'Cloud Run: {safe_error(condition.get("reason"))}; inspect private execution logs')
-    section(lines, 'Runner / execution errors', errors, empty='none' if payload else 'overview unavailable')
+    section(lines, 'Runner / execution errors', errors)
     return '\n'.join(lines)
 
 

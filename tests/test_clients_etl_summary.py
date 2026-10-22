@@ -62,12 +62,21 @@ def test_accepted_gaps_include_counts_reasons_and_run_links(tmp_path):
         'Sort batch files: success (moved: 8, failed: 0)', 'Clear batch folder: success',
         'Transform status: success (total: 11, successful: 11, failed: 0)',
         '617 fresh, 208 failed, 20 retained stale', 'missing_master_account: 208 accounts',
-        'identifiers in private overview', 'Report warnings:\n  - none',
+        'identifiers in private overview',
         'gs://agm-datalake-etl-runs/runs/execution-fixture/overview.json',
     ):
         assert expected in output
         assert expected in step_summary
     assert 'SYNTHETIC207' not in output  # Bounded samples; full outcomes stay in the overview.
+    for title in ('Backup failures', 'Transform failures', 'Report warnings', 'Runner / execution errors'):
+        assert title + ':' not in output
+        assert title + ':' not in step_summary
+    assert '\n\nExtract status:' in output
+    assert '\n\nExtract failures:' in output
+    assert '\n\nBackup status:' in output
+    assert '\n\nTransform status:' in output
+    assert '\n\nIBKR refresh:' in output
+    assert '\n\nIBKR account failures:' in output
 
 
 def test_all_failure_levels_and_fallback_warning_are_preserved(tmp_path):
@@ -90,6 +99,8 @@ def test_all_failure_levels_and_fallback_warning_are_preserved(tmp_path):
                      'clear_batch_folder:', 'clients:', 'fallback warning', 'Backup: prior.csv',
                      'Failure details withheld'):
         assert expected in output
+    for title in ('Extract failures', 'Backup failures', 'Transform failures', 'Report warnings'):
+        assert '\n\n' + title + ':' in output
 
 
 def test_stage_and_runner_errors_and_cloud_failure_survive(tmp_path):
@@ -102,7 +113,8 @@ def test_stage_and_runner_errors_and_cloud_failure_survive(tmp_path):
                      'lock_release_error: PreconditionFailed', 'NonZeroExitCode', 'inspect private execution logs'):
         assert expected in output
     assert 'total: unknown' in output
-    assert 'Transform failures:\n  - unavailable' in output
+    assert 'Transform failures:' not in output
+    assert '\n\nRunner / execution errors:' in output
 
 
 @pytest.mark.parametrize('malformed', [False, True])
@@ -114,15 +126,26 @@ def test_missing_or_invalid_overview_is_actionable(tmp_path, malformed):
     assert 'no retrievable terminal overview' in output
     assert 'DeadlineExceeded' in output
     assert 'Execution: execution-fixture' in output
+    assert 'overview unavailable' in output
 
 
-def test_clean_run_shows_explicit_empty_error_sections(tmp_path):
+def test_clean_run_omits_empty_error_sections_and_separates_categories(tmp_path):
     payload = overview()
     payload.update(status='success', operational_status='success')
     payload['overview']['extract'].update(status='success', steps=[])
     output, _ = run_summary(tmp_path, payload)
     for stage in ('Extract', 'Backup', 'Transform'):
-        assert f'{stage} failures:\n  - none' in output
+        assert f'{stage} failures:' not in output
+        assert f'\n\n{stage} status:' in output
+    assert 'Report warnings:' not in output
+    assert 'Runner / execution errors:' not in output
+
+
+def test_reported_account_failures_without_outcomes_still_show_missing_details(tmp_path):
+    payload = overview()
+    payload['overview']['extract']['steps'][0]['outcomes'] = []
+    output, _ = run_summary(tmp_path, payload)
+    assert 'IBKR account failures:\n  - details unavailable; see full overview' in output
 
 
 def test_notification_does_not_export_raw_config_or_provider_credentials(tmp_path):
