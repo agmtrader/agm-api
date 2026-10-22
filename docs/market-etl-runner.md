@@ -119,3 +119,22 @@ is the mean of five annual price returns, not dividend/total return. Unavailable
 history remains blank; zero/negative finite results remain valid. Extract metadata
 records requested/populated/unavailable counts. Successful pipeline status does
 not certify complete history coverage.
+
+## Recovery acceptance — October 22, 2026
+
+Source `0e39c05` passed [GitHub Action 39843963070](https://github.com/agmtrader/agm-api/actions/runs/39843963070).
+All four extracts, backup and all four transforms succeeded. Independent downloads
+verified current-run source provenance, preserved canonical report IDs, row counts
+and Drive checksums. Published stock/ETF prices and return values match their exact
+source files. The execution lock was released and market staging was empty.
+Stock historical coverage was 99/99; ETF coverage was 60/61, with one unavailable
+history retained blank. No session recovery was needed in this accepted run. The
+existing success-notification action passed; recipient delivery was not separately
+verified. The 95 affected local regressions also passed.
+
+The preceding candidate run correctly failed on a second ETF session error after
+one successful recovery. A subsequent read-only ETF diagnostic passed with the
+documented initialization settlement interval before this complete retest. The
+observed improvement does not establish why IBKR invalidated the earlier sessions.
+Future persistent session failures remain failures; no retry budget was increased.
+The broader first automatic-run/manual Clients dispatch scope remains in API #86.
