@@ -146,3 +146,11 @@ its older-history request remained unavailable. Subsequent extracts request the
 remaining 60 ETFs. The next successful market publication removes its row from
 the canonical ETF report; historical backup files remain unchanged. The 60/61
 coverage above describes the preceding run before this exclusion.
+
+The source change passed 26 focused Market runner/source checks. GitHub Action
+[39852428335](https://github.com/agmtrader/agm-api/actions/runs/39852428335) deployed
+`c03cdec` and executed the updated job. ETF extraction and transformation passed
+with 60/60 historical returns populated. The complete workflow failed because
+the Treasury and stock extracts encountered persistent IBKR session errors;
+their transforms preserved previous reports. This is a failed full-pipeline
+retest, despite the successful ETF exclusion. No retry budget was increased.
