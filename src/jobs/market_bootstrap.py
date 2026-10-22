@@ -10,7 +10,8 @@ import google.auth
 from google.auth.transport.requests import AuthorizedSession
 
 ALLOWED = {'src/jobs/__init__.py', 'src/jobs/market_etl.py', 'src/jobs/storage.py',
-           'src/jobs/market_result.py', 'src/components/tools/private/etl.py'}
+           'src/jobs/market_result.py', 'src/components/tools/private/etl.py',
+           'src/utils/connectors/ibkr_trading_api.py'}
 
 
 def main():

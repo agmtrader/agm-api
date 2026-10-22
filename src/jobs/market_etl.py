@@ -41,6 +41,11 @@ def main(argv=None):
         names = [file['name'] for file in config['files']]
         if set(names) != set(EXPECTED_SOURCES) or len(names) != len(EXPECTED_SOURCES) or any(not file.get('extract_func') for file in config['files']):
             raise ValueError('Market source configuration is incomplete')
+        # Enable the existing five-year price-return calculation in this job
+        # without changing DEV_MODE or the shared configuration templates.
+        for file in config['files']:
+            if file['name'] in ('stocks_snapshot', 'etfs_snapshot'):
+                file['historical_yields'] = True
         # A killed/uncertain prior run requires review, never blind deletion/replay.
         if etl.Drive.get_files_in_folder(stage):
             raise ValueError('Market staging is not empty; inspect the previous execution')

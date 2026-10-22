@@ -1,6 +1,7 @@
 import json
 import time
 from contextlib import contextmanager
+from urllib.parse import urlsplit
 
 import requests
 
@@ -101,6 +102,7 @@ class IBKRTradingAPI(IBKRWebAPI):
         context prevents callers from using a half-ready session or leaking a
         brokerage session when an ETL step fails.
         """
+        self._market_data_context = {'credential': credential, 'ip': ip, 'recoveries': []}
         try:
             self.create_sso_session(credential=credential, ip=ip)
             self.initialize_brokerage_session()
@@ -117,6 +119,42 @@ class IBKRTradingAPI(IBKRWebAPI):
                     logger.warning(f"Unable to close IBKR market-data session: {logout_error}")
                 finally:
                     self.sso_token = None
+            self._market_data_context = None
+
+    def _request_market_data_json(self, method: str, url: str, **kwargs):
+        """Recover one explicitly safe read per extract, retaining its warning.
+
+        Only the observed expired-session/accounts-bootstrap errors qualify.
+        Orders and other mutations can never enter this recovery path.
+        """
+        endpoint = urlsplit(url).path.removeprefix('/v1/api/iserver/')
+        allowed = {('GET', 'watchlists'), ('GET', 'watchlist'),
+                   ('POST', 'secdef/search'), ('GET', 'marketdata/snapshot'),
+                   ('GET', 'marketdata/history')}
+        if (method, endpoint) not in allowed or urlsplit(url).netloc != urlsplit(self.BASE_URL).netloc:
+            raise ValueError('Market session recovery only permits allowlisted market-data reads')
+        kwargs.pop('headers', None)
+        kwargs.setdefault('timeout', (10, 45))
+        for attempt in range(2):
+            response = requests.request(method, url, headers=self._require_sso_headers(), **kwargs)
+            if response.status_code == 200:
+                return response.json()
+            try:
+                raise_ibkr_response_error(response, trading_session=True, account_access=True)
+            except ServiceError as error:
+                context = getattr(self, '_market_data_context', None)
+                if (attempt or not context or context['recoveries']
+                        or error.code not in ('ibkr_session_expired', 'ibkr_session_not_ready')):
+                    raise
+                record = {'reason': error.code, 'endpoint': endpoint}
+                context['recoveries'].append(record)
+                logger.warning(f'IBKR_MARKET_SESSION_RECOVERY reason={error.code} endpoint={endpoint} attempt=1 limit=1')
+                if error.code == 'ibkr_session_expired':
+                    self.create_sso_session(credential=context['credential'], ip=context['ip'])
+                    self.initialize_brokerage_session()
+                self.get_brokerage_accounts()
+                if endpoint == 'marketdata/history':
+                    time.sleep(1.25)
 
     @handle_exception
     def logout_of_brokerage_session(self) -> dict:
@@ -180,6 +218,9 @@ class IBKRTradingAPI(IBKRWebAPI):
         return self.get_brokerage_accounts()
 
     def _request_iserver_json(self, method: str, url: str, headers: dict, reason: str, **kwargs):
+        if (getattr(self, '_market_data_context', None)
+                and urlsplit(url).path in ('/v1/api/iserver/watchlists', '/v1/api/iserver/watchlist')):
+            return self._request_market_data_json(method, url, **kwargs)
         self._prime_iserver_session(reason)
         response = requests.request(method, url, headers=headers, **kwargs)
 
@@ -375,19 +416,11 @@ class IBKRTradingAPI(IBKRWebAPI):
                 MarketDataField.BOND_STATE_CODE,
             ]
             fields_str = ",".join(str(field.value) for field in desired_fields)
-            headers = self._require_sso_headers()
-
-            response = requests.get(f"{url}&fields={fields_str}", headers=headers)
-            if response.status_code != 200:
-                raise_ibkr_response_error(response, trading_session=True, account_access=True)
+            self._request_market_data_json('GET', f"{url}&fields={fields_str}")
 
             logger.info("Waiting for market data snapshot to be ready")
             time.sleep(10)
-            response = requests.get(url, headers=headers)
-            if response.status_code != 200:
-                raise_ibkr_response_error(response, trading_session=True, account_access=True)
-
-            raw_data = response.json()
+            raw_data = self._request_market_data_json('GET', f"{url}&fields={fields_str}")
 
             def _translate_fields(item: dict):
                 mapped = {}
@@ -488,13 +521,10 @@ class IBKRTradingAPI(IBKRWebAPI):
                 f"IBKR_HISTORY_REQUEST conid={conid} period={period} bar={bar} "
                 f"start_time={start_time or '-'} direction={direction or '-'}"
             )
-            response = requests.get(url, headers=self._require_sso_headers(None), params=params)
-            if response.status_code != 200:
-                raise_ibkr_response_error(response, trading_session=True, account_access=True)
-            payload = response.json()
+            payload = self._request_market_data_json('GET', url, params=params)
             if isinstance(payload, dict) and (payload.get('error') or payload.get('message')):
                 logger.warning(
-                    f"IBKR_HISTORY_FAILED conid={conid} status={response.status_code} "
+                    f"IBKR_HISTORY_FAILED conid={conid} status=200 "
                     f"reason={payload.get('error') or payload.get('message')}"
                 )
             else:
@@ -512,11 +542,9 @@ class IBKRTradingAPI(IBKRWebAPI):
                 "symbol": symbol,
                 "secType": sec_type,
             }
-            response = requests.post(url, headers=self._require_sso_headers(), data=json.dumps(payload))
-            if response.status_code != 200:
-                raise_ibkr_response_error(response, trading_session=True, account_access=True)
+            result = self._request_market_data_json('POST', url, data=json.dumps(payload))
             logger.success("Bonds searched successfully")
-            return response.json()
+            return result
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 

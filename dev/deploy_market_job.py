@@ -17,7 +17,8 @@ PARENT = 'projects/agm-datalake/locations/us-central1'
 BUCKET = 'agm-datalake-etl-runs'
 JOB = 'agm-market-etl'
 FILES = ('src/jobs/__init__.py', 'src/jobs/market_etl.py', 'src/jobs/storage.py',
-         'src/jobs/market_result.py', 'src/components/tools/private/etl.py')
+         'src/jobs/market_result.py', 'src/components/tools/private/etl.py',
+         'src/utils/connectors/ibkr_trading_api.py')
 
 
 def bundle():
@@ -57,6 +58,17 @@ def main():
     parser.add_argument('--apply', action='store_true', help='Upload artifact and create/update the job; never execute')
     parser.add_argument('--update', action='store_true')
     args = parser.parse_args()
+    if args.update:
+        # Existing jobs retain their exact runtime/settings; only pinned source changes.
+        from dev.sync_market_job import Cloud, committed, synchronize
+        import subprocess
+        commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+        existing = Cloud().json(f'https://run.googleapis.com/v2/{PARENT}/jobs/{JOB}')
+        env = {item['name']: item.get('value') for item in existing['template']['template']['containers'][0]['env']}
+        if env.get('ETL_BATCH_FOLDER_ID') != args.staging_folder:
+            raise ValueError('Existing market staging differs; source synchronization cannot change it')
+        print(json.dumps(synchronize(Cloud(), lambda path: committed(commit, path), commit, apply=args.apply)))
+        return
     credentials, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/cloud-platform'])
     session = AuthorizedSession(credentials)
     response = session.get(f'https://run.googleapis.com/v2/{PARENT}/services/agm-api', timeout=30)
@@ -91,11 +103,7 @@ def main():
     upload.raise_for_status()
     generation = upload.json()['generation']
     job = configuration(template, args.staging_folder, name, generation, digest)
-    if args.update:
-        job['etag'] = existing.json()['etag']
-        response = session.patch(f'{base}/{JOB}', params={'updateMask': 'template,labels'}, json=job, timeout=60)
-    else:
-        response = session.post(base, params={'jobId': JOB}, json=job, timeout=60)
+    response = session.post(base, params={'jobId': JOB}, json=job, timeout=60)
     response.raise_for_status()
     print(json.dumps({'operation': response.json()['name'], 'job': JOB, 'image': template['containers'][0]['image'],
                       'bundle': name, 'generation': generation, 'sha256': digest, 'stage': args.staging_folder}))

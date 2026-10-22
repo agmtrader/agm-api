@@ -14,13 +14,14 @@ from copy import deepcopy
 import xml.etree.ElementTree as ET
 from io import StringIO, BytesIO
 import hashlib
+import math
 import uuid
 from googleapiclient.http import MediaIoBaseUpload
 
 from src.utils.connectors.drive import GoogleDrive
 from src.utils.connectors.flex_query_api import getFlexQuery
 from src.utils.connectors.ibkr_trading_api import IBKRTradingAPI
-from src.utils.exception import handle_exception
+from src.utils.exception import ServiceError, handle_exception
 from src.components.tools.public.reporting import get_bond_report
 from src.utils.logger import logger
 from src.utils.lazy_client import LazyClient
@@ -35,7 +36,13 @@ def _with_ibkr_market_data_session(func):
     @wraps(func)
     def wrapped(*args, **kwargs):
         with ibkr_trading_api.market_data_session():
-            return func(*args, **kwargs)
+            try:
+                return func(*args, **kwargs)
+            finally:
+                config = args[0] if args else kwargs.get('config')
+                context = getattr(ibkr_trading_api, '_market_data_context', None)
+                if isinstance(config, dict) and isinstance(context, dict) and context.get('recoveries'):
+                    config['_session_recoveries'] = deepcopy(context['recoveries'])
     return wrapped
 
 batch_folder_id = os.getenv('ETL_BATCH_FOLDER_ID', '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8')
@@ -160,6 +167,8 @@ def extract_data(etl_config) -> dict:
             # DataFrames are data, never boolean execution metadata.
             if isinstance(result, pd.DataFrame):
                 outcome = {'status': 'success', 'row_count': len(result)}
+                if 'historical_yields' in result.attrs:
+                    outcome['historical_yields'] = result.attrs['historical_yields']
             elif isinstance(result, dict):
                 outcome = dict(result)
                 outcome.setdefault('status', 'success')
@@ -177,6 +186,8 @@ def extract_data(etl_config) -> dict:
         except Exception as e:
             logger.error(f'Error during {step_name}: {e}')
             steps.append({'name': step_name, 'status': 'failed', 'error': str(e)})
+        if file_config.get('_session_recoveries'):
+            steps[-1]['session_recoveries'] = deepcopy(file_config['_session_recoveries'])
 
     failed_steps = [step for step in steps if step.get('status') not in ('success', 'skipped')]
     overall_status = 'success' if not failed_steps else 'partial'
@@ -566,6 +577,8 @@ def _resolve_snapshot_conids(
         try:
             results = api_client.get_securities_by_symbol(ticker, sec_type)
         except Exception as exc:
+            if isinstance(exc, ServiceError) and exc.code in ('ibkr_session_expired', 'ibkr_session_not_ready'):
+                raise
             logger.warning(f'MARKET_DATA_SYMBOL_FAILED ticker={ticker} stage=resolve error={exc}')
             continue
 
@@ -716,10 +729,16 @@ def _extract_equity_like_snapshot(
     # the latest bar on (or before) each one-year boundary and average the five
     # sequential price returns.  The result is a percentage, matching the
     # Current Yield convention used by the investment proposal code.
+    def _get_history(**kwargs):
+        # Pace every request, including backward pages and failed requests.
+        # IBKR permits 50 history requests/minute; 1.25s stays below that.
+        time.sleep(1.25)
+        return api_client.get_historical_market_data(**kwargs)
+
     def _average_annual_return(conid, ticker):
         try:
             logger.info(f'MARKET_DATA_HISTORY_START ticker={ticker} conid={conid}')
-            history = api_client.get_historical_market_data(
+            history = _get_history(
                 conid=str(conid),
                 period='5y',
                 bar='1d',
@@ -743,7 +762,7 @@ def _extract_equity_like_snapshot(
                     oldest_timestamp = parsed_timestamps.min()
                     required_start = latest_timestamp - pd.DateOffset(years=5)
                     if oldest_timestamp > required_start:
-                        older_history = api_client.get_historical_market_data(
+                        older_history = _get_history(
                             conid=str(conid),
                             period='5y',
                             bar='1d',
@@ -761,7 +780,10 @@ def _extract_equity_like_snapshot(
                     continue
                 timestamp = pd.to_datetime(bar.get('t'), unit='ms', errors='coerce')
                 close = pd.to_numeric(bar.get('c'), errors='coerce')
-                if pd.notna(timestamp) and pd.notna(close) and float(close) > 0:
+                if (
+                    pd.notna(timestamp) and pd.notna(close)
+                    and math.isfinite(float(close)) and float(close) > 0
+                ):
                     rows.append((timestamp, float(close)))
 
             if not rows:
@@ -798,14 +820,19 @@ def _extract_equity_like_snapshot(
             logger.info(f'MARKET_DATA_HISTORY_SUCCESS ticker={ticker} conid={conid} current_yield={result}')
             return result
         except Exception as exc:
+            if isinstance(exc, ServiceError) and exc.code in ('ibkr_session_expired', 'ibkr_session_not_ready'):
+                raise
             logger.warning(f'MARKET_DATA_SYMBOL_FAILED ticker={ticker} conid={conid} stage=history error={exc}')
             return None
 
-    # Historical prices are only fetched in development mode. Fetching five
-    # years of daily bars for every equity is too slow for the parent ETL
-    # request and can exhaust IBKR's historical-data limits.
+    # The background market runner opts in through its per-run file config.
+    # DEV_MODE remains a fallback for direct development extracts; production
+    # API callers do not acquire a long-running enrichment by default.
     if dev_mode is None:
-        dev_mode = os.getenv('DEV_MODE', 'false').lower() in ('true', '1', 'yes')
+        dev_mode = (
+            (config or {}).get('historical_yields') is True
+            or os.getenv('DEV_MODE', 'false').lower() in ('true', '1', 'yes')
+        )
 
     if snapshot_type in {'ETF', 'STOCK'} and dev_mode:
         historical_yields = []
@@ -813,13 +840,20 @@ def _extract_equity_like_snapshot(
             conid = str(row['Conidex']).split('@', 1)[0]
             ticker = conid_to_ticker.get(conid, row.get('Financial Instrument', 'unknown'))
             historical_yields.append(_average_annual_return(conid, ticker))
-            # Avoid bursting the IBKR historical-data endpoint for the equity list.
-            time.sleep(0.1)
         df['Current Yield'] = historical_yields
+        populated = int(df['Current Yield'].notna().sum())
+        df.attrs['historical_yields'] = {
+            'method': 'five_year_mean_annual_price_return_percent',
+            'requested': len(df), 'populated': populated, 'unavailable': len(df) - populated,
+        }
+        logger.info(
+            f'MARKET_DATA_YIELD_SUMMARY type={snapshot_type} requested={len(df)} '
+            f'populated={populated} unavailable={len(df) - populated}'
+        )
     elif snapshot_type in {'ETF', 'STOCK'}:
         logger.info(
             f'Skipping historical yield fetch for {snapshot_type} snapshot; '
-            'DEV_MODE is false.'
+            'background enrichment and DEV_MODE are disabled.'
         )
         # Preserve the snapshot schema for consumers that expect this column.
         df['Current Yield'] = None
@@ -1931,6 +1965,7 @@ def _runtime_etl_config(etl_config, now=None):
 
     for file_config in runtime_config.get('files', []):
         file_config.pop('_extracted_source', None)
+        file_config.pop('_session_recoveries', None)
         backup_name = file_config.get('backup_name')
         if not backup_name:
             continue

@@ -16,6 +16,7 @@ def _render(body):
     if not isinstance(overview, dict):
         return False, '\n'.join(lines + ['Stage results unavailable.'])
     for name, child in [('extract', 'steps'), ('backup', 'steps'), ('transform', 'reports')]:
+        lines.append('')
         stage = overview.get(name)
         if not isinstance(stage, dict):
             good = False
@@ -53,7 +54,11 @@ def _render(body):
         good = good and len(source_ids) == len(extracted) == len(transformed) == len(set(transformed_names))
         good = good and set(source_ids) == set(transformed_names)
         good = good and all(isinstance(item, dict) and item.get('source_file_id') == source_ids.get(item.get('name')) for item in transformed)
-    lines.append('Failure detail: review API logs and the retained overview; raw provider payloads are omitted.')
+    recoveries = sum(len(item.get('session_recoveries') or []) for item in extracted if isinstance(item, dict))
+    if recoveries:
+        lines.extend(['', f'IBKR session recoveries: {recoveries} (bounded read recovery; details in retained overview).'])
+    if not good:
+        lines.extend(['', 'Failure detail: review API logs and the retained overview; raw provider payloads are omitted.'])
     return bool(good), '\n'.join(lines)
 
 def render_market(body, expected_sources=None):

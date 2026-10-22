@@ -32,6 +32,17 @@ separate five-workflow post-deployment maintenance review.
 
 ## Deployment
 
+Existing jobs: `python3 dev/sync_market_job.py --source-ref <commit>` plans a
+source-only update; `--apply` publishes it without executing ETL. The workflow
+runs this synchronizer with its exact `GITHUB_SHA` before dispatch. It preserves
+the existing immutable image, staging, identity, VPC, resources and other policy,
+pins the connector-inclusive source bundle by generation/SHA-256, verifies uploaded
+bytes, uses the existing etag and checks configuration readback. Active executions
+or a retained lock block source replacement. Synchronization failure prevents
+dispatch. `deploy_market_job.py --update` delegates to the same path, fixing the
+old unsupported Jobs.patch `updateMask` request. Initial provisioning below
+remains separate.
+
 `dev/deploy_market_job.py --staging-folder <verified-market-folder>` is read-only
 planning. Add `--apply` to upload the reproducible exact-path-allowlisted source
 bundle and provision the job; add `--update` only for an existing job. Provisioning
@@ -78,3 +89,27 @@ separate observations; no workflow email was triggered by this controlled test.
 Source publication starts the normal Compile Check and gated API build/release.
 Hosted authenticated manual-route acceptance is not claimed from local Flask tests
 or from the direct local-ADC dispatch.
+
+## Session-loss recovery and equity coverage — October 22, 2026
+
+Execution `agm-market-etl-w46wk` initially established its brokerage sessions, then
+lost readiness during bonds and stocks. Those extracts failed; the missing-source
+transform errors correctly preserved their previous reports. UST and ETF sources
+succeeded. The specific cause of IBKR losing readiness is not established.
+
+Market extracts now permit one logged recovery across allowlisted read requests
+per source. A known expired-session 401 obtains fresh SSO/init/accounts; the exact
+500 accounts prerequisite repeats accounts bootstrap. Only the failed read is
+repeated. Unknown errors and 403s do not qualify; orders cannot enter this path.
+Persistent session errors abort symbol resolution/history rather than being
+counted as isolated unavailable symbols. `session_recoveries` remains in the
+private overview and a nonzero count is shown in the workflow summary. Existing
+strict source provenance, publication checks and zero whole-job retries remain.
+
+The previously deployed background stock/ETF historical enrichment is preserved
+in committed source: `historical_yields: true`, `DEV_MODE=false`, sequential daily
+history pages with 1.25-second pacing, including recovery reads. `Current Yield`
+is the mean of five annual price returns, not dividend/total return. Unavailable
+history remains blank; zero/negative finite results remain valid. Extract metadata
+records requested/populated/unavailable counts. Successful pipeline status does
+not certify complete history coverage.
