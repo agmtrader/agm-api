@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Auth to Google Cloud
         uses: google-github-actions/auth@v1
@@ -30,5 +32,8 @@ jobs:
             --config=cloudbuild.yaml \
             --project=agm-datalake \
             --service-account=projects/agm-datalake/serviceAccounts/agm-api@agm-datalake.iam.gserviceaccount.com \
-            --substitutions=_IMAGE_TAG=${GITHUB_SHA} \
+            --substitutions=_IMAGE_TAG=$(git rev-parse HEAD) \
             --quiet
+
+      - name: Synchronize Clients job source after successful API deployment
+        run: python3 dev/sync_clients_job.py --source-ref HEAD --apply
