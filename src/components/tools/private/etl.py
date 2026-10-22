@@ -1416,17 +1416,9 @@ def process_open_positions_template(df):
     :param df: Input dataframe
     :return: Processed dataframe
     """
-    # Upload the full file
-    existing_file = Drive.get_file_info(
-        parent_id=resources_folder_id,
-        file_name='ibkr_open_positions_all.csv',
-        raise_if_missing=False
-    )
-    if existing_file:
-        Drive.delete_file(file_id=existing_file['id'])
-
-    full_dict = df.to_dict(orient='records')
-    Drive.upload_file(file_name='ibkr_open_positions_all.csv', mime_type='text/csv', file_data=full_dict, parent_folder_id=resources_folder_id)
+    # This companion report needs the same verified, in-place publication as
+    # the final template. Never delete its stable file before a replacement.
+    _publish_report('ibkr_open_positions_all.csv', 'text/csv', df.to_dict(orient='records'))
     
     # Generate template (extract bonds and details)
     df = df[(df['AssetClass'] == 'BOND') & (df['LevelOfDetail'] == 'LOT')]

@@ -100,6 +100,11 @@ def render(payload, execution):
         counts = step.get('summary', {})
         lines.append(f'IBKR refresh: {text(counts.get("successful"))} fresh, '
                      f'{text(counts.get("failed"))} failed, {text(counts.get("retained_stale"))} retained stale')
+        delinked = sum(outcome.get('status') == 'skipped' and outcome.get('reason') == 'account_delinked'
+                       for outcome in step.get('outcomes', []))
+        if delinked:
+            lines.append(f'IBKR delinked: {delinked} skipped after broker confirmation; '
+                         'previous details remain historical/stale (identifiers in private overview).')
         if payload.get('operational_status') == 'completed_with_accepted_coverage_gaps':
             lines.append('Account coverage gaps match the accepted baseline; retained stale records are not current.')
         groups = defaultdict(list)

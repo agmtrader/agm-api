@@ -38,6 +38,16 @@ def evaluate(result, accepted):
         for s in extract.get('steps', []) if s.get('name') != 'account_details' and s.get('name') not in fallback_steps):
         return 'failed'
     details = detail_steps[0]
+    # A broker-confirmed delinking is a lifecycle outcome, not fresh coverage.
+    # No other skipped or unknown account outcome may bypass the baseline.
+    from src.components.tools.private.ibkr_details_refresh import _delinked_date
+    for outcome in details.get('outcomes', []):
+        if outcome.get('status') == 'skipped':
+            if (outcome.get('reason') != 'account_delinked'
+                    or not _delinked_date(outcome.get('date_delinked'))):
+                return 'failed'
+        elif outcome.get('status') not in ('success', 'failed'):
+            return 'failed'
     failures = [o for o in details.get('outcomes', []) if o.get('status') == 'failed']
     expected = {(o['account_id'], o['error']) for o in accepted}
     if details.get('summary', {}).get('successful', 0) <= 0:

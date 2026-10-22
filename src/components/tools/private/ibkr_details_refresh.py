@@ -9,6 +9,17 @@ import requests
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 
 
+def _delinked_date(value):
+    """Only a valid, nonfuture broker lifecycle date explains an absent master."""
+    if not isinstance(value, str) or not re.fullmatch(r'\d{8}', value):
+        return None
+    try:
+        day = datetime.strptime(value, '%Y%m%d').date()
+    except ValueError:
+        return None
+    return value if day <= datetime.now(timezone.utc).date() else None
+
+
 class Pacer:
     def __init__(self, rate):
         self.interval = 1 / rate
@@ -96,11 +107,18 @@ def refresh_details(accounts, previous, *, workers=4, rate=5, limit=0,
             account = candidate['account']
             if str(account.get('accountId') or '').strip().upper() != key:
                 raise ValueError('details_account_mismatch')
-            if str(account.get('masterAccountId') or '').strip().upper() != master:
+            returned_master = str(account.get('masterAccountId') or '').strip().upper()
+            delinked = _delinked_date(account.get('dateDelinked'))
+            if not returned_master and delinked:
+                # IBKR returns a small tombstone after delinking. Keep prior
+                # details as history, never replace them with a fresh tombstone.
+                outcome.update(status='skipped', reason='account_delinked', date_delinked=delinked)
+            elif returned_master != master:
                 raise ValueError('details_master_mismatch')
-            detail = dict(candidate)
-            detail['_agm_refresh'] = {'status': 'fresh', 'last_success_at': datetime.now(timezone.utc).isoformat()}
-            outcome.update(status='success', retained_previous=False)
+            else:
+                detail = dict(candidate)
+                detail['_agm_refresh'] = {'status': 'fresh', 'last_success_at': datetime.now(timezone.utc).isoformat()}
+                outcome.update(status='success', retained_previous=False)
         except Exception as exc:
             outcome['error'] = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
         outcome['seconds'] = round(time.monotonic() - tick, 3)
@@ -140,13 +158,19 @@ def refresh_details(accounts, previous, *, workers=4, rate=5, limit=0,
         if key in outcomes and outcomes[key]['status'] == 'success':
             continue
         metadata = detail.get('_agm_refresh') or {}
-        by_id[key] = dict(detail, _agm_refresh={
+        outcome = outcomes.get(key, {})
+        refresh = {
             'status': 'stale', 'last_success_at': metadata.get('last_success_at'),
             'last_attempt_at': stamp if key in outcomes else None,
-            'error': outcomes.get(key, {}).get('error', 'not_selected_in_sample')})
+            'error': outcome.get('error') or outcome.get('reason', 'not_selected_in_sample')}
+        if outcome.get('reason') == 'account_delinked':
+            refresh['date_delinked'] = outcome['date_delinked']
+        by_id[key] = dict(detail, _agm_refresh=refresh)
     report['summary'] = {'total': len(selected),
         'successful': sum(o['status'] == 'success' for o in report['outcomes']),
         'failed': sum(o['status'] == 'failed' for o in report['outcomes']),
+        'skipped': sum(o['status'] == 'skipped' for o in report['outcomes']),
+        'delinked': sum(o.get('reason') == 'account_delinked' for o in report['outcomes']),
         'retained_stale': sum(d['_agm_refresh']['status'] == 'stale' for d in by_id.values())}
     report['status'] = 'success' if selected and not report['summary']['failed'] and not limit else 'partial'
     report['seconds'] = round(time.monotonic() - started, 3)

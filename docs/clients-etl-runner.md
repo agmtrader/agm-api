@@ -98,3 +98,27 @@ Read-only plan: `python3 dev/sync_clients_job.py --source-ref HEAD`.
 Apply configuration only: add `--apply`. Uncommitted local files are excluded.
 Successful synchronization proves deployment provenance; ordinary-run outcomes
 remain a separate acceptance check.
+
+## Publication and delinked-account correction — October 22, 2026
+
+The open-positions transform publishes `ibkr_open_positions_all.csv` through the
+same verified staging and in-place update helper as the final bond/LOT template.
+It no longer deletes the full-position resource before a replacement is verified.
+Each report is published separately: if template publication fails after the full
+report succeeds, the transform remains failed and the previous template survives.
+Uncertain updates are not automatically replayed.
+
+An HTTP 200 details response with the exact requested account ID, no master, and
+a valid nonfuture `dateDelinked` is recorded as `skipped / account_delinked` with
+the broker's date. It does not count as fresh or require expanding the accepted
+failure baseline. Prior details remain historical with `_agm_refresh.status=stale`,
+their known last-success time, and the delinking reason/date. No synthetic current
+details are created when no previous record exists. The summary reports the
+delinked count separately without exporting account identifiers. The account
+database and its master mappings are not changed.
+
+Wrong account IDs, explicit conflicting masters, unexplained missing masters,
+invalid/future delinking dates and all other new failures still fail the job.
+Only broker-confirmed delinking can use this skipped-account path. The immutable
+accepted-coverage file remains unchanged. These corrections require release and
+a subsequent real execution before hosted recovery is established.
