@@ -2,7 +2,7 @@ name: Clients ETL Pipeline
 
 on:
   schedule:
-    - cron: '37 13 * * *' # 7:37 AM CST / Costa Rica (UTC-6)
+    - cron: '7 9 * * *' # 3:07 AM CST / Costa Rica (UTC-6)
   workflow_dispatch:
 
 concurrency:
