@@ -57,7 +57,7 @@ EQUITY_ETF_SELECTION_POLICY = {
 ETF_PLANNING_RETURN_CENTER = 10.0
 ETF_BREADTH_SCORE_WEIGHT = 0.8
 ETF_SAME_EXPOSURE_PENALTY = 0.75
-TOTAL_ASSETS = 32
+TOTAL_ASSETS = 20
 INVESTMENT_PROPOSAL_CONTEXT_TTL_SECONDS = 300
 _investment_proposal_context_cache: dict | None = None
 _investment_proposal_context_cached_at = 0.0
@@ -870,6 +870,13 @@ def _position_limit_for_portfolio_plan(portfolio_plan: dict) -> float | None:
     return None
 
 
+def _total_assets_for_portfolio_plan(portfolio_plan: dict) -> int:
+    value = portfolio_plan.get('total_assets')
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return TOTAL_ASSETS
+    return value
+
+
 def _initialize_used_symbols(bonds_df_no_duplicates: pd.DataFrame) -> set[str]:
     used_symbols: set[str] = set()
     if not bonds_df_no_duplicates.empty and 'Symbol_x' in bonds_df_no_duplicates.columns:
@@ -1327,7 +1334,7 @@ def create_investment_proposal_with_risk_profile(risk_profile: dict, starting_am
             investment_proposal=investment_proposal,
             distribution=distribution,
             context=context,
-            total_assets=risk_archetype['positions'],
+            total_assets=TOTAL_ASSETS,
             max_position=risk_archetype['largest_position'],
         )
 
@@ -1357,7 +1364,7 @@ def create_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
             investment_proposal=investment_proposal,
             distribution=distribution,
             context=context,
-            total_assets=portfolio_plan.get('total_assets', TOTAL_ASSETS),
+            total_assets=_total_assets_for_portfolio_plan(portfolio_plan),
             max_position=_position_limit_for_portfolio_plan(portfolio_plan),
         )
 
@@ -1393,7 +1400,7 @@ def preview_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
             investment_proposal=investment_proposal,
             distribution=distribution,
             context=context,
-            total_assets=portfolio_plan.get('total_assets', TOTAL_ASSETS),
+            total_assets=_total_assets_for_portfolio_plan(portfolio_plan),
             max_position=_position_limit_for_portfolio_plan(portfolio_plan),
         )
     except ServiceError:
