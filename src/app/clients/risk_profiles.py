@@ -24,7 +24,7 @@ def read():
     contact_id = request.args.get('contact_id')
     if contact_id:
         query['contact_id'] = contact_id
-    return read_risk_profiles(query=query)
+    return read_risk_profiles(query=query, view=request.args.get('view', 'full'))
 
 @bp.route('/list', methods=['GET'])
 @format_response

@@ -87,4 +87,4 @@ def read_route():
         query['contact_id'] = contact_id
     if source_type:
         query['source_type'] = source_type
-    return read_investment_proposals(query=query)
+    return read_investment_proposals(query=query, view=request.args.get('view', 'full'))

@@ -93,7 +93,7 @@ def current_advisor_account_contacts_route():
 @format_response
 def current_advisor_account_proposals_route():
     """Read proposals for holders of an advisor-owned account."""
-    return read_current_advisor_account_proposals(request.args.get('account_id'))
+    return read_current_advisor_account_proposals(request.args.get('account_id'), view=request.args.get('view', 'full'), proposal_id=request.args.get('proposal_id'))
 
 
 @bp.route('/me/account_statement', methods=['POST'])

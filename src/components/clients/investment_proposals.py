@@ -17,8 +17,17 @@ import re
 import time
 import math
 import heapq
+from sqlalchemy import case, func
 from itertools import count
 
+# Equity ETFs in the market snapshot. New symbols require classification before
+# entering this sleeve; fixed-income and commodity ETFs stay out of equity.
+EQUITY_ETF_SYMBOLS = frozenset({
+    'EEM', 'DIA', 'XLP', 'VEA', 'VT', 'XLY', 'XLE', 'ARKK', 'QQQ', 'XLRE',
+    'IEMG', 'IYR', 'EWJ', 'VOO', 'IBB', 'XLB', 'VTI', 'XLV', 'QQQM', 'RSP',
+    'VNQ', 'IWM', 'VXUS', 'IVV', 'XLK', 'SOXX', 'XLU', 'EFA', 'SPY', 'VWO',
+    'IEFA', 'XLF', 'XLI', 'ACWI', 'SMH', 'SCHB',
+})
 TOTAL_ASSETS = 20
 INVESTMENT_PROPOSAL_CONTEXT_TTL_SECONDS = 300
 _investment_proposal_context_cache: dict | None = None
@@ -54,6 +63,8 @@ PROPOSAL_BUCKET_KEYS = {
     'bonds_aaa_a': 'aaa_a',
     'bonds_bbb': 'bbb',
     'bonds_bb': 'bb',
+    'investment_grade': 'investment_grade',
+    'gold': 'gold',
     'bonds': 'bonds',
     'stocks': 'stocks',
     'etfs': 'etfs',
@@ -310,6 +321,8 @@ def _build_investment_proposal_template() -> list[dict]:
             'equivalents': ['ETF'],
             'bonds': []
         },
+        {'name': 'investment_grade', 'equivalents': ['AAA', 'AA', 'A', 'BBB'], 'bonds': []},
+        {'name': 'gold', 'equivalents': ['GOLD'], 'bonds': []},
         {'name': 'stocks', 'equivalents': ['STOCK'], 'bonds': []},
         {'name': 'bonds', 'equivalents': [], 'bonds': []},
     ]
@@ -496,7 +509,42 @@ def _assets_from_investment_proposal(investment_proposal: list[dict]) -> dict:
         *assets.get('aaa_a', []),
         *assets.get('bbb', []),
         *assets.get('bb', []),
+        *assets.get('investment_grade', []),
     ]
+    return assets
+
+
+def _canonical_risk_assets(assets: dict) -> dict:
+    """Present IG and GLD separately while reading either storage generation."""
+    assets = {**assets}
+    assets['investment_grade'] = [*assets.get('investment_grade', []), *assets.get('aaa_a', []), *assets.get('bbb', [])]
+    assets['aaa_a'] = []
+    assets['bbb'] = []
+    etfs = assets.get('etfs', [])
+    assets['gold'] = [*assets.get('gold', []), *[asset for asset in etfs if str(asset.get('symbol') or '').upper() == 'GLD']]
+    assets['etfs'] = [asset for asset in etfs if str(asset.get('symbol') or '').upper() != 'GLD']
+    assets['bonds'] = [*assets['investment_grade'], *assets.get('bb', [])]
+    return assets
+
+
+def _storage_compatible_assets(assets: dict) -> dict:
+    """Retain every holding for API versions deployed before the new sleeves.
+
+    IG is stored by each selected bond's real rating, never a target credit split.
+    GLD stays an ETF in storage and is presented as Gold by the new readers.
+    """
+    if not assets.get('investment_grade') and not assets.get('gold'):
+        return assets
+    assets = {**assets}
+    for key, ratings in (('aaa_a', {'AAA', 'AA', 'A'}), ('bbb', {'BBB'})):
+        assets[key] = [*assets.get(key, []), *[
+            asset for asset in assets.get('investment_grade', [])
+            if _normalize_rating_token(asset.get('equivalent')).replace('+', '').replace('-', '') in ratings
+        ]]
+    assets['etfs'] = [*assets.get('etfs', []), *assets.get('gold', [])]
+    assets['investment_grade'] = []
+    assets['gold'] = []
+    assets['risk_allocation_version'] = '2026-10-26'
     return assets
 
 
@@ -515,6 +563,8 @@ def _assets_from_saved_proposal(proposal: dict) -> dict:
             assets[key] = [_normalize_bond_record(asset) for asset in bucket_assets if isinstance(asset, dict)]
         if not any(key in raw_assets for key in ('cash', 'bonds', 'stocks')):
             assets['bonds'] = [*assets.get('aaa_a', []), *assets.get('bbb', []), *assets.get('bb', [])]
+        if proposal.get('source_type') == 'risk_profile' or raw_assets.get('risk_allocation_version') == '2026-10-26':
+            assets = _canonical_risk_assets(assets)
         return assets
 
     # Legacy fallback for rows that still have the old columns before migration is applied.
@@ -536,7 +586,7 @@ def _asset_metadata_value_is_missing(field: str, value) -> bool:
 
 
 def _assets_need_market_metadata(assets: dict) -> bool:
-    for key in ('treasury', 'aaa_a', 'bbb', 'bb', 'bonds'):
+    for key in ('treasury', 'aaa_a', 'bbb', 'bb', 'investment_grade', 'bonds'):
         for asset in assets.get(key, []) or []:
             if isinstance(asset, dict) and any(
                 _asset_metadata_value_is_missing(field, asset.get(field))
@@ -554,6 +604,7 @@ def _enrich_assets_with_market_metadata(assets: dict, context: dict) -> dict:
         'bbb': context['rtd_df'],
         'bb': context['rtd_df'],
         'bonds': context['rtd_df'],
+        'investment_grade': context['rtd_df'],
     }
 
     for key, market_df in bucket_sources.items():
@@ -595,6 +646,8 @@ def _distribution_from_saved_assets_payload(assets: dict) -> dict | None:
         'bonds_bbb': assets.get('bbb') or [],
         'bonds_bb': assets.get('bb') or [],
         'etfs': assets.get('etfs') or [],
+        'investment_grade': assets.get('investment_grade') or [],
+        'gold': assets.get('gold') or [],
     }
 
     # Asset percentages are the proposal's actual allocation. Do not infer
@@ -733,7 +786,7 @@ def _prepare_etf_candidates(etfs_df: pd.DataFrame, proposal_equity_df: pd.DataFr
     raw_yields = candidates.get('Current Yield', pd.Series(None, index=candidates.index, dtype=object))
     parsed_yields = raw_yields.apply(_to_float_or_none)
     missing_yields = parsed_yields.apply(lambda value: value is None or not np.isfinite(value))
-    candidates['Current Yield_x'] = parsed_yields.apply(_normalize_yield_percent)
+    candidates['Current Yield_x'] = parsed_yields
     if missing_yields.any():
         fallback_yield = _median_equity_yield_percent(
             proposal_equity_df.to_dict(orient='records')
@@ -753,14 +806,13 @@ def _prepare_etf_candidates(etfs_df: pd.DataFrame, proposal_equity_df: pd.DataFr
 
 
 def _distribution_from_risk_archetype(risk_archetype: dict) -> dict:
-    distribution = {
-        'treasuries': risk_archetype.get('treasuries', 0),
-        'bonds_aaa_a': risk_archetype.get('bonds_aaa_a', 0),
-        'bonds_bbb': risk_archetype.get('bonds_bbb', 0),
-        'bonds_bb': risk_archetype.get('bonds_bb', 0),
-        'etfs': risk_archetype.get('etfs', 0),
+    return {
+        'treasuries': risk_archetype['treasuries'],
+        'investment_grade': risk_archetype['investment_grade'],
+        'bonds_bb': risk_archetype['high_yield'],
+        'etfs': risk_archetype['equity'],
+        'gold': risk_archetype['gold'],
     }
-    return _normalize_distribution(distribution)
 
 
 def _js_round(value: float) -> int:
@@ -768,63 +820,33 @@ def _js_round(value: float) -> int:
 
 
 def _default_allocation_from_risk_archetype(risk_archetype: dict) -> dict:
-    bonds = _js_round((
-        float(risk_archetype.get('bonds_aaa_a', 0) or 0)
-        + float(risk_archetype.get('bonds_bbb', 0) or 0)
-        + float(risk_archetype.get('bonds_bb', 0) or 0)
-    ) * 100)
-
     return {
         'cash': 0,
-        'treasuries': _js_round(float(risk_archetype.get('treasuries', 0) or 0) * 100),
-        'bonds': bonds,
-        'stocks': _js_round(float(risk_archetype.get('etfs', 0) or 0) * 100),
+        'treasuries': _js_round(risk_archetype['treasuries'] * 100),
+        'bonds': _js_round((risk_archetype['investment_grade'] + risk_archetype['high_yield']) * 100),
+        'stocks': _js_round(risk_archetype['equity'] * 100),
+        'gold': _js_round(risk_archetype['gold'] * 100),
     }
 
 
 def _default_bond_rating_allocation_from_risk_archetype(risk_archetype: dict) -> dict:
-    total_bond_share = (
-        float(risk_archetype.get('bonds_aaa_a', 0) or 0)
-        + float(risk_archetype.get('bonds_bbb', 0) or 0)
-        + float(risk_archetype.get('bonds_bb', 0) or 0)
-    )
-
-    if total_bond_share <= 0:
-        return {'aaa': 0, 'bbb': 50, 'bb': 50}
-
-    aaa = _js_round((float(risk_archetype.get('bonds_aaa_a', 0) or 0) / total_bond_share) * 100)
-    bbb = _js_round((float(risk_archetype.get('bonds_bbb', 0) or 0) / total_bond_share) * 100)
-    bb = max(0, 100 - aaa - bbb)
-    return {'aaa': aaa, 'bbb': bbb, 'bb': bb}
+    total = risk_archetype['investment_grade'] + risk_archetype['high_yield']
+    return {
+        'aaa': 0, 'bbb': 0,
+        'ig': risk_archetype['investment_grade'] / total * 100 if total else 0,
+        'bb': risk_archetype['high_yield'] / total * 100 if total else 100,
+    }
 
 
 def _portfolio_plan_matches_selected_archetype_defaults(portfolio_plan: dict, risk_archetype: dict) -> bool:
-    allocation = portfolio_plan.get('allocation') or {}
-    bond_rating_allocation = portfolio_plan.get('bond_rating_allocation') or {}
-
-    expected_allocation = _default_allocation_from_risk_archetype(risk_archetype)
-    # Accept the old rounded UI presets during rollout, and precise new presets.
-    # Both resolve to the canonical weights rather than propagating UI rounding.
-    legacy_bond_rating_allocation = _default_bond_rating_allocation_from_risk_archetype(risk_archetype)
-    total_bonds = sum(float(risk_archetype.get(key) or 0) for key in ('bonds_aaa_a', 'bonds_bbb', 'bonds_bb'))
-    exact_bond_rating_allocation = {
-        key: float(risk_archetype.get(source_key) or 0) / total_bonds * 100
-        for key, source_key in [('aaa', 'bonds_aaa_a'), ('bbb', 'bonds_bbb'), ('bb', 'bonds_bb')]
-    } if total_bonds > 0 else legacy_bond_rating_allocation
-
-    allocation_matches = all(
-        float(allocation.get(key) or 0) == float(expected_allocation.get(key) or 0)
-        for key in expected_allocation
-    )
-    bond_rating_matches = any(
-        all(
-            math.isclose(float(bond_rating_allocation.get(key) or 0), expected[key], rel_tol=0, abs_tol=1e-8)
-            for key in expected
+    return all(
+        math.isclose(float((portfolio_plan.get(field) or {}).get(key) or 0), value, rel_tol=0, abs_tol=1e-8)
+        for field, expected in (
+            ('allocation', _default_allocation_from_risk_archetype(risk_archetype)),
+            ('bond_rating_allocation', _default_bond_rating_allocation_from_risk_archetype(risk_archetype)),
         )
-        for expected in (legacy_bond_rating_allocation, exact_bond_rating_allocation)
+        for key, value in expected.items()
     )
-
-    return allocation_matches and bond_rating_matches
 
 
 def _distribution_from_portfolio_plan(portfolio_plan: dict) -> dict:
@@ -855,8 +877,20 @@ def _distribution_from_portfolio_plan(portfolio_plan: dict) -> dict:
         'bonds_bbb': bonds * bbb,
         'bonds_bb': bonds * bb,
         'etfs': stocks,
+        'investment_grade': bonds * float(bond_rating_allocation.get('ig') or 0) / 100,
+        'gold': float(allocation.get('gold') or 0) / 100,
     }
     return _normalize_distribution(distribution)
+
+
+def _position_limit_for_portfolio_plan(portfolio_plan: dict) -> float | None:
+    archetype = next(
+        (item for item in risk_archetypes if item['name'] == portfolio_plan.get('selected_risk_archetype')),
+        None,
+    )
+    if archetype and _portfolio_plan_matches_selected_archetype_defaults(portfolio_plan, archetype):
+        return archetype['largest_position']
+    return None
 
 
 def _initialize_used_symbols(bonds_df_no_duplicates: pd.DataFrame) -> set[str]:
@@ -868,7 +902,7 @@ def _initialize_used_symbols(bonds_df_no_duplicates: pd.DataFrame) -> set[str]:
     return used_symbols
 
 
-def _optimize_bucket_asset_selection(pools: list[list[dict]], weights: list[float], total_assets: int):
+def _optimize_bucket_asset_selection(pools: list[list[dict]], weights: list[float], total_assets: int, max_position: float | None = None):
     """Maximize weighted sleeve means with exact count and unique issuers.
 
     The independent-sleeve optimum bounds each search branch. Only branch when
@@ -884,7 +918,8 @@ def _optimize_bucket_asset_selection(pools: list[list[dict]], weights: list[floa
             next_states = {}
             prefix = np.cumsum([float(row['Current Yield_x']) for row in rows])
             for size, (score, counts) in states.items():
-                for k in range(1, min(len(rows), total_assets - size) + 1):
+                minimum_count = max(1, math.ceil(weight / max_position - 1e-10)) if max_position else 1
+                for k in range(minimum_count, min(len(rows), total_assets - size) + 1):
                     candidate = score + weight * float(prefix[k - 1]) / k
                     if size + k not in next_states or candidate > next_states[size + k][0]:
                         next_states[size + k] = (candidate, counts + [k])
@@ -930,7 +965,7 @@ def _optimize_bucket_asset_selection(pools: list[list[dict]], weights: list[floa
 
 def _populate_investment_proposal_from_distribution(
     investment_proposal: list[dict], distribution: dict, context: dict,
-    total_assets: int = TOTAL_ASSETS,
+    total_assets: int = TOTAL_ASSETS, max_position: float | None = None,
 ):
     if isinstance(total_assets, bool) or not isinstance(total_assets, int) or total_assets < 1:
         raise ServiceError('Total assets must be a positive integer.', status_code=400, code='invalid_asset_count')
@@ -945,13 +980,36 @@ def _populate_investment_proposal_from_distribution(
     for bucket in investment_proposal:
         bucket['bonds'] = []
     for bucket in active:
-        if bucket['name'] == 'etfs':
-            candidates = _prepare_etf_candidates(context['etfs_df'], context.get('proposal_equity_df'))
+        if bucket['name'] in {'etfs', 'gold'}:
+            etfs = context['etfs_df']
+            symbols = etfs.apply(lambda row: _resolve_market_asset_display_symbol(row.to_dict(), '').upper(), axis=1)
+            if bucket['name'] == 'gold':
+                # GLD is a commodity holding, not part of the equity sleeve.
+                gold = etfs[symbols == 'GLD']
+                if gold.empty:
+                    raise ServiceError('GLD is missing from the ETF snapshot.', status_code=422, code='proposal_assets_unavailable')
+                row = gold.iloc[0].to_dict()
+                candidates = pd.DataFrame([{
+                    **row, 'Ticker': 'GLD', 'Symbol_x': 'GLD',
+                    'S&P Equivalent_x': 'GOLD',
+                    'Current Yield_x': _to_float_or_none(row.get('Current Yield')),
+                }])
+            else:
+                candidates = _prepare_etf_candidates(etfs[symbols.isin(EQUITY_ETF_SYMBOLS)], context.get('proposal_equity_df'))
         else:
             equivalents = bucket['equivalents']
             candidates = merged[merged['S&P Equivalent_x'].astype(str).str.replace(r'[+\-]', '', regex=True).isin(equivalents)]
-        cleaned = _clean_candidate_pool(candidates)
-        screened = _screen_outliers_for_bucket(cleaned, _bucket_selection_profile(cleaned))
+        # Gold has no bond income requirement; retain its source return even
+        # when zero/negative, rather than inventing an equity median for GLD.
+        if bucket['name'] in {'gold', 'etfs'}:
+            cleaned = candidates[candidates['Current Yield_x'].apply(lambda value: value is not None and np.isfinite(value))]
+        else:
+            cleaned = _clean_candidate_pool(candidates)
+        if bucket['name'] == 'treasuries':
+            cleaned = cleaned.copy()
+            cleaned['Ticker'] = cleaned['Symbol_x']
+
+        screened = cleaned if bucket['name'] in {'gold', 'etfs'} else _screen_outliers_for_bucket(cleaned, _bucket_selection_profile(cleaned))
         ranked = screened.sort_values(['Current Yield_x', 'Ticker'], ascending=[False, True])
         ranked = ranked.groupby('Ticker').head(1)
         ranked = ranked[~ranked['Ticker'].isin(used)]
@@ -959,7 +1017,7 @@ def _populate_investment_proposal_from_distribution(
         if not rows:
             raise ServiceError(f"Unable to generate investment proposal: no eligible assets for {bucket['name']}.", status_code=422, code='proposal_assets_unavailable', details={'missing_buckets': [bucket['name']]})
         pools.append(rows)
-    selected = _optimize_bucket_asset_selection(pools, [weights[bucket['name']] for bucket in active], total_assets)
+    selected = _optimize_bucket_asset_selection(pools, [weights[bucket['name']] for bucket in active], total_assets, max_position)
     if selected is None:
         raise ServiceError(f'Cannot build exactly {total_assets} distinct eligible assets. Reduce the total or refresh market data.', status_code=422, code='proposal_asset_count_unavailable')
     for bucket, rows in zip(active, selected):
@@ -1025,7 +1083,7 @@ def _serialize_investment_proposal(
     starting_amount=None,
 ):
     return {
-        'assets': _assets_from_investment_proposal(investment_proposal),
+        'assets': _storage_compatible_assets(_assets_from_investment_proposal(investment_proposal)),
         'risk_profile_id': risk_profile_id,
         'contact_id': contact_id,
         'source_type': source_type,
@@ -1057,6 +1115,7 @@ def _build_investment_proposal_preview(
         starting_amount=starting_amount,
     )
 
+    proposal_record['assets'] = _assets_from_saved_proposal(proposal_record)
     bucket_mapping = [
         ('cash', 'cash'),
         ('stocks', 'stocks'),
@@ -1065,6 +1124,8 @@ def _build_investment_proposal_preview(
         ('bbb', 'bonds_bbb'),
         ('bb', 'bonds_bb'),
         ('etfs', 'etfs'),
+        ('investment_grade', 'investment_grade'),
+        ('gold', 'gold'),
     ]
 
     bucket_summaries = []
@@ -1332,6 +1393,8 @@ def create_investment_proposal_with_risk_profile(risk_profile: dict, starting_am
             investment_proposal=investment_proposal,
             distribution=distribution,
             context=context,
+            total_assets=risk_archetype['positions'],
+            max_position=risk_archetype['largest_position'],
         )
 
     except ServiceError:
@@ -1361,6 +1424,7 @@ def create_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
             distribution=distribution,
             context=context,
             total_assets=portfolio_plan.get('total_assets', TOTAL_ASSETS),
+            max_position=_position_limit_for_portfolio_plan(portfolio_plan),
         )
 
     except ServiceError:
@@ -1396,6 +1460,7 @@ def preview_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
             distribution=distribution,
             context=context,
             total_assets=portfolio_plan.get('total_assets', TOTAL_ASSETS),
+            max_position=_position_limit_for_portfolio_plan(portfolio_plan),
         )
     except ServiceError:
         raise
@@ -1411,7 +1476,39 @@ def preview_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
     )
 
 @handle_exception
-def read_investment_proposals(query: dict = None):
+def read_investment_proposals(query: dict = None, view: str = 'full'):
+    if view not in ('full', 'list'):
+        raise ServiceError('view must be full or list', status_code=400)
+    if view == 'list':
+        # Count JSON objects in SQL instead of transporting/enriching every asset.
+        # Preserve legacy JSON strings for the existing tolerant normalizer.
+        assets = db.metadata.tables['investment_proposal'].c.assets
+        keys = ('cash', 'treasury', 'bonds', 'aaa_a', 'bbb', 'bb', 'stocks', 'etfs', 'investment_grade', 'gold')
+        counts = func.jsonb_build_object(*[
+            value for key in keys for value in (
+                key, case((func.jsonb_typeof(assets[key]) == 'array',
+                    func.jsonb_array_length(func.jsonb_path_query_array(assets, f'$.{key}[*] ? (@.type() == "object")'))), else_=0),
+            )
+        ])
+        projected_assets = case(
+            (func.jsonb_typeof(assets) == 'string', assets),
+            else_=func.jsonb_build_object('counts', counts, 'canonical',
+                assets.has_key('cash') | assets.has_key('bonds') | assets.has_key('stocks')),
+        ).label('assets')
+        rows = db.read(table='investment_proposal', query=query, column_overrides={'assets': projected_assets})
+        summaries = []
+        for row in rows:
+            raw = row.get('assets')
+            if isinstance(raw, dict) and 'counts' in raw:
+                selected = ('cash', 'treasury', 'bonds', 'stocks', 'etfs', 'gold') if raw.get('canonical') else ('cash', 'treasury', 'aaa_a', 'bbb', 'bb', 'stocks', 'etfs', 'investment_grade', 'gold')
+                total = sum((raw.get('counts') or {}).get(key, 0) or 0 for key in selected)
+            else:
+                normalized = _assets_from_saved_proposal(row)
+                total = sum(len(normalized.get(key) or []) for key in ('cash', 'treasury', 'bonds', 'stocks', 'etfs', 'gold'))
+            summary = {key: value for key, value in row.items() if key != 'assets'}
+            summary['source_type'] = row.get('source_type') if row.get('source_type') in ('risk_profile', 'portfolio_plan', 'custom') else 'risk_profile'
+            summaries.append({**summary, 'total_assets': total})
+        return summaries
     investment_proposals = db.read(table='investment_proposal', query=query)
     normalized_proposals = [
         _normalize_saved_investment_proposal(investment_proposal)

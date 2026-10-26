@@ -3,11 +3,31 @@ from io import BytesIO
 from src.components.tools.public.reporting import get_clients_report, get_client_fees_report, get_nav_report, get_nav_report_monthly, get_bond_report, get_stocks_report, get_etfs_report, get_ust_bond_report, get_proposals_equity_report, get_open_positions_report, get_deposits_withdrawals, get_monthly_deposits_withdrawals, get_trades_report, get_brokerage_commissions, get_management_commissions, get_ending_balances_from_statements, get_ibkr_details, get_ibkr_statement_summary, get_ibkr_statement_transactions
 from src.utils.response import format_response
 from src.components.tools.public.trade_confirmations import get_trade_confirmations_report
+from src.components.tools.public.account_performance import get_account_performance
 from src.components.tools.public import accounting_statements as accounting
 from src.utils.authz import require_scope
 from src.utils.exception import ServiceError
 
 bp = Blueprint('reporting', __name__)
+
+
+@bp.route('/account_performance', methods=['GET'])
+@require_scope('all')
+@format_response
+def account_performance_route():
+    return get_account_performance(
+        request.args.get('start_date'), request.args.get('end_date'),
+    ), 200, {'Cache-Control': 'private, no-store'}
+
+
+def _read_report_view(load, fields):
+    view = request.args.get('view', 'full')
+    if view not in ('full', 'summary'):
+        raise ServiceError('view must be full or summary', 400)
+    rows = load()
+    if view == 'full':
+        return rows
+    return [{field: row.get(field) for field in fields} for row in rows]
 
 
 def _accounting_payload():
@@ -90,7 +110,9 @@ def get_trade_confirmations_route():
 @format_response
 def get_clients_report_route():
     """Read the base clients reporting dataset."""
-    return get_clients_report()
+    return _read_report_view(get_clients_report, (
+        'Account ID', 'Alias', 'Status', 'sheet_name', 'Title', 'SLS Devices', 'Email Address',
+    ))
 
 @bp.route('/clients/fees', methods=['GET'])
 @format_response
@@ -102,7 +124,7 @@ def get_client_fees_report_route():
 @format_response
 def get_nav_report_route():
     """Read the NAV reporting dataset."""
-    return get_nav_report()
+    return _read_report_view(get_nav_report, ('ClientAccountID', 'Total', 'ReportDate'))
 
 @bp.route('/nav/monthly', methods=['GET'])
 @format_response

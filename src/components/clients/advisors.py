@@ -38,7 +38,7 @@ def _current_advisor_accounts() -> list:
     advisor = get_current_advisor()
     if not advisor or advisor.get('code') is None:
         raise ServiceError('Advisor ownership could not be resolved', status_code=403)
-    return read_accounts(query={'advisor_code': advisor['code']})
+    return read_accounts(query={'advisor_code': advisor['code']}, view='list')
 
 
 def _current_advisor_account(account_id: str) -> dict:
@@ -144,19 +144,19 @@ def read_current_advisor_account_contacts(account_id: str) -> list:
 
 
 @handle_exception
-def read_current_advisor_account_proposals(account_id: str) -> list:
+def read_current_advisor_account_proposals(account_id: str, view: str = 'full', proposal_id: str = None) -> list:
     """Return proposals for holders of an advisor-owned account."""
+    if view not in ('full', 'list'):
+        raise ServiceError('view must be full or list', status_code=400)
     _current_advisor_account(account_id)
     links = read_account_contacts(query={'account_id': account_id})
     contact_ids = {str(link.get('contact_id')) for link in links if link.get('contact_id')}
-    proposals = []
-    seen_ids = set()
-    for contact_id in contact_ids:
-        for proposal in read_investment_proposals(query={'contact_id': contact_id}) or []:
-            proposal_id = str(proposal.get('id'))
-            if proposal_id not in seen_ids:
-                seen_ids.add(proposal_id)
-                proposals.append(proposal)
+    if not contact_ids:
+        return []
+    query = {'contact_id': sorted(contact_ids)}
+    if proposal_id:
+        query['id'] = proposal_id
+    proposals = read_investment_proposals(query=query, view=view) or []
     return sorted(proposals, key=lambda proposal: str(proposal.get('created') or ''), reverse=True)
 
 

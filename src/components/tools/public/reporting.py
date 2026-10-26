@@ -27,7 +27,9 @@ _activity_statement_file_cache = {}
 _ending_balances_cache_lock = threading.Lock()
 _ibkr_statement_rows_cache = {}
 _ibkr_statement_rows_cache_lock = threading.Lock()
-_daily_report_cache = ReportCache(os.getenv('REPORT_CACHE_TTL_SECONDS', '30'))
+_daily_report_cache = ReportCache(os.getenv('REPORT_CACHE_TTL_SECONDS', '30'), keys=(
+    'clients', 'nav', 'client-fees', 'bonds', 'stocks', 'etfs', 'ust-bonds', 'open-positions',
+))
 _quote_snapshot_cache = ReportCache(os.getenv('REPORT_CACHE_TTL_SECONDS', '30'), keys=('market-quotes',))
 
 activity_statement_folders = {
@@ -71,18 +73,8 @@ def _read_daily_report(name):
 
 @handle_exception
 def get_client_fees_report():
-    """
-    Get the client fees list.
-    
-    :return: Response object with clients list or error message
-    """
-    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
-    clients_file = [client for client in files_in_resources_folder if 'ibkr_client_fees' in client['name']]
-    if len(clients_file) != 1:
-        logger.error('Clients file not found or multiple files found')
-        raise Exception('Clients file not found or multiple files found')
-    clients = Drive.download_file(file_id=clients_file[0]['id'], parse=True)
-    return clients
+    """Read a daily snapshot under the bounded report freshness policy."""
+    return _daily_report_cache.get('client-fees', lambda: _read_daily_report('ibkr_client_fees'))
 
 @handle_exception
 def get_nav_report():
@@ -95,63 +87,23 @@ def get_nav_report():
 
 @handle_exception
 def get_bond_report():
-    """
-    Get the RTD report.
-    
-    :return: Response object with RTD report or error message
-    """
-    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
-    rtd_file = [rtd for rtd in files_in_resources_folder if 'ibkr_bonds_snapshot' in rtd['name']]
-    if len(rtd_file) != 1:
-        logger.error('RTD file not found or multiple files found')
-        raise Exception('RTD file not found or multiple files found')
-    rtd = Drive.download_file(file_id=rtd_file[0]['id'], parse=True)
-    return rtd  
+    """Read a daily snapshot under the bounded report freshness policy."""
+    return _daily_report_cache.get('bonds', lambda: _read_daily_report('ibkr_bonds_snapshot'))
 
 @handle_exception
 def get_stocks_report():
-    """
-    Get the Stocks report.
-    
-    :return: Response object with RTD report or error message
-    """
-    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
-    rtd_file = [rtd for rtd in files_in_resources_folder if 'ibkr_stocks_snapshot' in rtd['name']]
-    if len(rtd_file) != 1:
-        logger.error('Stocks file not found or multiple files found')
-        raise Exception('Stocks file not found or multiple files found')
-    rtd = Drive.download_file(file_id=rtd_file[0]['id'], parse=True)
-    return rtd
+    """Read a daily snapshot under the bounded report freshness policy."""
+    return _daily_report_cache.get('stocks', lambda: _read_daily_report('ibkr_stocks_snapshot'))
 
 @handle_exception
 def get_etfs_report():
-    """
-    Get the ETFs report.
-    
-    :return: Response object with ETFs report or error message
-    """
-    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
-    rtd_file = [rtd for rtd in files_in_resources_folder if 'ibkr_etfs_snapshot' in rtd['name']]
-    if len(rtd_file) != 1:
-        logger.error('ETFs file not found or multiple files found')
-        raise Exception('ETFs file not found or multiple files found')
-    rtd = Drive.download_file(file_id=rtd_file[0]['id'], parse=True)
-    return rtd
+    """Read a daily snapshot under the bounded report freshness policy."""
+    return _daily_report_cache.get('etfs', lambda: _read_daily_report('ibkr_etfs_snapshot'))
 
 @handle_exception
 def get_ust_bond_report():
-    """
-    Get the UST Bonds report.
-
-    :return: Response object with UST Bonds report or error message
-    """
-    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
-    rtd_file = [rtd for rtd in files_in_resources_folder if 'ibkr_ust_bonds_snapshot' in rtd['name']]
-    if len(rtd_file) != 1:
-        logger.error('UST Bonds file not found or multiple files found')
-        raise Exception('UST Bonds file not found or multiple files found')
-    rtd = Drive.download_file(file_id=rtd_file[0]['id'], parse=True)
-    return rtd
+    """Read a daily snapshot under the bounded report freshness policy."""
+    return _daily_report_cache.get('ust-bonds', lambda: _read_daily_report('ibkr_ust_bonds_snapshot'))
 
 def _read_quote_snapshots():
     files = Drive.get_files_in_folder(resources_folder_id)
@@ -181,12 +133,7 @@ def get_open_positions_report(include_quotes=False, account_ids=None):
     
     :return: Response object with open positions report or error message
     """
-    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
-    open_positions_file = [open_positions for open_positions in files_in_resources_folder if 'ibkr_open_positions_all' in open_positions['name']]
-    if len(open_positions_file) != 1:
-        logger.error('Open positions file not found or multiple files found')
-        raise Exception('Open positions file not found or multiple files found')
-    open_positions = Drive.download_file(file_id=open_positions_file[0]['id'], parse=True)
+    open_positions = _daily_report_cache.get('open-positions', lambda: _read_daily_report('ibkr_open_positions_all'))
     if account_ids is not None:
         selected = {str(value).strip() for value in account_ids}
         open_positions = [row for row in open_positions if str(row.get('ClientAccountID') or '').strip() in selected]
