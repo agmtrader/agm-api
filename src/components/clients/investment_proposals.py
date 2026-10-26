@@ -28,6 +28,35 @@ EQUITY_ETF_SYMBOLS = frozenset({
     'VNQ', 'IWM', 'VXUS', 'IVV', 'XLK', 'SOXX', 'XLU', 'EFA', 'SPY', 'VWO',
     'IEFA', 'XLF', 'XLI', 'ACWI', 'SMH', 'SCHB',
 })
+# Reviewed breadth/concentration preferences, not measured fund-quality ratings.
+# Similar index exposures share a family so additional wrappers lose priority.
+# Source references and the limits of these proxies are recorded in PROC-005.
+EQUITY_ETF_SELECTION_POLICY = {
+    'VT': (1.00, 'global'), 'ACWI': (0.98, 'global'),
+    'VTI': (1.00, 'us_market'), 'SCHB': (0.99, 'us_market'),
+    'VOO': (0.98, 'us_market'), 'IVV': (0.98, 'us_market'),
+    'SPY': (0.98, 'us_market'),
+    'VXUS': (0.97, 'international'),
+    'VEA': (0.96, 'developed'), 'IEFA': (0.95, 'developed'),
+    'EFA': (0.94, 'developed'),
+    'RSP': (0.94, 'us_equal_weight'), 'DIA': (0.90, 'us_blue_chip'),
+    'IWM': (0.88, 'us_small_cap'),
+    'IEMG': (0.88, 'emerging'), 'VWO': (0.88, 'emerging'),
+    'EEM': (0.85, 'emerging'), 'EWJ': (0.85, 'japan'),
+    'QQQM': (0.86, 'nasdaq_growth'), 'QQQ': (0.85, 'nasdaq_growth'),
+    'XLP': (0.72, 'staples'), 'XLV': (0.72, 'healthcare'),
+    'XLU': (0.72, 'utilities'), 'XLI': (0.70, 'industrials'),
+    'XLF': (0.68, 'financials'), 'XLB': (0.68, 'materials'),
+    'XLY': (0.65, 'consumer_discretionary'), 'XLE': (0.62, 'energy'),
+    'XLK': (0.62, 'technology'),
+    'VNQ': (0.65, 'real_estate'), 'IYR': (0.62, 'real_estate'),
+    'XLRE': (0.62, 'real_estate'),
+    'SOXX': (0.45, 'semiconductors'), 'SMH': (0.45, 'semiconductors'),
+    'IBB': (0.45, 'biotechnology'), 'ARKK': (0.35, 'innovation_theme'),
+}
+ETF_PLANNING_RETURN_CENTER = 10.0
+ETF_BREADTH_SCORE_WEIGHT = 0.8
+ETF_SAME_EXPOSURE_PENALTY = 0.75
 TOTAL_ASSETS = 32
 INVESTMENT_PROPOSAL_CONTEXT_TTL_SECONDS = 300
 _investment_proposal_context_cache: dict | None = None
@@ -723,12 +752,7 @@ def _prepare_bucket_candidates(
 
 
 def _prepare_etf_candidates(etfs_df: pd.DataFrame, proposal_equity_df: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Adapt the ETF report to the common candidate schema.
-
-    Prefer historical-performance Current Yield. Production snapshots leave
-    this column empty, so missing values use the existing proposal-equity
-    median estimate until historical data is available.
-    """
+    """Adapt observed ETF returns without inventing missing per-fund history."""
     if etfs_df.empty:
         return pd.DataFrame(columns=['Ticker', 'Symbol_x', 'Current Yield_x', 'S&P Equivalent_x'])
 
@@ -737,6 +761,7 @@ def _prepare_etf_candidates(etfs_df: pd.DataFrame, proposal_equity_df: pd.DataFr
         candidates.get('Financial Instrument', candidates.get('Symbol', pd.Series(index=candidates.index)))
         .astype(str)
         .str.strip()
+        .str.upper()
     )
     candidates['Ticker'] = display_symbol
     candidates['Symbol_x'] = display_symbol
@@ -745,21 +770,43 @@ def _prepare_etf_candidates(etfs_df: pd.DataFrame, proposal_equity_df: pd.DataFr
     missing_yields = parsed_yields.apply(lambda value: value is None or not np.isfinite(value))
     candidates['Current Yield_x'] = parsed_yields
     if missing_yields.any():
-        fallback_yield = _median_equity_yield_percent(
-            proposal_equity_df.to_dict(orient='records')
-            if proposal_equity_df is not None and not proposal_equity_df.empty
-            else []
-        )
         logger.warning(
             f'ETF snapshot has {int(missing_yields.sum())} missing Current Yield value(s); '
-            'using proposal-equity median fallback '
-            f'of {fallback_yield:.4f}% until the ETL snapshot is refreshed.'
+            'excluding those candidates until per-fund history is available.'
         )
-        candidates.loc[missing_yields, 'Current Yield_x'] = fallback_yield
+        candidates = candidates.loc[~missing_yields].copy()
     candidates['S&P Equivalent_x'] = 'ETF'
     # Keep the source columns so optional proposal metadata such as industry
     # can be preserved when it exists in the ETF snapshot.
     return candidates
+
+
+def _rank_equity_etf_candidates(candidates: pd.DataFrame) -> pd.DataFrame:
+    """Prefer breadth, modest return assumptions and distinct index exposures.
+
+    The 8-12% planning range has a soft 10% center, never a return filter or
+    a replacement for the observed return. Breadth owns 80% of the base score.
+    This ordering is reused by the count optimizer, not just the first sort.
+    """
+    remaining = [row for row in candidates.to_dict(orient='records')
+                 if row['Ticker'] in EQUITY_ETF_SELECTION_POLICY]
+    ranked = []
+    exposure_counts = {}
+
+    def score(row):
+        breadth, exposure = EQUITY_ETF_SELECTION_POLICY[row['Ticker']]
+        return_fit = 1 / (1 + abs(float(row['Current Yield_x']) - ETF_PLANNING_RETURN_CENTER) / 5)
+        base = 10 * (ETF_BREADTH_SCORE_WEIGHT * breadth + (1 - ETF_BREADTH_SCORE_WEIGHT) * return_fit)
+        return base - ETF_SAME_EXPOSURE_PENALTY * exposure_counts.get(exposure, 0)
+
+    while remaining:
+        remaining.sort(key=lambda row: (-score(row), row['Ticker']))
+        selected = remaining.pop(0)
+        selected['_selection_score'] = score(selected)
+        exposure = EQUITY_ETF_SELECTION_POLICY[selected['Ticker']][1]
+        exposure_counts[exposure] = exposure_counts.get(exposure, 0) + 1
+        ranked.append(selected)
+    return pd.DataFrame(ranked, columns=[*candidates.columns, '_selection_score'])
 
 
 def _distribution_from_risk_archetype(risk_archetype: dict) -> dict:
@@ -833,7 +880,7 @@ def _initialize_used_symbols(bonds_df_no_duplicates: pd.DataFrame) -> set[str]:
 
 
 def _optimize_bucket_asset_selection(pools: list[list[dict]], weights: list[float], total_assets: int, max_position: float | None = None):
-    """Maximize weighted sleeve means with exact count and unique issuers.
+    """Maximize weighted selection scores with exact count and unique issuers.
 
     The independent-sleeve optimum bounds each search branch. Only branch when
     its selected holdings conflict, so unused candidates never reserve issuers.
@@ -846,7 +893,7 @@ def _optimize_bucket_asset_selection(pools: list[list[dict]], weights: list[floa
         states = {0: (0.0, [])}
         for weight, rows in zip(weights, available):
             next_states = {}
-            prefix = np.cumsum([float(row['Current Yield_x']) for row in rows])
+            prefix = np.cumsum([float(row.get('_selection_score', row['Current Yield_x'])) for row in rows])
             for size, (score, counts) in states.items():
                 minimum_count = max(1, math.ceil(weight / max_position - 1e-10)) if max_position else 1
                 for k in range(minimum_count, min(len(rows), total_assets - size) + 1):
@@ -926,9 +973,10 @@ def _populate_investment_proposal_from_distribution(
             cleaned['Ticker'] = cleaned['Symbol_x']
 
         screened = cleaned if bucket['name'] == 'etfs' else _screen_outliers_for_bucket(cleaned, _bucket_selection_profile(cleaned))
-        ranked = screened.sort_values(['Current Yield_x', 'Ticker'], ascending=[False, True])
-        ranked = ranked.groupby('Ticker').head(1)
-        ranked = ranked[~ranked['Ticker'].isin(used)]
+        eligible = screened.sort_values(['Current Yield_x', 'Ticker'], ascending=[False, True]).groupby('Ticker').head(1)
+        eligible = eligible[~eligible['Ticker'].isin(used)]
+        ranked = (_rank_equity_etf_candidates(eligible) if bucket['name'] == 'etfs'
+                  else eligible)
         rows = ranked.to_dict(orient='records')
         if not rows:
             raise ServiceError(f"Unable to generate investment proposal: no eligible assets for {bucket['name']}.", status_code=422, code='proposal_assets_unavailable', details={'missing_buckets': [bucket['name']]})
