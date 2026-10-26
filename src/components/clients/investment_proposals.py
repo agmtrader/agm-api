@@ -28,7 +28,7 @@ EQUITY_ETF_SYMBOLS = frozenset({
     'VNQ', 'IWM', 'VXUS', 'IVV', 'XLK', 'SOXX', 'XLU', 'EFA', 'SPY', 'VWO',
     'IEFA', 'XLF', 'XLI', 'ACWI', 'SMH', 'SCHB',
 })
-TOTAL_ASSETS = 20
+TOTAL_ASSETS = 32
 INVESTMENT_PROPOSAL_CONTEXT_TTL_SECONDS = 300
 _investment_proposal_context_cache: dict | None = None
 _investment_proposal_context_cached_at = 0.0
@@ -295,54 +295,20 @@ def _resolve_source_bucket(asset: dict) -> str:
 
 def _build_investment_proposal_template() -> list[dict]:
     return [
-        {'name': 'cash', 'equivalents': ['CASH'], 'bonds': []},
-        {
-            'name': 'treasuries',
-            'equivalents': ['UST'],
-            'bonds': []
-        },
-        {
-            'name': 'bonds_aaa_a',
-            'equivalents': ['AAA', 'AAA-', 'AAA+', 'AA', 'AA+', 'AA-', 'A', 'A-', 'A+'],
-            'bonds': []
-        },
-        {
-            'name': 'bonds_bbb',
-            'equivalents': ['BBB', 'BBB-', 'BBB+'],
-            'bonds': []
-        },
-        {
-            'name': 'bonds_bb',
-            'equivalents': ['BB', 'BB-', 'BB+'],
-            'bonds': []
-        },
-        {
-            'name': 'etfs',
-            'equivalents': ['ETF'],
-            'bonds': []
-        },
+        {'name': 'treasuries', 'equivalents': ['UST'], 'bonds': []},
         {'name': 'investment_grade', 'equivalents': ['AAA', 'AA', 'A', 'BBB'], 'bonds': []},
+        {'name': 'bonds_bb', 'equivalents': ['BB'], 'bonds': []},
+        {'name': 'etfs', 'equivalents': ['ETF'], 'bonds': []},
         {'name': 'gold', 'equivalents': ['GOLD'], 'bonds': []},
-        {'name': 'stocks', 'equivalents': ['STOCK'], 'bonds': []},
-        {'name': 'bonds', 'equivalents': [], 'bonds': []},
     ]
+
 
 def _get_bucket_for_rating(rating: str) -> str:
     token = _normalize_rating_token(rating)
-    normalized = token if token in {'UST', 'ETF', 'STOCK'} else _validated_sp_rating(token).replace('+', '').replace('-', '')
-    if normalized == 'UST':
-        return 'treasuries'
-    if normalized == 'ETF':
-        return 'etfs'
-    if normalized == 'STOCK':
-        return 'stocks'
-    if normalized in {'AAA', 'AA', 'A'}:
-        return 'bonds_aaa_a'
-    if normalized == 'BBB':
-        return 'bonds_bbb'
-    if normalized == 'BB':
-        return 'bonds_bb'
-    return ''
+    normalized = token if token in {'UST', 'ETF', 'GOLD'} else _validated_sp_rating(token).replace('+', '').replace('-', '')
+    return {'UST': 'treasuries', 'ETF': 'etfs', 'GOLD': 'gold', 'AAA': 'investment_grade',
+            'AA': 'investment_grade', 'A': 'investment_grade', 'BBB': 'investment_grade', 'BB': 'bonds_bb'}.get(normalized, '')
+
 
 def _load_investment_proposal_context() -> dict:
     global _investment_proposal_context_cache
@@ -514,8 +480,8 @@ def _assets_from_investment_proposal(investment_proposal: list[dict]) -> dict:
     return assets
 
 
-def _canonical_risk_assets(assets: dict) -> dict:
-    """Present IG and GLD separately while reading either storage generation."""
+def _canonical_proposal_assets(assets: dict) -> dict:
+    """Expose the same IG and Gold categories for every proposal source."""
     assets = {**assets}
     assets['investment_grade'] = [*assets.get('investment_grade', []), *assets.get('aaa_a', []), *assets.get('bbb', [])]
     assets['aaa_a'] = []
@@ -524,27 +490,6 @@ def _canonical_risk_assets(assets: dict) -> dict:
     assets['gold'] = [*assets.get('gold', []), *[asset for asset in etfs if str(asset.get('symbol') or '').upper() == 'GLD']]
     assets['etfs'] = [asset for asset in etfs if str(asset.get('symbol') or '').upper() != 'GLD']
     assets['bonds'] = [*assets['investment_grade'], *assets.get('bb', [])]
-    return assets
-
-
-def _storage_compatible_assets(assets: dict) -> dict:
-    """Retain every holding for API versions deployed before the new sleeves.
-
-    IG is stored by each selected bond's real rating, never a target credit split.
-    GLD stays an ETF in storage and is presented as Gold by the new readers.
-    """
-    if not assets.get('investment_grade') and not assets.get('gold'):
-        return assets
-    assets = {**assets}
-    for key, ratings in (('aaa_a', {'AAA', 'AA', 'A'}), ('bbb', {'BBB'})):
-        assets[key] = [*assets.get(key, []), *[
-            asset for asset in assets.get('investment_grade', [])
-            if _normalize_rating_token(asset.get('equivalent')).replace('+', '').replace('-', '') in ratings
-        ]]
-    assets['etfs'] = [*assets.get('etfs', []), *assets.get('gold', [])]
-    assets['investment_grade'] = []
-    assets['gold'] = []
-    assets['risk_allocation_version'] = '2026-10-26'
     return assets
 
 
@@ -563,9 +508,7 @@ def _assets_from_saved_proposal(proposal: dict) -> dict:
             assets[key] = [_normalize_bond_record(asset) for asset in bucket_assets if isinstance(asset, dict)]
         if not any(key in raw_assets for key in ('cash', 'bonds', 'stocks')):
             assets['bonds'] = [*assets.get('aaa_a', []), *assets.get('bbb', []), *assets.get('bb', [])]
-        if proposal.get('source_type') == 'risk_profile' or raw_assets.get('risk_allocation_version') == '2026-10-26':
-            assets = _canonical_risk_assets(assets)
-        return assets
+        return _canonical_proposal_assets(assets)
 
     # Legacy fallback for rows that still have the old columns before migration is applied.
     legacy_assets = _empty_assets_payload()
@@ -575,7 +518,7 @@ def _assets_from_saved_proposal(proposal: dict) -> dict:
             for asset in (proposal.get(proposal_key) or [])
             if isinstance(asset, dict)
         ]
-    return legacy_assets
+    return _canonical_proposal_assets(legacy_assets)
 
 
 def _asset_metadata_value_is_missing(field: str, value) -> bool:
@@ -820,67 +763,35 @@ def _js_round(value: float) -> int:
 
 
 def _default_allocation_from_risk_archetype(risk_archetype: dict) -> dict:
-    return {
-        'cash': 0,
-        'treasuries': _js_round(risk_archetype['treasuries'] * 100),
-        'bonds': _js_round((risk_archetype['investment_grade'] + risk_archetype['high_yield']) * 100),
-        'stocks': _js_round(risk_archetype['equity'] * 100),
-        'gold': _js_round(risk_archetype['gold'] * 100),
-    }
-
-
-def _default_bond_rating_allocation_from_risk_archetype(risk_archetype: dict) -> dict:
-    total = risk_archetype['investment_grade'] + risk_archetype['high_yield']
-    return {
-        'aaa': 0, 'bbb': 0,
-        'ig': risk_archetype['investment_grade'] / total * 100 if total else 0,
-        'bb': risk_archetype['high_yield'] / total * 100 if total else 100,
-    }
+    return {key: _js_round(risk_archetype[key] * 100)
+            for key in ('treasuries', 'investment_grade', 'high_yield', 'equity', 'gold')}
 
 
 def _portfolio_plan_matches_selected_archetype_defaults(portfolio_plan: dict, risk_archetype: dict) -> bool:
-    return all(
-        math.isclose(float((portfolio_plan.get(field) or {}).get(key) or 0), value, rel_tol=0, abs_tol=1e-8)
-        for field, expected in (
-            ('allocation', _default_allocation_from_risk_archetype(risk_archetype)),
-            ('bond_rating_allocation', _default_bond_rating_allocation_from_risk_archetype(risk_archetype)),
-        )
+    allocation = portfolio_plan.get('allocation') or {}
+    expected = _default_allocation_from_risk_archetype(risk_archetype)
+    return set(allocation) == set(expected) and all(
+        math.isclose(float(allocation[key]), value, rel_tol=0, abs_tol=1e-8)
         for key, value in expected.items()
     )
 
 
 def _distribution_from_portfolio_plan(portfolio_plan: dict) -> dict:
-    selected_archetype_name = str(portfolio_plan.get('selected_risk_archetype') or '').strip()
-    if selected_archetype_name:
-        selected_archetype = next(
-            (risk_archetype for risk_archetype in risk_archetypes if str(risk_archetype.get('name') or '').strip() == selected_archetype_name),
-            None,
-        )
-        if selected_archetype and _portfolio_plan_matches_selected_archetype_defaults(portfolio_plan, selected_archetype):
-            return _distribution_from_risk_archetype(selected_archetype)
-
     allocation = portfolio_plan.get('allocation') or {}
-    bond_rating_allocation = portfolio_plan.get('bond_rating_allocation') or {}
-
-    cash = float(allocation.get('cash') or 0) / 100
-    treasuries = float(allocation.get('treasuries') or 0) / 100
-    bonds = float(allocation.get('bonds') or 0) / 100
-    stocks = float(allocation.get('stocks') or 0) / 100
-
-    aaa = float(bond_rating_allocation.get('aaa') or 0) / 100
-    bbb = float(bond_rating_allocation.get('bbb') or 0) / 100
-    bb = float(bond_rating_allocation.get('bb') or 0) / 100
-
-    distribution = {
-        'treasuries': cash + treasuries,
-        'bonds_aaa_a': bonds * aaa,
-        'bonds_bbb': bonds * bbb,
-        'bonds_bb': bonds * bb,
-        'etfs': stocks,
-        'investment_grade': bonds * float(bond_rating_allocation.get('ig') or 0) / 100,
-        'gold': float(allocation.get('gold') or 0) / 100,
-    }
-    return _normalize_distribution(distribution)
+    mapping = {'treasuries': 'treasuries', 'investment_grade': 'investment_grade',
+               'high_yield': 'bonds_bb', 'equity': 'etfs', 'gold': 'gold'}
+    if not isinstance(allocation, dict) or set(allocation) != set(mapping):
+        raise ServiceError('Use Treasuries, Investment grade, High yield, Equity and Gold allocations.',
+                           status_code=422, code='invalid_proposal_allocation')
+    try:
+        values = {key: float(allocation[key]) for key in mapping}
+    except (ValueError, TypeError):
+        raise ServiceError('Allocations must be finite nonnegative percentages totaling 100%.',
+                           status_code=422, code='invalid_proposal_allocation')
+    if any(not math.isfinite(value) or value < 0 for value in values.values()) or not math.isclose(sum(values.values()), 100, abs_tol=1e-8):
+        raise ServiceError('Allocations must be finite nonnegative percentages totaling 100%.',
+                           status_code=422, code='invalid_proposal_allocation')
+    return {mapping[key]: value / 100 for key, value in values.items()}
 
 
 def _position_limit_for_portfolio_plan(portfolio_plan: dict) -> float | None:
@@ -1083,7 +994,7 @@ def _serialize_investment_proposal(
     starting_amount=None,
 ):
     return {
-        'assets': _storage_compatible_assets(_assets_from_investment_proposal(investment_proposal)),
+        'assets': _assets_from_investment_proposal(investment_proposal),
         'risk_profile_id': risk_profile_id,
         'contact_id': contact_id,
         'source_type': source_type,
@@ -1201,15 +1112,13 @@ def _build_investment_proposal_with_assets(assets: list[dict]):
 
     try:
         context = _load_investment_proposal_context()
-        merged_universe_df = context['merged_universe_df']
         rtd_df = context['rtd_df']
         ust_df = context['ust_df']
-        stocks_df = context['stocks_df']
         etfs_df = context['etfs_df']
         investment_proposal = _build_investment_proposal_template()
 
         if not isinstance(assets, list):
-            raise Exception('assets must be a list of dicts with symbol, percentage, and optional source_bucket.')
+            raise Exception('assets must be a list of dicts with symbol, percentage, and source_bucket.')
 
         logger.announcement(f'Creating proposal from {len(assets)} assets.')
 
@@ -1251,82 +1160,54 @@ def _build_investment_proposal_with_assets(assets: list[dict]):
             if not symbol or percentage is None:
                 raise Exception('Each asset must include symbol and percentage.')
 
-            normalized_symbol = str(symbol).strip()
+            normalized_symbol = str(symbol).strip().upper()
             matched_row = None
             bucket_name = ''
             rating = ''
             current_yield_pct = 0.0
 
-            if source_bucket == 'UST':
+            allowed_sources = {'TREASURIES', 'INVESTMENT_GRADE', 'HIGH_YIELD', 'EQUITY', 'GOLD'}
+            if source_bucket not in allowed_sources:
+                raise ServiceError('Choose a Treasuries, Investment grade, High yield, Equity ETF or GLD holding.',
+                                   status_code=422, code='invalid_proposal_asset_class')
+            if source_bucket == 'TREASURIES':
                 matched_row = _find_matching_market_row(ust_df, normalized_symbol)
-                bucket_name = 'treasuries'
-                rating = 'UST'
+                bucket_name, rating = 'treasuries', 'UST'
                 if matched_row:
                     current_yield_pct = _resolve_current_yield_percent(matched_row)
-            elif source_bucket == 'BONDS':
+            elif source_bucket in {'INVESTMENT_GRADE', 'HIGH_YIELD'}:
                 matched_row = _find_matching_market_row(rtd_df, normalized_symbol)
                 if matched_row:
                     rating = _resolve_rating(matched_row)
+                    bucket_name = _get_bucket_for_rating(rating)
                     current_yield_pct = _resolve_current_yield_percent(matched_row)
-            elif source_bucket == 'ETFS':
-                matched_row = _find_matching_market_row(etfs_df, normalized_symbol)
-                bucket_name = 'etfs'
-                rating = 'ETF'
-                if matched_row:
-                    current_yield_pct = _resolve_equity_yield_percent(matched_row)
-                if current_yield_pct <= 0:
-                    current_yield_pct = float(context.get('proposal_equity_yield_pct') or 0)
-            elif source_bucket == 'STOCKS':
-                matched_row = _find_matching_market_row(stocks_df, normalized_symbol)
-                bucket_name = 'stocks'
-                rating = 'STOCK'
-                if matched_row:
-                    current_yield_pct = _resolve_equity_yield_percent(matched_row)
-                if current_yield_pct <= 0:
-                    current_yield_pct = float(context.get('proposal_equity_yield_pct') or 0)
+                    expected_bucket = 'investment_grade' if source_bucket == 'INVESTMENT_GRADE' else 'bonds_bb'
+                    if bucket_name != expected_bucket:
+                        raise ServiceError('The bond rating does not match the selected proposal category.',
+                                           status_code=422, code='invalid_proposal_asset_class')
             else:
-                matched_row = _find_matching_market_row(merged_universe_df, normalized_symbol)
+                matched_row = _find_matching_market_row(etfs_df, normalized_symbol)
                 if matched_row:
-                    rating = _resolve_rating(matched_row)
-                    current_yield_pct = _resolve_current_yield_percent(matched_row)
-                else:
-                    matched_row = _find_matching_market_row(etfs_df, normalized_symbol)
-                    if matched_row:
-                        bucket_name = 'etfs'
-                        rating = 'ETF'
-                        current_yield_pct = _resolve_equity_yield_percent(matched_row)
+                    ticker = _resolve_market_asset_display_symbol(matched_row, normalized_symbol).upper()
+                    if source_bucket == 'GOLD' and ticker == 'GLD':
+                        bucket_name, rating = 'gold', 'GOLD'
+                    elif source_bucket == 'EQUITY' and ticker in EQUITY_ETF_SYMBOLS:
+                        bucket_name, rating = 'etfs', 'ETF'
                     else:
-                        matched_row = _find_matching_market_row(stocks_df, normalized_symbol)
-                        if matched_row:
-                            bucket_name = 'etfs'
-                            rating = 'ETF'
-                            current_yield_pct = _resolve_equity_yield_percent(matched_row)
-
+                        raise ServiceError('Equity accepts equity ETFs only; Gold accepts GLD only.',
+                                           status_code=422, code='invalid_proposal_asset_class')
+                    current_yield_pct = _to_float_or_none(matched_row.get('Current Yield'))
+                    if current_yield_pct is None and source_bucket == 'EQUITY':
+                        current_yield_pct = float(context.get('proposal_equity_yield_pct') or 0)
+                    if current_yield_pct is None or not math.isfinite(current_yield_pct):
+                        raise ServiceError('The selected holding has no usable source return.',
+                                           status_code=422, code='proposal_assets_unavailable')
             if not matched_row:
-                raise Exception(
-                    f'Asset "{symbol}" not found in the expected market data feed'
-                    f'{f" ({source_bucket})" if source_bucket else ""}.'
-                )
-
-            if not rating:
-                rating = _resolve_rating(matched_row)
-
-            if not rating:
-                raise Exception(
-                    f'No rating or asset classification found for "{symbol}". '
-                    f'Fields: SP="{matched_row.get("SP", "")}", '
-                    f'S&P Equivalent="{matched_row.get("S&P Equivalent", "")}", '
-                    f'Ratings="{matched_row.get("Ratings", "")}", '
-                    f'Moodys="{matched_row.get("Moodys", "")}".'
-                )
-
-            if not bucket_name:
-                bucket_name = _get_bucket_for_rating(rating)
-            if not bucket_name and source_bucket in {'STOCKS', 'ETFS'}:
-                bucket_name = 'stocks' if source_bucket == 'STOCKS' else 'etfs'
-                rating = 'STOCK' if source_bucket == 'STOCKS' else 'ETF'
-            if not bucket_name:
-                raise Exception(f'Unknown rating "{rating}" for asset {symbol}.')
+                raise ServiceError('The selected holding was not found in its proposal category feed.',
+                                   status_code=422, code='proposal_assets_unavailable')
+            if any(bond.get('ibcid') == normalized_symbol for item in investment_proposal for bond in item['bonds']):
+                raise ServiceError('Each holding may appear only once in a proposal.',
+                                   status_code=422, code='duplicate_proposal_asset')
 
             bucket = next(b for b in investment_proposal if b['name'] == bucket_name)
             bucket['bonds'].append({
