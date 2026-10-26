@@ -557,7 +557,7 @@ ETF_SNAPSHOT_TICKERS = [
     'AGG', 'BND', 'VCIT', 'VCSH', 'LQD', 'HYG', 'JNK', 'SHY', 'IEF', 'TLT',
     'SGOV', 'BIL', 'TIP', 'MUB', 'BNDX', 'SPAB', 'MBB', 'EMB', 'USFR', 'TFLO',
     'XLK', 'XLF', 'XLV', 'XLE', 'XLY', 'XLI', 'XLP', 'XLU', 'XLB', 'XLRE',
-    'SMH', 'SOXX', 'IBB', 'ARKK', 'VNQ', 'IYR', 'GLD', 'IAU', 'SLV', 'DBC'
+    'SMH', 'SOXX', 'IBB', 'ARKK', 'VNQ', 'IYR', 'SLV', 'DBC'
 ]
 
 def _initialize_ibkr_market_data_client():
