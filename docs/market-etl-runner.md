@@ -54,7 +54,7 @@ are part of the artifact. API route deployment requires the normal API release.
 Provision/verify the job before publishing the job-based scheduled workflow and
 the dispatch route. Confirm the caller identity has job invocation/execution-read
 permissions and overview read access; do not broaden credentials speculatively.
-Run daily at 09:07 UTC / 03:07 CST (Costa Rica), alongside clients ETL; preserve existing
+Run daily at 06:00 UTC / 00:00 CST (midnight Costa Rica), alongside clients ETL; preserve existing
 notification recipients. The workflow polls its exact execution and requires
 Cloud Run terminal success plus a matching validated market overview. There is no
 HTTP fallback, no ETL replay, and no notification on mere dispatch acceptance.
@@ -212,3 +212,10 @@ retest, despite the successful ETF exclusion. No retry budget was increased.
 Clients and market ETL workflows both target 03:07 CST (Costa Rica, UTC-6) /
 09:07 UTC daily (`7 9 * * *`). This supersedes earlier start times retained in
 historical rollout evidence. GitHub may start scheduled workflows late.
+
+## Shared scheduled start revised — October 26, 2026
+
+Owner requested both clients and market ETLs daily at 06:00 UTC / 00:00 CST
+(midnight Costa Rica, UTC-6), using `0 6 * * *`. This supersedes earlier schedule
+times retained in historical evidence. GitHub Actions may start scheduled workflows
+late; the configured time is a target.

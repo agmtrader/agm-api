@@ -122,3 +122,10 @@ invalid/future delinking dates and all other new failures still fail the job.
 Only broker-confirmed delinking can use this skipped-account path. The immutable
 accepted-coverage file remains unchanged. These corrections require release and
 a subsequent real execution before hosted recovery is established.
+
+## Shared scheduled start revised — October 26, 2026
+
+Owner requested both clients and market ETLs daily at 06:00 UTC / 00:00 CST
+(midnight Costa Rica, UTC-6), using `0 6 * * *`. This supersedes earlier schedule
+times retained in historical evidence. GitHub Actions may start scheduled workflows
+late; the configured time is a target.
