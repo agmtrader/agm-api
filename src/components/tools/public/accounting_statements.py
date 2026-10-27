@@ -20,6 +20,7 @@ import time
 import uuid
 import zipfile
 from collections import OrderedDict
+from concurrent.futures import Future
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -44,6 +45,7 @@ _cache_lock = threading.Lock()
 _registry_lock = threading.Lock()
 _analysis_slots = threading.BoundedSemaphore(4)
 _cache_epoch = 0
+_inflight = {}
 
 
 def _cached(key, load, ttl=30):
@@ -54,14 +56,29 @@ def _cached(key, load, ttl=30):
         if item and item[0] > now:
             _cache.move_to_end(key)
             return copy.deepcopy(item[1])
-    value = load()
-    with _cache_lock:
-        if epoch != _cache_epoch:
-            return value
-        _cache[key] = (now + ttl, copy.deepcopy(value))
-        while len(_cache) > 96 or sum(len(v[1]) for v in _cache.values() if isinstance(v[1], bytes)) > 32 * 1024 * 1024:
-            _cache.popitem(last=False)
-    return value
+        flight_key = (epoch, key)
+        existing = _inflight.get(flight_key)
+        future = existing or Future()
+        if existing is None:
+            _inflight[flight_key] = future
+    if existing is not None:
+        return copy.deepcopy(future.result())
+    try:
+        value = load()
+        with _cache_lock:
+            if epoch == _cache_epoch:
+                # A slow Drive read must not expire before it finishes.
+                _cache[key] = (time.monotonic() + ttl, copy.deepcopy(value))
+                while len(_cache) > 96 or sum(len(v[1]) for v in _cache.values() if isinstance(v[1], bytes)) > 32 * 1024 * 1024:
+                    _cache.popitem(last=False)
+        future.set_result(copy.deepcopy(value))
+        return value
+    except BaseException as exc:
+        future.set_exception(exc)
+        raise
+    finally:
+        with _cache_lock:
+            _inflight.pop(flight_key, None)
 
 
 def clear_cache():
@@ -271,6 +288,13 @@ def _belongs(source, account):
 
 
 def account_sources(account, year):
+    # Month detail/continuity reads share the expensive archive and raw-file
+    # classification, keyed by the entire account policy and source selection.
+    key = ('account_sources', json.dumps(account, sort_keys=True), year)
+    return _cached(key, lambda: _account_sources(account, year))
+
+
+def _account_sources(account, year):
     files = []
     for folder in [account['folder_id'], *account.get('additional_folder_ids', [])]:
         files.extend(_walk(folder, year))

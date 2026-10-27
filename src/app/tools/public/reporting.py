@@ -63,6 +63,8 @@ def accounting_detail_route():
 @format_response
 def accounting_accounts_route():
     if request.method == 'GET':
+        if request.args.get('refresh') == '1':
+            accounting.clear_cache()
         return accounting.load_registry()
     payload = _accounting_payload()
     return accounting.save_registry(payload.get('accounts'), payload.get('revision'), g.current_principal_id)
