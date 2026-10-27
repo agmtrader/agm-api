@@ -28,7 +28,7 @@ _ending_balances_cache_lock = threading.Lock()
 _ibkr_statement_rows_cache = {}
 _ibkr_statement_rows_cache_lock = threading.Lock()
 _daily_report_cache = ReportCache(os.getenv('REPORT_CACHE_TTL_SECONDS', '30'), keys=(
-    'clients', 'nav', 'client-fees', 'bonds', 'stocks', 'etfs', 'ust-bonds', 'open-positions',
+    'clients', 'nav', 'client-fees', 'bonds', 'stocks', 'etfs', 'ust-bonds', 'open-positions', 'ibkr-details',
 ))
 _quote_snapshot_cache = ReportCache(os.getenv('REPORT_CACHE_TTL_SECONDS', '30'), keys=('market-quotes',))
 
@@ -543,13 +543,8 @@ def get_monthly_deposits_withdrawals(years: list, months: list, start_date=None,
 
 @handle_exception
 def get_ibkr_details():
-    files_in_resources_folder = Drive.get_files_in_folder(resources_folder_id)
-    ibkr_account_details_file = [ibkr_account_details for ibkr_account_details in files_in_resources_folder if 'ibkr_account_details' in ibkr_account_details['name']]
-    if len(ibkr_account_details_file) != 1:
-        logger.error('IBKR account details file not found or multiple files found')
-        raise Exception('IBKR account details file not found or multiple files found')
-    ibkr_details = Drive.download_file(file_id=ibkr_account_details_file[0]['id'], parse=True)
-    return ibkr_details
+    """Read the daily Drive snapshot; live account/provider routes stay uncached."""
+    return _daily_report_cache.get('ibkr-details', lambda: _read_daily_report('ibkr_account_details'))
 
 """
 BACKUPS

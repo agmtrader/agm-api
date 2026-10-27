@@ -85,6 +85,7 @@ def read_contact_documents_route():
         include_data=include_data,
         include_documents=include_documents,
         include_processing=include_processing,
+        category=request.args.get('category'),
     )
 
 
@@ -141,7 +142,7 @@ def delete_contact_document_route():
 def read_contact_screenings_route():
     """Read screening results by contact_id (repeat up to 100 for bulk reads)."""
     contact_id = _read_id_filter('contact_id', request.args.getlist('contact_id'))
-    return read_contact_screenings(contact_id=contact_id)
+    return read_contact_screenings(contact_id=contact_id, view=request.args.get('view', 'full'))
 
 
 @bp.route('/screen', methods=['POST'])

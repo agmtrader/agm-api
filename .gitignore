@@ -16,6 +16,13 @@ dev/*
 !dev/backfill_risk_profile_contacts.py
 !dev/generate_qr.py
 !dev/schema_preflight.py
+!dev/portfolio_analyst.py
+!dev/portfolio_analyst.md
+!dev/agm_portfolio_report.py
+!dev/agm_portfolio_report.md
+!dev/report_fonts/
+!dev/report_fonts/*
+output/pdf/
 !dev/check_database_capacity.py
 !dev/deploy_api.sh
 contact_document_category_analysis/

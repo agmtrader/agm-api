@@ -56,6 +56,7 @@ gcloud run services update agm-api \
   --cpu=1 --memory=2Gi --port=5000 \
   --service-account=agm-api@agm-datalake.iam.gserviceaccount.com \
   --set-env-vars=DEV_MODE=false \
+  --update-secrets=GOOGLE_DOCUMENT_AI_PROJECT_ID=GOOGLE_DOCUMENT_AI_PROJECT_ID:latest,GOOGLE_DOCUMENT_AI_LOCATION=GOOGLE_DOCUMENT_AI_LOCATION:latest,GOOGLE_DOCUMENT_AI_PROCESSOR_ID=GOOGLE_DOCUMENT_AI_PROCESSOR_ID:latest,GOOGLE_DOCUMENT_AI_PROCESSOR_VERSION=GOOGLE_DOCUMENT_AI_PROCESSOR_VERSION:latest \
   --vpc-connector=agm-qa-connector --vpc-egress=all-traffic \
   --cpu-boost --ingress=all --image="$task_image" \
   "${task_labels[@]}" --quiet

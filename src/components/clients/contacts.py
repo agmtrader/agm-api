@@ -3,6 +3,7 @@ from src.utils.connectors.supabase import db
 from src.utils.logger import logger
 from typing import Optional
 from datetime import datetime
+from sqlalchemy import func, select
 import re
 import unicodedata
 from src.components.tools.public.reporting import (
@@ -142,7 +143,10 @@ def read_contact_documents(
     include_data: bool = False,
     include_documents: bool = True,
     include_processing: bool = False,
+    category: str = None,
 ):
+    if category is not None and (not category.strip() or len(category) > 200):
+        raise ServiceError('category must contain 1 to 200 nonblank characters', status_code=400)
     requested_document_ids = {
         str(document_id).strip()
         for document_id in (document_ids or [])
@@ -159,6 +163,9 @@ def read_contact_documents(
     if requested_document_ids:
         query['document_id'] = sorted(requested_document_ids)
     links = db.read(table=contact_document_table, query=query) or []
+    if category is not None:
+        selected_category = category.strip().lower()
+        links = [link for link in links if str(link.get('category') or '').strip().lower() == selected_category]
     if not include_documents:
         documents = []
         if include_processing and links:
@@ -1018,6 +1025,24 @@ def create_contact_screenings_batch_from_contact_ids(
 
 
 @handle_exception
-def read_contact_screenings(contact_id: str | list[str] = None):
+def read_contact_screenings(contact_id: str | list[str] = None, view: str = 'full'):
+    if view not in ('full', 'audit'):
+        raise ServiceError('view must be full or audit', status_code=400)
+    if view == 'audit':
+        # Group exact stored inputs, rather than approximate legacy JSON/string
+        # parsing in SQL. Counts preserve every historical observation.
+        @db.with_session(commit=False)
+        def read_groups(session):
+            table = db.metadata.tables[contact_screening_table]
+            columns = [table.c[key] for key in (
+                'contact_id', 'risk_score', 'fatf_status', 'ofac_results', 'uk_status', 'un_status',
+            )]
+            statement = select(*columns, func.count().label('count'), func.max(table.c.created).label('created')).group_by(*columns)
+            if contact_id:
+                ids = contact_id if isinstance(contact_id, list) else [contact_id]
+                statement = statement.where(table.c.contact_id.in_(ids))
+            return [db._none_to_null({**row, 'contact_id': str(row['contact_id'])})
+                    for row in session.execute(statement).mappings()]
+        return read_groups()
     query = {'contact_id': contact_id} if contact_id else {}
     return db.read(table=contact_screening_table, query=query) or []
