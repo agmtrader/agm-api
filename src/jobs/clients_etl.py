@@ -7,20 +7,27 @@ from pathlib import Path
 import uuid
 
 
-def evaluate(result, accepted):
-    """Accept only explicitly recorded coverage gaps; preserve raw partial overview."""
-    if result.get('status') == 'success':
-        return 'success'
+def evaluate(result, accepted=None):
+    """Distinguish completed processing errors from an incomplete runner.
+
+    The legacy accepted-coverage argument is retained for callers, but account
+    and file errors no longer decide whether a completed batch exits nonzero.
+    """
     stages = result.get('overview', {})
-    if not stages or any(stages.get(name, {}).get('status') != 'success' for name in ('backup', 'transform')):
+    if (result.get('status') not in ('success', 'partial')
+            or any(result.get(key) is not None for key in
+                   ('error', 'error_type', 'overview_publication_error', 'lock_release_error'))
+            or not isinstance(stages, dict)
+            or any(not isinstance(stages.get(name), dict)
+                   or stages[name].get('status') not in ('success', 'partial', 'failed')
+                   for name in ('extract', 'backup', 'transform'))):
         return 'failed'
     extract = stages.get('extract', {})
-    # Only IBKR's explicit generation-in-progress response may use a published backup.
+    # Keep the specific named-backup warning alongside raw extraction failures.
     result['warnings'] = []
     reports = stages['transform'].get('reports', [])
-    fallback_steps = set()
     for step in extract.get('steps', []):
-        error = step.get('error', '')
+        error = str(step.get('error') or '')
         matching = [r for r in reports if r.get('name') == step.get('name')]
         if (step.get('name') in ('742588', '734782', '732383', '794867')
                 and step.get('status') == 'failed'
@@ -28,35 +35,15 @@ def evaluate(result, accepted):
                 and 'Statement generation in progress' in error
                 and len(matching) == 1 and matching[0].get('status') == 'success'
                 and matching[0].get('backup_file')):
-            fallback_steps.add(step['name'])
             result['warnings'].append({
                 'name': step['name'], 'reason': 'statement_generation_in_progress',
                 'message': 'New file was not generated; existing backup was published.',
                 'backup_file': matching[0]['backup_file'], 'error': error})
-    detail_steps = [s for s in extract.get('steps', []) if s.get('name') == 'account_details']
-    if len(detail_steps) != 1 or any(s.get('status') not in ('success', 'skipped')
-        for s in extract.get('steps', []) if s.get('name') != 'account_details' and s.get('name') not in fallback_steps):
-        return 'failed'
-    details = detail_steps[0]
-    # A broker-confirmed delinking is a lifecycle outcome, not fresh coverage.
-    # No other skipped or unknown account outcome may bypass the baseline.
-    from src.components.tools.private.ibkr_details_refresh import _delinked_date
-    for outcome in details.get('outcomes', []):
-        if outcome.get('status') == 'skipped':
-            if (outcome.get('reason') != 'account_delinked'
-                    or not _delinked_date(outcome.get('date_delinked'))):
-                return 'failed'
-        elif outcome.get('status') not in ('success', 'failed'):
-            return 'failed'
-    failures = [o for o in details.get('outcomes', []) if o.get('status') == 'failed']
-    expected = {(o['account_id'], o['error']) for o in accepted}
-    if details.get('summary', {}).get('successful', 0) <= 0:
-        return 'failed'
-    if not failures:
-        return 'success' if details.get('status') == 'success' else 'failed'
-    if all((o.get('account_id'), o.get('error')) in expected for o in failures):
-        return 'completed_with_accepted_coverage_gaps'
-    return 'failed'
+    if (result['status'] == 'partial'
+            or any(stages[name]['status'] != 'success' for name in ('extract', 'backup', 'transform'))
+            or any(item.get('status') == 'failed' for item in result.get('manual_inputs', []))):
+        return 'completed_with_errors'
+    return 'success'
 
 
 def copy_manual_inputs(etl, config, source):
@@ -68,9 +55,14 @@ def copy_manual_inputs(etl, config, source):
     copied = []
     for f in etl.Drive.get_files_in_folder(source):
         if f.get('name') in names:
-            etl.Drive.service.files().copy(fileId=f['id'],
-                body={'name': f['name'], 'parents': [etl.batch_folder_id]}, supportsAllDrives=True, fields='id,name').execute()
-            copied.append({'name': f['name'], 'source_id': f['id'], 'modified_time': f.get('modifiedTime')})
+            outcome = {'name': f['name'], 'source_id': f['id'], 'modified_time': f.get('modifiedTime')}
+            try:
+                etl.Drive.service.files().copy(fileId=f['id'],
+                    body={'name': f['name'], 'parents': [etl.batch_folder_id]}, supportsAllDrives=True, fields='id,name').execute()
+                outcome['status'] = 'success'
+            except Exception as exc:
+                outcome.update(status='failed', error=type(exc).__name__)
+            copied.append(outcome)
     return copied
 
 
@@ -113,13 +105,17 @@ def main(argv=None):
             copies = copy_manual_inputs(etl, etl._get_etl_config_by_name('clients'), source) if source else []
             result = etl.run_pipeline('clients')
             result['manual_inputs'] = copies
+            if result.get('status') == 'success' and any(item['status'] == 'failed' for item in copies):
+                result['status'] = 'partial'
     except Exception as exc:
         result = {'status': 'failed', 'error_type': type(exc).__name__,
                   'error_code': getattr(exc, 'code', None), 'error_id': getattr(exc, 'error_id', None)}
         from src.utils.logger import logger
         logger.error(f'Clients runner failed: {type(exc).__name__}')
     result.update(runner_started_at=started, run_id=run_id)
-    operational = evaluate(result, accepted)
+    # A details-only diagnostic has no three-stage pipeline overview.
+    operational = (('success' if result.get('status') == 'success' else 'failed')
+                   if args.local_details_only else evaluate(result, accepted))
     result['operational_status'] = operational
     if storage:
         try:
@@ -140,7 +136,7 @@ def main(argv=None):
     print(json.dumps({'status': result['status'], 'operational_status': result['operational_status'],
                       'overview_file': str(overview_path), 'run_id': run_id,
                       'summary': result.get('summary'), 'seconds': result.get('seconds')}))
-    return 0 if result['operational_status'] in ('success', 'completed_with_accepted_coverage_gaps') else 1
+    return 0 if result['operational_status'] in ('success', 'completed_with_errors') else 1
 
 
 if __name__ == '__main__':

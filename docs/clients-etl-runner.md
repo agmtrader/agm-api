@@ -1,5 +1,7 @@
 # Clients ETL runner
 
+Current completion policy (October 28, 2026): the full Clients batch attempts extract, backup and transform despite captured file/account/stage errors. It exits zero as `completed_with_errors` when those stages have all been attempted, preserving raw failures and stale-data evidence. Fatal runner/infrastructure failures still exit nonzero. This policy supersedes the historical accepted-gap failure rules below.
+
 The runner imports the same `run_pipeline('clients')` used by the HTTP route. It does not start Flask/Gunicorn or call the AGM API. It initializes the existing database connector explicitly. No deployment or scheduler changes have been made.
 
 ## Local read-only validation
@@ -18,7 +20,7 @@ This reads internal accounts and the previous Drive details backup, refreshes th
 
 Full refresh defaults: four concurrent immutable bearer-token requests, global five-starts-per-second pacing, bounded connect/read deadlines, no automatic retries. Each wave checks the credential-scoped token cache for renewal. Unsupported/conflicting/missing masters and malformed IDs are explicit coverage failures; no default credential fallback and no silent skip list. Previous response master can supply a missing internal master. Prior-only accounts are also refreshed; brand-new broker account discovery is not implemented here.
 
-Success replaces previous details after identity/master validation. Failure retains last-good details and marks `_agm_refresh.status=stale`; old backups without a known successful-fetch time retain null. The companion report covers failures without prior details. Partial results exit 1.
+Success replaces previous details after identity/master validation. Failure retains last-good details and marks `_agm_refresh.status=stale`; old backups without a known successful-fetch time retain null. The companion report covers failures without prior details. Partial details-only diagnostic results exit 1; full-pipeline completion follows the policy below.
 
 ## Full clients pipeline command (writes managed Drive resources)
 
@@ -49,7 +51,7 @@ Private bucket `agm-datalake-etl-runs` retains code artifacts and `runs/<executi
 
 Clients staging folder `1EIshGq22oFg-WJ9aHdS37Heh5KaqN2ct` is separate from the original shared folder. Only manually supplied clients filenames are copied from the existing shared folder; source files are not renamed/moved/deleted by this job. Copied input source IDs/modified times are retained in the overview. Market ETL keeps its existing shared stage and schedule. The legacy API clients endpoint is not the scheduled trigger after cutover; avoid manually invoking it alongside a clients job because it still writes the same reporting resources without the job lock.
 
-The owner accepted current incomplete account coverage. The source bundle embeds the 208 account/error pairs from the verified local report as the explicit accepted baseline. The raw pipeline status and coverage outcomes remain partial/visible, while the job can finish as `completed_with_accepted_coverage_gaps` only when every failure matches that baseline and backup/transform and other extract steps succeed. New gaps, failed publication, failed lock release and other pipeline failures produce nonzero exit. This is not a declaration that stale/absent accounts are current.
+The source bundle retains its existing accepted account/error baseline unchanged for historical evidence. As of October 28, the baseline no longer gates batch completion: captured file, account, backup and transform errors yield `completed_with_errors` once all three stages have been attempted. Raw failures and stale/absent coverage remain visible. The runner does not declare stale/absent accounts current, bypass identity checks or add baseline entries. Fatal startup/runner failures, failed durable overview publication and failed lock release still produce nonzero exit.
 
 Deploy or update from the code workspace:
 
@@ -61,7 +63,7 @@ The clients GitHub workflow is prepared to launch the job, poll that execution t
 
 
 ### Flex report generation pending
-When a configured clients Flex report (742588, 734782, 732383 or 794867) returns IBKR error 1019 with “Statement generation in progress”, the runner may complete successfully if backup and transformation succeed and the matching report identifies the existing backup it published. The overview warnings, GitHub summary and notification identify that no new file was generated and name the backup. Raw extraction failure evidence remains visible. A missing or failed fallback, another IBKR error, or an unaccepted details failure still fails the run.
+When a configured clients Flex report (742588, 734782, 732383 or 794867) returns IBKR error 1019 with “Statement generation in progress”, the runner may complete successfully if backup and transformation succeed and the matching report identifies the existing backup it published. The overview warnings, GitHub summary and notification identify that no new file was generated and name the backup. Raw extraction failure evidence remains visible. A missing or failed fallback, another IBKR error, or a new details failure remains a reported processing error. After all stages have been attempted, the batch completes with `completed_with_errors`.
 
 ### Terminal notification details
 
@@ -118,7 +120,8 @@ delinked count separately without exporting account identifiers. The account
 database and its master mappings are not changed.
 
 Wrong account IDs, explicit conflicting masters, unexplained missing masters,
-invalid/future delinking dates and all other new failures still fail the job.
+invalid/future delinking dates and all other new failures remain failed account
+outcomes and are reported without failing a completed batch.
 Only broker-confirmed delinking can use this skipped-account path. The immutable
 accepted-coverage file remains unchanged. These corrections require release and
 a subsequent real execution before hosted recovery is established.
@@ -129,3 +132,19 @@ Owner requested both clients and market ETLs daily at 06:00 UTC / 00:00 CST
 (midnight Costa Rica, UTC-6), using `0 6 * * *`. This supersedes earlier schedule
 times retained in historical evidence. GitHub Actions may start scheduled workflows
 late; the configured time is a target.
+
+## Continue processing and report errors — October 28, 2026
+
+Individual manual-input copy failures are recorded and later copies and pipeline
+stages continue. Failure to initialize isolated staging or list the source folder
+is a runner failure. Existing extract/transform loops continue after each file
+error, and the stage loop attempts all three stages even if a stage raises.
+A stage status of `partial` or captured `failed` is processing evidence, not an
+uncaught runner error. Missing stages or invalid terminal status remain failures.
+
+The workflow requires successful Cloud Run termination and a completed overview;
+it accepts `success`, `completed_with_errors`, and the legacy
+`completed_with_accepted_coverage_gaps`. The completed notification uses
+`COMPLETED WITH ERRORS` when appropriate and retains the existing detailed
+error summary, source/backup warnings and fresh/failed/stale counts.
+This does not add retries or replay failed work.

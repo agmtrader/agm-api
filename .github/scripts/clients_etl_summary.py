@@ -73,6 +73,9 @@ def render(payload, execution):
              f'Execution: {text(run_id)}', f'Raw pipeline: {text(payload.get("status"))}']
     if run_id:
         lines.append(f'Full overview: gs://agm-datalake-etl-runs/runs/{text(run_id)}/overview.json')
+    if payload.get('operational_status') == 'completed_with_errors':
+        lines.append('All pipeline stages were attempted; processing errors are listed below. '
+                     'Failed or retained stale data is not fresh.')
     if not payload:
         lines.append('Clients job has no retrievable terminal overview. Review execution and workflow logs; '
                      'no API fallback or automatic retry was attempted.')
@@ -98,6 +101,10 @@ def render(payload, execution):
                           f'failed: {text(step.get("summary", {}).get("failed"))})') if count else ''
                 lines.append(f'  - {label}: {text(step.get("status"))}{suffix}')
         section(lines, f'{name} failures', failures(stage, name.lower(), 'reports' if name == 'Transform' else 'steps'))
+
+    section(lines, 'Manual input failures', [
+        f'{safe_name(item.get("name"))}: {safe_error(item.get("error"))}'
+        for item in payload.get('manual_inputs', []) if item.get('status') == 'failed'])
 
     detail_steps = [s for s in extract.get('steps', []) if s.get('name') == 'account_details']
     for step in detail_steps:
@@ -151,12 +158,17 @@ def load(path):
 
 def main():
     temp = Path(os.environ['RUNNER_TEMP'])
-    summary = render(load(temp / 'overview.json'), load(temp / 'execution.json'))
+    payload = load(temp / 'overview.json')
+    summary = render(payload, load(temp / 'execution.json'))
     (temp / 'clients-etl-summary.txt').write_text(summary + '\n')
     # A random delimiter prevents upstream multiline errors from truncating the output.
     delimiter = f'SUMMARY_{uuid.uuid4().hex}'
     with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
         stream.write(f'summary<<{delimiter}\n{summary}\n{delimiter}\n')
+        status = payload.get('operational_status')
+        if status not in ('success', 'completed_with_errors', 'completed_with_accepted_coverage_gaps'):
+            status = 'failed'
+        stream.write(f'operational_status={status}\n')
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
         stream.write('```text\n' + summary.replace('```', "'''") + '\n```\n')
     print(summary)

@@ -15,6 +15,7 @@ jobs:
     timeout-minutes: 70
     outputs:
       summary: ${{ steps.summary.outputs.summary }}
+      operational_status: ${{ steps.summary.outputs.operational_status }}
     steps:
       - uses: actions/checkout@v4
       - name: Authenticate to Google Cloud
@@ -47,7 +48,7 @@ jobs:
           gcloud storage cp "gs://agm-datalake-etl-runs/runs/$execution/overview.json" "$RUNNER_TEMP/overview.json"
           jq '{status, operational_status, run_id, warnings, extract: .overview.extract.summary, backup: .overview.backup.status, transform: .overview.transform.status}' "$RUNNER_TEMP/overview.json" >> "$GITHUB_STEP_SUMMARY"
           jq -e 'any(.status.conditions[]; .type == "Completed" and .status == "True")' "$RUNNER_TEMP/execution.json" > /dev/null
-          jq -e '.operational_status == "success" or .operational_status == "completed_with_accepted_coverage_gaps"' "$RUNNER_TEMP/overview.json" > /dev/null
+          jq -e '.operational_status == "success" or .operational_status == "completed_with_errors" or .operational_status == "completed_with_accepted_coverage_gaps"' "$RUNNER_TEMP/overview.json" > /dev/null
       - name: Prepare terminal summary
         id: summary
         if: ${{ always() }}
@@ -69,11 +70,11 @@ jobs:
           server_port: 465
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "✅ Clients ETL Pipeline SUCCEEDED"
+          subject: "${{ needs.etl.outputs.operational_status == 'completed_with_errors' && '⚠️ Clients ETL Pipeline COMPLETED WITH ERRORS' || '✅ Clients ETL Pipeline SUCCEEDED' }}"
           to: cr@agmtechnology.com,as@agmtechnology.com
           from: aa@agmtechnology.com
           body: |
-            The clients job completed. Accepted account coverage gaps remain visible in the summary.
+            The clients job completed all stages. Any file or account errors and retained stale data are listed in the summary below.
 
             ${{ needs.etl.outputs.summary }}
           
