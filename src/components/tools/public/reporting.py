@@ -30,7 +30,7 @@ _ending_balances_cache_lock = threading.Lock()
 _ibkr_statement_rows_cache = {}
 _ibkr_statement_rows_cache_lock = threading.Lock()
 _daily_report_cache = ReportCache(os.getenv('REPORT_CACHE_TTL_SECONDS', '30'), keys=(
-    'clients', 'nav', 'client-fees', 'bonds', 'stocks', 'etfs', 'ust-bonds', 'open-positions', 'ibkr-details', 'compliance-tasks',
+    'clients', 'nav', 'client-fees', 'bonds', 'stocks', 'etfs', 'ust-bonds', 'open-positions', 'ibkr-details', 'compliance-tasks', 'pending-tasks', 'registration-tasks',
 ))
 _quote_snapshot_cache = ReportCache(os.getenv('REPORT_CACHE_TTL_SECONDS', '30'), keys=('market-quotes',))
 
@@ -104,6 +104,61 @@ def get_compliance_tasks_report(account_id=None):
 
     # Filter after copying the shared base; never cache one account's projection.
     return compliance_report_view(_daily_report_cache.get('compliance-tasks', read), account_id)
+
+
+@handle_exception
+def get_task_snapshot_rows(source):
+    from src.components.tools.private.ibkr_task_refresh import decode_snapshot
+    if source not in ('pending', 'registration'):
+        raise ServiceError('Unsupported task report source.', 400)
+    filename = f'ibkr_{source}_tasks.csv'
+
+    def describe():
+        matches = [file for file in Drive.get_files_in_folder(resources_folder_id, include_report_metadata=True)
+                   if file.get('name') == filename]
+        if len(matches) != 1:
+            raise ServiceError('Task snapshot missing or duplicated. Run the Clients ETL task refresh.',
+                               503, code='task_report_unavailable')
+        file = matches[0]
+        downloadable = (file.get('capabilities') or {}).get('canDownload')
+        if downloadable is False:
+            raise ServiceError('Task snapshot download unavailable.', 503, code='task_report_unavailable')
+        version = (file['id'], file['version'], file['modifiedTime']) if file.get('version') and file.get('modifiedTime') and downloadable is True else None
+        return version, file
+
+    return _daily_report_cache.get_versioned(f'{source}-tasks', describe,
+        lambda file: decode_snapshot(Drive.download_file(file_id=file['id'], parse=False), source))
+
+
+def get_tasks_review(args):
+    from src.utils.task_review import review_view
+    feeds, health = {}, {}
+    for source in ('compliance', 'pending', 'registration'):
+        try:
+            data = get_compliance_tasks_report() if source == 'compliance' else get_task_snapshot_rows(source)
+            feeds[source] = data
+            if source == 'compliance':
+                health[source] = {'status': 'stale' if data['freshness']['stale'] else 'fresh',
+                    'records': len(data['rows']), 'updated_at': data['source']['uploaded_at'],
+                    'exported_at': None}
+            else:
+                coverage = [row for row in data if row['record_type'] == 'account']
+                from src.utils.task_review import freshness
+                counts = Counter(freshness(row['refresh_status'], row['last_success_at']) for row in coverage)
+                health[source] = {'status': 'partial' if counts['stale'] or counts['unavailable'] else 'fresh',
+                    'records': sum(row['record_type'] == 'task' for row in data),
+                    'accounts': len(coverage), 'fresh': counts['fresh'], 'stale': counts['stale'],
+                    'unavailable': counts['unavailable'],
+                    'updated_at': max((row['last_attempt_at'] for row in coverage), default=None)}
+        except Exception:
+            health[source] = {'status': 'unavailable', 'records': None, 'updated_at': None}
+    if not feeds:
+        raise ServiceError('All task snapshots are unavailable. Check the Clients ETL publication.', 503,
+                           code='task_report_unavailable')
+    try:
+        return review_view(feeds, health, args)
+    except (TypeError, ValueError):
+        raise ServiceError('Invalid task review filters.', 400)
 
 @handle_exception
 def get_client_fees_report():

@@ -433,6 +433,64 @@ def extract_account_details_backup(config=None):
         file_data=base64.b64encode(json.dumps(report, default=str).encode()).decode(), parent_folder_id=folder)
     return report
 
+
+def extract_task_backup(config, progress=None):
+    """Collect one API task feed; publish only a fully encoded/verified snapshot."""
+    from src.components.clients.accounts import read_accounts
+    from src.components.tools.private.ibkr_task_refresh import decode_snapshot, encode_snapshot, refresh_tasks
+
+    source = config['task_type']
+    folder = config['backup_folder_id']
+    pattern = rf'{source}_tasks_\d+\.csv'
+    files = [file for file in Drive.get_files_in_folder(folder) if re.fullmatch(pattern, file.get('name', ''))]
+    if files:
+        previous_file = Drive.get_most_recent_file(files)
+        previous = decode_snapshot(Drive.download_file(file_id=previous_file['id'], parse=False), source)
+    else:
+        previous = []
+    accounts = read_accounts({}, view='list')
+    details_config = _get_file_config('account_details', [_get_etl_config_by_name('clients')])
+    detail_files = [file for file in Drive.get_files_in_folder(details_config['backup_folder_id'])
+                    if re.fullmatch(r'account_details_\d+\.json', file.get('name', ''))]
+    details_source = Drive.get_most_recent_file(detail_files) if detail_files else None
+    if details_source:
+        details = Drive.download_file(file_id=details_source['id'], parse=True)
+        accounts = task_account_population(accounts, details)
+    rows, report = refresh_tasks(accounts, previous, source, progress=progress)
+    raw = encode_snapshot(rows)
+    # Reuse the same byte/MD5-verified publication path for dated backups.
+    uploaded = _publish_report(config['backup_name'], 'text/csv', base64.b64encode(raw).decode('ascii'), folder_id=folder)
+    config['_task_extracted_source'] = {'id': uploaded['id'], 'name': config['backup_name']}
+    return {**report, 'saved_file': config['backup_name'], 'source_file_id': uploaded['id'],
+            'details_population_source': details_source['name'] if details_source else None}
+
+
+def task_account_population(accounts, details):
+    """Use the same prior-details routing evidence as the daily details refresh."""
+    if not isinstance(details, list) or any(not isinstance(item, dict) or not isinstance(item.get('account'), dict) for item in details):
+        raise ValueError('Invalid account details population')
+    by_id = {}
+    for detail in details:
+        account = detail['account']
+        key = str(account.get('accountId') or '').strip().upper()
+        if not key or key in by_id:
+            raise ValueError('Missing or duplicate details account identity')
+        by_id[key] = account
+    selected = []
+    seen = set()
+    for row in accounts:
+        row = dict(row)
+        key = str(row.get('ibkr_account_number') or '').strip().upper()
+        seen.add(key)
+        if not row.get('master_account') and key in by_id:
+            row['master_account'] = by_id[key].get('masterAccountId')
+        selected.append(row)
+    for key, account in by_id.items():
+        if key not in seen:
+            selected.append({'ibkr_account_number': key, 'master_account': account.get('masterAccountId'),
+                             'title': account.get('accountTitle')})
+    return selected
+
 # Market data
 @_with_ibkr_market_data_session
 def extract_bond_snapshot(config=None):
@@ -1299,7 +1357,7 @@ def _upload_market_snapshot(config, frame):
     config['_extracted_source'] = {'id': uploaded['id'], 'name': config['backup_name']}
 
 
-def _publish_report(filename, mime_type, payload):
+def _publish_report(filename, mime_type, payload, *, folder_id=None):
     """Verify a staged upload before updating the stable resource, without pre-delete.
 
     An interrupted update has an uncertain outcome; never replay it automatically.
@@ -1311,14 +1369,15 @@ def _publish_report(filename, mime_type, payload):
     else:
         raw = base64.b64decode(payload, validate=True)
     checksum = hashlib.md5(raw).hexdigest()
-    existing = [f for f in Drive.get_files_in_folder(resources_folder_id)
+    target_folder = folder_id or resources_folder_id
+    existing = [f for f in Drive.get_files_in_folder(target_folder)
                 if f.get('name') == filename]
     if len(existing) > 1:
         raise ValueError(f'Ambiguous reporting resource: {filename}')
     # Existing readers use substring matching; never put a canonical basename in a stage name.
     stage_name = f'.etl-pending-{uuid.uuid4().hex}'
     stage = Drive.upload_file(file_name=stage_name, mime_type=mime_type,
-        file_data=base64.b64encode(raw).decode('ascii'), parent_folder_id=resources_folder_id)
+        file_data=base64.b64encode(raw).decode('ascii'), parent_folder_id=target_folder)
     stage_id = stage['id']
     fields = 'id,name,size,md5Checksum'
 
@@ -1361,6 +1420,19 @@ def process_report(config):
         config_name = config['name']
         backup_name = config.get('backup_name', '')
 
+        if config.get('task_type') in ('pending', 'registration'):
+            from src.components.tools.private.ibkr_task_refresh import decode_snapshot
+            source = config.get('_task_extracted_source')
+            if not source or not any(file['id'] == source['id'] for file in files):
+                raise ValueError('No task snapshot from this ETL run; previous resource preserved')
+            raw = Drive.download_file(file_id=source['id'], parse=False)
+            rows = decode_snapshot(raw, config['task_type'])
+            _publish_report(output_filename, 'text/csv', base64.b64encode(raw).decode('ascii'))
+            return {'name': config_name, 'status': 'success', 'backup_file': source['name'],
+                    'source_file_id': source['id'], 'output_file': output_filename,
+                    'row_count': sum(row['record_type'] == 'task' for row in rows),
+                    'account_count': sum(row['record_type'] == 'account' for row in rows)}
+
         if config_name == 'compliance_tasks':
             if config.get('_manual_input_error'):
                 raise ValueError(config['_manual_input_error'])
@@ -1375,11 +1447,14 @@ def process_report(config):
             source = {**source, **properties}
             raw = Drive.download_file(file_id=source['id'], parse=False)
             report = build_compliance_report(raw, source)
-            _publish_report(output_filename, 'application/json',
+            _publish_report(output_filename, 'text/csv', base64.b64encode(raw).decode('ascii'))
+            compatibility_file = config.get('compatibility_output_filename', 'ibkr_compliance_tasks.json')
+            _publish_report(compatibility_file, 'application/json',
                 base64.b64encode(json.dumps(report).encode('utf-8')).decode('ascii'))
             return {'name': config_name, 'status': 'success', 'row_count': len(report['rows']),
                     'backup_file': source['name'], 'source_file_id': source['id'],
-                    'source_uploaded_at': report['source']['uploaded_at'], 'output_file': output_filename}
+                    'source_uploaded_at': report['source']['uploaded_at'], 'output_file': output_filename,
+                    'compatibility_output_file': compatibility_file}
 
         # Avoid substring collisions (e.g., bonds_snapshot vs ust_bonds_snapshot).
         # Prefer exact backup_name, then strict "<config_name>_" prefix.
@@ -1863,7 +1938,8 @@ clients_report_configs = [
         'batch_name': 'compliance_tasks.csv',
         'extract_func': None,
         'transform_func': None,
-        'output_filename': 'ibkr_compliance_tasks.json',
+        'output_filename': 'ibkr_compliance_tasks.csv',
+        'compatibility_output_filename': 'ibkr_compliance_tasks.json',
     },
     {
         'name': 'account_details',
@@ -1874,6 +1950,28 @@ clients_report_configs = [
         'extract_func': extract_account_details_backup,
         'transform_func': None,
         'output_filename': 'ibkr_account_details.json'
+    },
+    {
+        'name': 'pending_tasks',
+        'pipeline': 'clients',
+        'backup_folder_id': '1u0IUkD7-lBUy9uhgHD-5xzw3l8OePJdE',
+        'flex': False,
+        'backup_name': 'pending_tasks_' + today_date + '.csv',
+        'extract_func': extract_task_backup,
+        'transform_func': None,
+        'task_type': 'pending',
+        'output_filename': 'ibkr_pending_tasks.csv',
+    },
+    {
+        'name': 'registration_tasks',
+        'pipeline': 'clients',
+        'backup_folder_id': '1u0IUkD7-lBUy9uhgHD-5xzw3l8OePJdE',
+        'flex': False,
+        'backup_name': 'registration_tasks_' + today_date + '.csv',
+        'extract_func': extract_task_backup,
+        'transform_func': None,
+        'task_type': 'registration',
+        'output_filename': 'ibkr_registration_tasks.csv',
     },
     {
         'name': 'tasks_for_subaccounts',
@@ -2021,6 +2119,7 @@ def _runtime_etl_config(etl_config, now=None):
     runtime_first = runtime_time.replace(day=1).strftime('%Y%m%d')
 
     for file_config in runtime_config.get('files', []):
+        file_config.pop('_task_extracted_source', None)
         file_config.pop('_manual_input_error', None)
         file_config.pop('_extracted_source', None)
         file_config.pop('_session_recoveries', None)

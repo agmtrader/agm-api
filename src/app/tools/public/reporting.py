@@ -9,6 +9,8 @@ from src.components.tools.public import accounting_statements as accounting
 from src.utils.authz import require_scope
 from src.utils.exception import ServiceError
 from src.components.tools.public.reporting import get_compliance_tasks_report
+from src.components.tools.public.reporting import get_task_snapshot_rows
+from src.components.tools.public.reporting import get_tasks_review
 
 bp = Blueprint('reporting', __name__)
 
@@ -18,6 +20,55 @@ bp = Blueprint('reporting', __name__)
 @format_response
 def compliance_tasks_route():
     return get_compliance_tasks_report(request.args.get('account_id')), 200, {'Cache-Control': 'private, no-store'}
+
+
+def _task_snapshot_response(source):
+    from src.components.tools.private.ibkr_task_refresh import encode_snapshot, snapshot_view
+    account_id = request.args.get('account_id')
+    status = request.args.get('status', 'all')
+    try:
+        offset, limit = int(request.args.get('offset', '0')), int(request.args.get('limit', '500'))
+        # Validate before any source read, including an empty/unavailable report.
+        snapshot_view([], source, account_id, status=status, offset=offset, limit=limit)
+    except (TypeError, ValueError):
+        raise ServiceError('Invalid task report account, status or pagination.', 400)
+    output_format = request.args.get('format', 'json')
+    if output_format not in ('json', 'csv'):
+        raise ServiceError('Task report format must be json or csv.', 400)
+    if output_format == 'csv' and (status != 'all' or 'offset' in request.args or 'limit' in request.args):
+        raise ServiceError('CSV downloads contain the full selected-account snapshot; use JSON for status/pagination filters.', 400)
+    rows = get_task_snapshot_rows(source)
+    if output_format == 'csv':
+        selected = [row for row in rows if account_id is None or row['account_id'] == account_id]
+        response = send_file(BytesIO(encode_snapshot(selected)), as_attachment=True,
+                             download_name=f'ibkr_{source}_tasks.csv', mimetype='text/csv')
+        response.headers['Cache-Control'] = 'private, no-store'
+        return response
+    return snapshot_view(rows, source, account_id, status=status, offset=offset, limit=limit), 200, {'Cache-Control': 'private, no-store'}
+
+
+@bp.route('/pending_tasks', methods=['GET'])
+@require_scope('all')
+@format_response
+def pending_task_snapshot_route():
+    """Read the daily pending-task CSV snapshot; account_id/status/offset/limit filter JSON, format=csv downloads the full selected snapshot."""
+    return _task_snapshot_response('pending')
+
+
+@bp.route('/registration_tasks', methods=['GET'])
+@require_scope('all')
+@format_response
+def registration_task_snapshot_route():
+    """Read daily registration tasks/history; account_id/status/offset/limit filter JSON, format=csv downloads the full selected snapshot."""
+    return _task_snapshot_response('registration')
+
+
+@bp.route('/tasks_review', methods=['GET'])
+@require_scope('all')
+@format_response
+def tasks_review_route():
+    """Read paginated task observations or account coverage from the three saved snapshots; no live broker requests."""
+    return get_tasks_review(request.args), 200, {'Cache-Control': 'private, no-store'}
 
 
 @bp.route('/account_performance', methods=['GET'])

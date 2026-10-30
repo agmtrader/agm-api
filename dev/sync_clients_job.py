@@ -23,6 +23,7 @@ JOB = 'agm-clients-etl'
 FILES = ('src/jobs/__init__.py', 'src/jobs/clients_etl.py', 'src/jobs/storage.py',
          'src/utils/ibkr_compliance.py',
          'src/components/tools/private/etl.py',
+         'src/components/tools/private/ibkr_task_refresh.py',
          'src/components/tools/private/ibkr_details_refresh.py')
 BASELINE = 'cache/accepted_coverage.json'
 
@@ -37,8 +38,9 @@ def bundle(source, previous, expected_digest):
     with zipfile.ZipFile(io.BytesIO(previous)) as archive:
         names = archive.namelist()
         current = set(FILES) | {BASELINE}
-        legacy = current - {'src/utils/ibkr_compliance.py'}
-        if set(names) not in (current, legacy) or len(names) != len(set(names)):
+        previous = current - {'src/components/tools/private/ibkr_task_refresh.py'}
+        legacy = previous - {'src/utils/ibkr_compliance.py'}
+        if set(names) not in (current, previous, legacy) or len(names) != len(set(names)):
             raise ValueError('Unexpected existing Clients bundle contents')
         baseline = archive.read(BASELINE)
         parsed = json.loads(baseline)
