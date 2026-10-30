@@ -482,8 +482,11 @@ def task_account_population(accounts, details):
         row = dict(row)
         key = str(row.get('ibkr_account_number') or '').strip().upper()
         seen.add(key)
-        if not row.get('master_account') and key in by_id:
-            row['master_account'] = by_id[key].get('masterAccountId')
+        if key in by_id:
+            if not str(row.get('master_account') or '').strip():
+                row['master_account'] = by_id[key].get('masterAccountId')
+            if not str(row.get('title') or '').strip():
+                row['title'] = by_id[key].get('accountTitle')
         selected.append(row)
     for key, account in by_id.items():
         if key not in seen:
