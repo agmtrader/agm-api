@@ -193,19 +193,43 @@ def test_delinked_without_previous_details_does_not_invent_a_fresh_record():
     assert report['outcomes'][0]['retained_previous'] is False
 
 
-def test_terminal_policy_accepts_delinking_but_no_arbitrary_skip_or_new_failure():
+def test_terminal_policy_completes_with_account_errors_without_hiding_outcomes():
     result = {'status': 'partial', 'overview': {
         'backup': {'status': 'success'}, 'transform': {'status': 'success'},
-        'extract': {'steps': [{'name': 'account_details', 'status': 'partial',
+        'extract': {'status': 'partial', 'steps': [{'name': 'account_details', 'status': 'partial',
             'summary': {'successful': 616}, 'outcomes': [
                 {'account_id': 'U1', 'status': 'skipped', 'reason': 'account_delinked', 'date_delinked': '20261016'},
                 {'account_id': 'U2', 'status': 'failed', 'error': 'HTTP 403'}]}]}}}
     baseline = [{'account_id': 'U2', 'error': 'HTTP 403'}]
-    assert evaluate(result, baseline) == 'completed_with_accepted_coverage_gaps'
-    result['overview']['extract']['steps'][0]['outcomes'][0]['reason'] = 'unexplained'
-    assert evaluate(result, baseline) == 'failed'
-    result['overview']['extract']['steps'][0]['outcomes'][0].update(status='failed', error='details_master_mismatch')
-    assert evaluate(result, baseline) == 'failed'
+    outcomes = result['overview']['extract']['steps'][0]['outcomes']
+    assert evaluate(result, baseline) == 'completed_with_errors'
+    assert evaluate(result, []) == 'completed_with_errors'
+    assert result['status'] == 'partial'
+    assert outcomes[0]['reason'] == 'account_delinked'
+    assert outcomes[1] == {'account_id': 'U2', 'status': 'failed', 'error': 'HTTP 403'}
+    outcomes[0].update(status='failed', error='details_master_mismatch')
+    assert evaluate(result, baseline) == 'completed_with_errors'
+    assert outcomes[0]['status'] == 'failed'
+    assert outcomes[0]['error'] == 'details_master_mismatch'
+
+
+@pytest.mark.parametrize('missing_stage', ['extract', 'backup', 'transform'])
+def test_terminal_policy_fails_when_stage_completion_is_missing(missing_stage):
+    result = {'status': 'partial', 'overview': {
+        'extract': {'status': 'partial'}, 'backup': {'status': 'success'},
+        'transform': {'status': 'success'}}}
+    del result['overview'][missing_stage]['status']
+    assert evaluate(result) == 'failed'
+
+
+@pytest.mark.parametrize('error', [
+    'error', 'error_type', 'overview_publication_error', 'lock_release_error',
+])
+def test_terminal_policy_fails_on_fatal_errors_despite_completed_stages(error):
+    result = {'status': 'partial', error: 'synthetic runner failure', 'overview': {
+        'extract': {'status': 'partial'}, 'backup': {'status': 'success'},
+        'transform': {'status': 'success'}}}
+    assert evaluate(result) == 'failed'
 
 
 def test_summary_reports_delinked_history_without_exporting_account_identifiers(monkeypatch):
