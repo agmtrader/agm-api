@@ -77,7 +77,9 @@ def read_current_advisor_accounts() -> list:
 
 
 @handle_exception
-def read_current_advisor_open_positions(include_quotes=False) -> list:
+def read_current_advisor_open_positions(include_quotes=False, view='full'):
+    if view not in ('full', 'count'):
+        raise ServiceError('view must be full or count', 400)
     """Return open positions only for accounts owned by the advisor."""
     accounts = _current_advisor_accounts()
     account_ids = {
@@ -91,6 +93,8 @@ def read_current_advisor_open_positions(include_quotes=False) -> list:
         if str(position.get('ClientAccountID') or '').strip() in account_ids
         and str(position.get('OpenDateTime') or '').strip()
     ]
+    if view == 'count':
+        return {'count': len(owned_positions)}
     return add_open_position_quotes(owned_positions) if include_quotes else owned_positions
 
 

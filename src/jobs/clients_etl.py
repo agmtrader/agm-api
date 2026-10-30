@@ -57,8 +57,13 @@ def copy_manual_inputs(etl, config, source):
         if f.get('name') in names:
             outcome = {'name': f['name'], 'source_id': f['id'], 'modified_time': f.get('modifiedTime')}
             try:
+                body = {'name': f['name'], 'parents': [etl.batch_folder_id]}
+                if f['name'] == 'compliance_tasks.csv':
+                    if not f.get('modifiedTime'):
+                        raise ValueError('Compliance upload time is unavailable')
+                    body['appProperties'] = {'manual_source_modified_at': f['modifiedTime']}
                 etl.Drive.service.files().copy(fileId=f['id'],
-                    body={'name': f['name'], 'parents': [etl.batch_folder_id]}, supportsAllDrives=True, fields='id,name').execute()
+                    body=body, supportsAllDrives=True, fields='id,name').execute()
                 outcome['status'] = 'success'
             except Exception as exc:
                 outcome.update(status='failed', error=type(exc).__name__)

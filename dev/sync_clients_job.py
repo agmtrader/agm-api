@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PARENT = 'projects/agm-datalake/locations/us-central1'
 JOB = 'agm-clients-etl'
 FILES = ('src/jobs/__init__.py', 'src/jobs/clients_etl.py', 'src/jobs/storage.py',
+         'src/utils/ibkr_compliance.py',
          'src/components/tools/private/etl.py',
          'src/components/tools/private/ibkr_details_refresh.py')
 BASELINE = 'cache/accepted_coverage.json'
@@ -34,7 +35,10 @@ def bundle(source, previous, expected_digest):
     if hashlib.sha256(previous).hexdigest() != expected_digest:
         raise ValueError('Existing Clients bundle checksum mismatch')
     with zipfile.ZipFile(io.BytesIO(previous)) as archive:
-        if set(archive.namelist()) != set(FILES) | {BASELINE} or len(archive.namelist()) != len(FILES) + 1:
+        names = archive.namelist()
+        current = set(FILES) | {BASELINE}
+        legacy = current - {'src/utils/ibkr_compliance.py'}
+        if set(names) not in (current, legacy) or len(names) != len(set(names)):
             raise ValueError('Unexpected existing Clients bundle contents')
         baseline = archive.read(BASELINE)
         parsed = json.loads(baseline)

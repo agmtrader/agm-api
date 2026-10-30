@@ -16,8 +16,10 @@ from src.utils.connectors.drive import GoogleDrive
 from src.utils.exception import ServiceError, handle_exception
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 from src.utils.report_cache import ReportCache
+from src.utils.report_reads import read_report_files
 from src.utils.position_quotes import enrich_position_quotes
 from src.utils.lazy_client import LazyClient
+from src.utils.ibkr_compliance import compliance_report_view
 
 logger.announcement('Initializing Reporting Service', type='info')
 Drive = LazyClient(GoogleDrive)
@@ -28,7 +30,7 @@ _ending_balances_cache_lock = threading.Lock()
 _ibkr_statement_rows_cache = {}
 _ibkr_statement_rows_cache_lock = threading.Lock()
 _daily_report_cache = ReportCache(os.getenv('REPORT_CACHE_TTL_SECONDS', '30'), keys=(
-    'clients', 'nav', 'client-fees', 'bonds', 'stocks', 'etfs', 'ust-bonds', 'open-positions', 'ibkr-details',
+    'clients', 'nav', 'client-fees', 'bonds', 'stocks', 'etfs', 'ust-bonds', 'open-positions', 'ibkr-details', 'compliance-tasks',
 ))
 _quote_snapshot_cache = ReportCache(os.getenv('REPORT_CACHE_TTL_SECONDS', '30'), keys=('market-quotes',))
 
@@ -61,20 +63,52 @@ def get_clients_report():
     
     :return: Response object with clients list or error message
     """
-    return _daily_report_cache.get('clients', lambda: _read_daily_report('ibkr_clients'))
+    return _cached_daily_report('clients', 'ibkr_clients')
 
 
-def _read_daily_report(name):
-    files = Drive.get_files_in_folder(resources_folder_id)
+def _describe_daily_report(name):
+    files = Drive.get_files_in_folder(resources_folder_id, include_report_metadata=True)
     matches = [file for file in files if name in file['name']]
     if len(matches) != 1:
         raise Exception(f'{name} file not found or multiple files found')
-    return Drive.download_file(file_id=matches[0]['id'], parse=True)
+    source = matches[0]
+    downloadable = (source.get('capabilities') or {}).get('canDownload')
+    if downloadable is False:
+        raise ServiceError('Reporting source download is unavailable.', 503, code='report_source_unavailable')
+    version = (source['id'], source['version'], source['modifiedTime'], source.get('size'), source.get('mimeType')) if source.get('version') and source.get('modifiedTime') and downloadable is True else None
+    return version, source
+
+
+def _read_daily_report(name):
+    _, source = _describe_daily_report(name)
+    return Drive.download_file(file_id=source['id'], parse=True)
+
+
+def _cached_daily_report(key, name):
+    return _daily_report_cache.get_versioned(key, lambda: _describe_daily_report(name),
+                                           lambda source: Drive.download_file(file_id=source['id'], parse=True))
+
+
+@handle_exception
+def get_compliance_tasks_report(account_id=None):
+    if account_id is not None and not re.fullmatch(r'[A-Z]\d+', account_id):
+        raise ServiceError('Provide a valid IBKR account_id.', 400)
+
+    def read():
+        matches = [file for file in Drive.get_files_in_folder(resources_folder_id)
+                   if file.get('name') == 'ibkr_compliance_tasks.json']
+        if len(matches) != 1:
+            raise ServiceError('Compliance report missing or duplicated. Supply compliance_tasks.csv to Clients ETL.',
+                               503, code='compliance_report_unavailable')
+        return Drive.download_file(file_id=matches[0]['id'], parse=True)
+
+    # Filter after copying the shared base; never cache one account's projection.
+    return compliance_report_view(_daily_report_cache.get('compliance-tasks', read), account_id)
 
 @handle_exception
 def get_client_fees_report():
     """Read a daily snapshot under the bounded report freshness policy."""
-    return _daily_report_cache.get('client-fees', lambda: _read_daily_report('ibkr_client_fees'))
+    return _cached_daily_report('client-fees', 'ibkr_client_fees')
 
 @handle_exception
 def get_nav_report():
@@ -83,27 +117,27 @@ def get_nav_report():
     
     :return: Response object with NAV report or error message
     """
-    return _daily_report_cache.get('nav', lambda: _read_daily_report('ibkr_nav'))
+    return _cached_daily_report('nav', 'ibkr_nav')
 
 @handle_exception
 def get_bond_report():
     """Read a daily snapshot under the bounded report freshness policy."""
-    return _daily_report_cache.get('bonds', lambda: _read_daily_report('ibkr_bonds_snapshot'))
+    return _cached_daily_report('bonds', 'ibkr_bonds_snapshot')
 
 @handle_exception
 def get_stocks_report():
     """Read a daily snapshot under the bounded report freshness policy."""
-    return _daily_report_cache.get('stocks', lambda: _read_daily_report('ibkr_stocks_snapshot'))
+    return _cached_daily_report('stocks', 'ibkr_stocks_snapshot')
 
 @handle_exception
 def get_etfs_report():
     """Read a daily snapshot under the bounded report freshness policy."""
-    return _daily_report_cache.get('etfs', lambda: _read_daily_report('ibkr_etfs_snapshot'))
+    return _cached_daily_report('etfs', 'ibkr_etfs_snapshot')
 
 @handle_exception
 def get_ust_bond_report():
     """Read a daily snapshot under the bounded report freshness policy."""
-    return _daily_report_cache.get('ust-bonds', lambda: _read_daily_report('ibkr_ust_bonds_snapshot'))
+    return _cached_daily_report('ust-bonds', 'ibkr_ust_bonds_snapshot')
 
 def _read_quote_snapshots():
     files = Drive.get_files_in_folder(resources_folder_id)
@@ -133,7 +167,7 @@ def get_open_positions_report(include_quotes=False, account_ids=None):
     
     :return: Response object with open positions report or error message
     """
-    open_positions = _daily_report_cache.get('open-positions', lambda: _read_daily_report('ibkr_open_positions_all'))
+    open_positions = _cached_daily_report('open-positions', 'ibkr_open_positions_all')
     if account_ids is not None:
         selected = {str(value).strip() for value in account_ids}
         open_positions = [row for row in open_positions if str(row.get('ClientAccountID') or '').strip() in selected]
@@ -544,7 +578,7 @@ def get_monthly_deposits_withdrawals(years: list, months: list, start_date=None,
 @handle_exception
 def get_ibkr_details():
     """Read the daily Drive snapshot; live account/provider routes stay uncached."""
-    return _daily_report_cache.get('ibkr-details', lambda: _read_daily_report('ibkr_account_details'))
+    return _cached_daily_report('ibkr-details', 'ibkr_account_details')
 
 """
 BACKUPS
@@ -573,7 +607,7 @@ def get_trades_report(years: list, months: list):
     except Exception as e:
         logger.error(f'Could not fetch contents of trades root folder: {trades_root_folder_id}: {e}')
         print(f'[get_trades_report] ERROR fetching root folder {trades_root_folder_id}: {e}')
-        return []
+        raise
 
     print(f'[get_trades_report] root_contents ({len(root_contents)} items):')
     for item in root_contents:
@@ -603,7 +637,7 @@ def get_trades_report(years: list, months: list):
         except Exception as e:
             logger.error(f'Could not fetch contents for year folder {year}: {e}')
             print(f'[get_trades_report] ERROR fetching year folder {year}: {e}')
-            continue
+            raise
 
         print(f'[get_trades_report] year={year} has {len(year_files)} files:')
         for f in year_files:
@@ -648,23 +682,20 @@ def get_trades_report(years: list, months: list):
 
         print(f'[get_trades_report] latest_files_for_months={latest_files_for_months}')
 
-        # Download and parse each latest file
-        for month, info in latest_files_for_months.items():
-            try:
-                logger.info(f'Downloading trades for {year}-{month} from file {info["end_date"]}')
-                print(f'[get_trades_report] Downloading {year}-{month}, file_id={info["id"]}')
-                f_data = Drive.download_file(file_id=info['id'], parse=True)
-                if f_data:
-                    df = pd.DataFrame(f_data)
-                    df['Year'] = year
-                    df['Month'] = month
-                    all_trades_dfs.append(df)
-                    print(f'[get_trades_report] Loaded {len(df)} rows for {year}-{month}')
-                else:
-                    print(f'[get_trades_report] WARNING: empty file for {year}-{month}')
-            except Exception as e:
-                logger.error(f'Error downloading/parsing file for {year}-{month}: {e}')
-                print(f'[get_trades_report] ERROR downloading {year}-{month}: {e}')
+        def read_trade_month(item):
+            month, info = item
+            f_data = Drive.download_file(file_id=info['id'], parse=True)
+            if not f_data:
+                return None
+            df = pd.DataFrame(f_data)
+            df['Year'] = year
+            df['Month'] = month
+            return df
+
+        # A failed month must not turn into a successful partial-period total.
+        for frame in read_report_files(list(latest_files_for_months.items()), read_trade_month):
+            if frame is not None:
+                all_trades_dfs.append(frame)
 
     if not all_trades_dfs:
         return []
@@ -901,21 +932,18 @@ def get_ending_balances_from_statements():
         if _ending_balances_cache['key'] == cache_key:
             return _ending_balances_cache['rows']
 
-        ending_balances = []
-        current_file_cache = {}
-        for account, year, month, file_info in statement_files:
-            file_cache_key = (
-                account,
-                year,
-                month,
-                file_info['id'],
-                file_info.get('modifiedTime'),
-            )
+        def read_statement(item):
+            account, year, month, file_info = item
+            file_cache_key = (account, year, month, file_info['id'], file_info.get('modifiedTime'))
             statement_rows = _activity_statement_file_cache.get(file_cache_key)
             if statement_rows is None:
                 statement_bytes = Drive.download_file(file_id=file_info['id'], parse=False)
                 statement_rows = _extract_change_in_nav_rows(statement_bytes, account, year, month)
+            return file_cache_key, statement_rows
 
+        ending_balances = []
+        current_file_cache = {}
+        for file_cache_key, statement_rows in read_report_files(statement_files, read_statement):
             current_file_cache[file_cache_key] = statement_rows
             ending_balances.extend(statement_rows)
 

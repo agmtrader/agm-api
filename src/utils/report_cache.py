@@ -1,4 +1,4 @@
-"""Small process-local cache for the two daily reporting snapshots.
+"""Small process-local cache for the allowlisted daily reporting snapshots.
 
 Cloud Run instances/workers do not share this cache. Expired entries never
 serve as a fallback after a source error. Authentication belongs to the route.
@@ -17,6 +17,28 @@ class ReportCache:
         self.lock = Lock()
         self.entries = {}
         self.pending = {}
+        self.versions = {}
+
+    def get_versioned(self, key, describe, load):
+        """Revalidate metadata after TTL; reuse only the same readable version.
+
+        Uses the existing value slot and single-flight/copy policy. A metadata
+        or download failure still invalidates the entry; there is no fallback.
+        Missing version evidence forces a full read. TTL zero bypasses reuse.
+        """
+        def refresh():
+            version, source = describe()
+            if self.ttl > 0 and version is not None:
+                with self.lock:
+                    previous = self.entries.get(key)
+                    if previous is not None and self.versions.get(key) == version:
+                        return previous[1]
+            value = load(source)
+            if self.ttl > 0:
+                with self.lock:
+                    self.versions[key] = version
+            return value
+        return self.get(key, refresh)
 
     def get(self, key, load):
         if key not in self.keys:

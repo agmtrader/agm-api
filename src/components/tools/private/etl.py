@@ -25,6 +25,7 @@ from src.utils.exception import ServiceError, handle_exception
 from src.components.tools.public.reporting import get_bond_report
 from src.utils.logger import logger
 from src.utils.lazy_client import LazyClient
+from src.utils.ibkr_compliance import build_compliance_report
 
 logger.announcement('Initializing Reporting Service', type='info')
 Drive = LazyClient(GoogleDrive)
@@ -141,13 +142,15 @@ def extract_data(etl_config) -> dict:
     # Their extraction status reflects that initial snapshot: present means
     # successful input, absent means skipped (not an extraction failure).
     initial_batch_files = set()
+    initial_batch_names = []
     if any(file_config.get('extract_func') is None for file_config in etl_config.get('files', [])):
         try:
-            initial_batch_files = {
+            initial_batch_names = [
                 file.get('name')
                 for file in (Drive.get_files_in_folder(batch_folder_id) or [])
                 if file.get('name')
-            }
+            ]
+            initial_batch_files = set(initial_batch_names)
         except Exception as e:
             logger.error(f'Unable to inspect initial batch files: {e}')
 
@@ -156,6 +159,10 @@ def extract_data(etl_config) -> dict:
         extract_func = file_config.get('extract_func')
         if extract_func is None:
             batch_name = file_config.get('batch_name')
+            if step_name == 'compliance_tasks' and initial_batch_names.count(batch_name) > 1:
+                file_config['_manual_input_error'] = 'Duplicate compliance_tasks.csv inputs; keep one complete export'
+                steps.append({'name': step_name, 'status': 'failed', 'error': file_config['_manual_input_error']})
+                continue
             present = batch_name in initial_batch_files if batch_name else any(
                 file_name.startswith(f'{step_name}.') for file_name in initial_batch_files
             )
@@ -1147,9 +1154,21 @@ def rename_files_in_batch(etl_config):
             for config in configs_to_process:
                 if not config.get('backup_folder_id'):
                     continue
+                if config.get('_manual_input_error'):
+                    continue
                 if config['name'] in f['name']:
                     new_name = config['backup_name']
                     try:
+                        if config['name'] == 'compliance_tasks':
+                            # Preserve the original upload time across staging copies,
+                            # renames and subsequent runs of the same manual export.
+                            metadata = Drive.service.files().get(fileId=f['id'],
+                                supportsAllDrives=True, fields='appProperties').execute()
+                            properties = metadata.get('appProperties', {})
+                            if not properties.get('manual_source_modified_at') and f.get('modifiedTime'):
+                                Drive.service.files().update(fileId=f['id'], supportsAllDrives=True,
+                                    body={'appProperties': {**properties, 'manual_source_modified_at': f['modifiedTime']}},
+                                    fields='id').execute()
                         Drive.rename_file(file_id=f['id'], new_name=new_name)
                         renamed_files.append({'from': f['name'], 'to': new_name, 'status': 'success'})
                     except Exception as e:
@@ -1189,13 +1208,16 @@ def sort_batch_files_to_backup_folders(etl_config):
             for config in configs_to_process:
                 if not config.get('backup_folder_id'):
                     continue
+                if config.get('_manual_input_error'):
+                    continue
                 if config['name'] in f['name']:
                     new_parent_id = config['backup_folder_id']
                     try:
                         backup_files = Drive.get_files_in_folder(new_parent_id)
                         if len(backup_files) > 0:
                             for backed_up_file in backup_files:
-                                if backed_up_file['createdTime'].split('T')[0] == datetime.now().strftime('%Y-%m-%d'):
+                                belongs_to_report = any(backed_up_file.get('name', '').startswith(config['name'] + separator) for separator in ('_', ' '))
+                                if belongs_to_report and backed_up_file['createdTime'].split('T')[0] == datetime.now().strftime('%Y-%m-%d'):
                                     logger.warning(f'Deleting backed up file: {backed_up_file}')
                                     Drive.delete_file(backed_up_file['id'])
                         Drive.move_file(f=f, newParentId=new_parent_id)
@@ -1339,12 +1361,32 @@ def process_report(config):
         config_name = config['name']
         backup_name = config.get('backup_name', '')
 
+        if config_name == 'compliance_tasks':
+            if config.get('_manual_input_error'):
+                raise ValueError(config['_manual_input_error'])
+            # This backup folder is shared with the historical subaccount export.
+            # Never fall back to another report, or parse IDs via pandas floats.
+            candidates = [f for f in files if re.fullmatch(r'compliance_tasks_\d+\.csv', f.get('name', ''))]
+            if not candidates:
+                raise ValueError('Compliance CSV backup missing; previous report preserved')
+            source = Drive.get_most_recent_file(candidates)
+            properties = Drive.service.files().get(fileId=source['id'], supportsAllDrives=True,
+                fields='appProperties').execute()
+            source = {**source, **properties}
+            raw = Drive.download_file(file_id=source['id'], parse=False)
+            report = build_compliance_report(raw, source)
+            _publish_report(output_filename, 'application/json',
+                base64.b64encode(json.dumps(report).encode('utf-8')).decode('ascii'))
+            return {'name': config_name, 'status': 'success', 'row_count': len(report['rows']),
+                    'backup_file': source['name'], 'source_file_id': source['id'],
+                    'source_uploaded_at': report['source']['uploaded_at'], 'output_file': output_filename}
+
         # Avoid substring collisions (e.g., bonds_snapshot vs ust_bonds_snapshot).
         # Prefer exact backup_name, then strict "<config_name>_" prefix.
         files_for_config = [f for f in files if f.get('name', '') == backup_name]
         if not files_for_config:
-            files_for_config = [f for f in files if f.get('name', '').startswith(f'{config_name}_')]
-        files = files_for_config or files
+            files_for_config = [f for f in files if any(f.get('name', '').startswith(config_name + separator) for separator in ('_', ' '))]
+        files = files_for_config if config_name == 'tasks_for_subaccounts' else files_for_config or files
         if config_name == 'account_details':
             files = [f for f in files if re.fullmatch(r'account_details_\d+\.json', f.get('name', ''))]
 
@@ -1813,6 +1855,17 @@ market_data_report_configs = [
 
 clients_report_configs = [
     {
+        'name': 'compliance_tasks',
+        'pipeline': 'clients',
+        'backup_folder_id': '1u0IUkD7-lBUy9uhgHD-5xzw3l8OePJdE',
+        'flex': False,
+        'backup_name': 'compliance_tasks_' + today_date + '.csv',
+        'batch_name': 'compliance_tasks.csv',
+        'extract_func': None,
+        'transform_func': None,
+        'output_filename': 'ibkr_compliance_tasks.json',
+    },
+    {
         'name': 'account_details',
         'pipeline': 'clients',
         'backup_folder_id': '1YCOsFGAb3fZvKbFDBGK6wpjT1S-NIK98',
@@ -1968,6 +2021,7 @@ def _runtime_etl_config(etl_config, now=None):
     runtime_first = runtime_time.replace(day=1).strftime('%Y%m%d')
 
     for file_config in runtime_config.get('files', []):
+        file_config.pop('_manual_input_error', None)
         file_config.pop('_extracted_source', None)
         file_config.pop('_session_recoveries', None)
         file_config.pop('_session_failures', None)

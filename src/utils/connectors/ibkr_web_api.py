@@ -454,7 +454,7 @@ class IBKRWebAPI:
         original_creds = (self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY)
         try:
             original_creds = self._apply_credentials(master_account)
-            logger.info(f"Updating account.")
+            logger.info("Submitting documents to IBKR")
             url = f"{self.BASE_URL}/gw/api/v1/accounts"
 
             body = {
@@ -472,9 +472,15 @@ class IBKRWebAPI:
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/jwt"
             }
+            logger.info("Sending IBKR document submission request")
             response = requests.patch(url, headers=headers, data=document_submission)
+            logger.info(f"IBKR document submission response: HTTP {response.status_code}")
             if response.status_code != 200:
-                raise_ibkr_response_error(response, account_access="/accounts" in url)
+                try:
+                    raise_ibkr_response_error(response, account_access="/accounts" in url)
+                except ServiceError as exc:
+                    logger.warning("IBKR document submission rejected: " + json.dumps(safe_upstream_details(exc.details)))
+                    raise
             logger.success(f"Documents submitted successfully")
             return response.json()
         finally:
@@ -1120,13 +1126,21 @@ class IBKRWebAPI:
         Returns:
             dict: API response from IBKR.
         """
+        logger.info("Starting CLP capability workflow")
         if not document_submission:
+            logger.warning("CLP capability request not sent: document submission is required")
             raise ServiceError("Document submission is required", status_code=400, code="validation_error")
 
-        self.submit_documents(document_submission=document_submission, master_account=master_account)
+        logger.info("CLP capability: submitting required documents first")
+        try:
+            self.submit_documents(document_submission=document_submission, master_account=master_account)
+        except ServiceError:
+            logger.warning("CLP capability request not sent: document submission failed")
+            raise
+        logger.info("CLP capability: document submission completed")
         original_creds = self._apply_credentials(master_account)
         try:
-            logger.info(f"Adding CLP capability for account {account_id}")
+            logger.info("Preparing IBKR CLP capability request")
 
             url = f"{self.BASE_URL}/gw/api/v1/accounts"
 
@@ -1137,8 +1151,6 @@ class IBKRWebAPI:
                     }
                 }
             }
-
-            logger.info(f"Body: {body}")
 
             token = self.get_bearer_token()
             if not token:
@@ -1151,13 +1163,18 @@ class IBKRWebAPI:
                 "Content-Type": "application/jwt",
             }
 
+            logger.info("Sending IBKR CLP capability request")
             response = requests.patch(url, headers=headers, data=signed_jwt)
+            logger.info(f"IBKR CLP capability response: HTTP {response.status_code}")
             if response.status_code != 200:
-                raise_ibkr_response_error(response, account_access="/accounts" in url)
+                try:
+                    raise_ibkr_response_error(response, account_access="/accounts" in url)
+                except ServiceError as exc:
+                    logger.warning("IBKR CLP capability rejected: " + json.dumps(safe_upstream_details(exc.details)))
+                    raise
 
-            logger.success("Trading permissions added successfully")
+            logger.success("IBKR CLP capability request completed successfully")
             data = response.json()
-            logger.info(data)
             return data
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds

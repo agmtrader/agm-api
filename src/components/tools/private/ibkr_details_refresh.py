@@ -1,4 +1,4 @@
-"""Fresh IBKR reads with immutable worker credentials; no persistence or retries."""
+"""Fresh IBKR reads with immutable credentials and one alternate read after 403."""
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 import re
@@ -87,17 +87,49 @@ def refresh_details(accounts, previous, *, workers=4, rate=5, limit=0,
         else:
             eligible.append((key, next(iter(masters))))
     clients = {}
+    credential_lock = threading.Lock()
     pacer = Pacer(rate)
 
+    def token_for(credential_master):
+        # A client stays bound to one credential set, including across workers.
+        with credential_lock:
+            if credential_master not in clients:
+                client = client_factory()
+                client._apply_credentials(credential_master)
+                clients[credential_master] = client
+            token = clients[credential_master].get_bearer_token()
+            if not token:
+                raise ValueError('token_unavailable')
+            return token
+
     def fetch(key, master, token):
-        pacer.wait()
         tick = time.monotonic()
         outcome = {'account_id': key, 'master_account': master, 'status': 'failed',
-                   'retained_previous': key in by_id}
+                   'retained_previous': key in by_id, 'attempts': []}
         detail = None
         try:
+            pacer.wait()
             response = get(f'https://api.ibkr.com/gw/api/v1/accounts/{key}/details',
                            headers={'Authorization': f'Bearer {token}'}, timeout=(10, 45))
+            outcome['attempts'].append({'credential_master': master, 'http_status': response.status_code})
+            outcome['credential_master'] = master
+            if response.status_code == 403:
+                alternate = next((m for m in IBKRWebAPI.MASTER_ACCOUNT_CREDENTIALS if m != master), None)
+                if alternate:
+                    outcome['http_status'] = 403
+                    attempt = {'credential_master': alternate}
+                    outcome['attempts'].append(attempt)
+                    try:
+                        alternate_token = token_for(alternate)
+                    except Exception as exc:
+                        attempt['error'] = f'authentication_{type(exc).__name__}'
+                        raise ValueError(attempt['error']) from exc
+                    pacer.wait()
+                    outcome['credential_master'] = alternate
+                    response = get(f'https://api.ibkr.com/gw/api/v1/accounts/{key}/details',
+                                   headers={'Authorization': f'Bearer {alternate_token}'}, timeout=(10, 45))
+                    attempt['http_status'] = response.status_code
+                    outcome['credential_master'] = alternate
             outcome['http_status'] = response.status_code
             if response.status_code != 200:
                 raise ValueError(f'HTTP {response.status_code}')
@@ -121,6 +153,8 @@ def refresh_details(accounts, previous, *, workers=4, rate=5, limit=0,
                 outcome.update(status='success', retained_previous=False)
         except Exception as exc:
             outcome['error'] = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
+            if outcome['attempts']:
+                outcome['attempts'][-1]['error'] = outcome['error']
         outcome['seconds'] = round(time.monotonic() - tick, 3)
         return detail, outcome
 
@@ -130,13 +164,7 @@ def refresh_details(accounts, previous, *, workers=4, rate=5, limit=0,
             tokens = {}
             for master in dict.fromkeys(m for _, m in wave):
                 try:
-                    if master not in clients:
-                        client = client_factory()
-                        client._apply_credentials(master)
-                        clients[master] = client
-                    tokens[master] = clients[master].get_bearer_token()
-                    if not tokens[master]:
-                        raise ValueError('token_unavailable')
+                    tokens[master] = token_for(master)
                 except Exception as exc:
                     tokens[master] = None
                     for key, m in wave:

@@ -61,7 +61,7 @@ def current_advisor_accounts_route():
 @format_response
 def current_advisor_open_positions_route():
     """Read open positions for the authenticated advisor only."""
-    return read_current_advisor_open_positions(include_quotes=request.args.get('quotes') == '1')
+    return read_current_advisor_open_positions(include_quotes=request.args.get('quotes') == '1', view=request.args.get('view', 'full'))
 
 
 @bp.route('/me/nav', methods=['GET'])

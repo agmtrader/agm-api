@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PARENT = 'projects/agm-datalake/locations/us-central1'
 JOB = 'agm-market-etl'
 FILES = ('src/jobs/__init__.py', 'src/jobs/market_etl.py', 'src/jobs/storage.py',
+         'src/utils/ibkr_compliance.py',
          'src/jobs/market_result.py', 'src/components/tools/private/etl.py',
          'src/utils/connectors/ibkr_trading_api.py')
 

@@ -10,6 +10,7 @@ import google.auth
 from google.auth.transport.requests import AuthorizedSession
 
 ALLOWED = {'src/jobs/__init__.py', 'src/jobs/clients_etl.py', 'src/jobs/storage.py',
+           'src/utils/ibkr_compliance.py',
            'src/components/tools/private/etl.py',
            'src/components/tools/private/ibkr_details_refresh.py', 'cache/accepted_coverage.json'}
 

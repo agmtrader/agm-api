@@ -17,11 +17,12 @@ import json
 import base64
 import time
 import threading
+import re
 from functools import wraps
 
 from typing import Union
 
-def retry_on_connection_error(max_retries=3, delay=1):
+def retry_on_connection_error(max_retries=3, delay=1, retry_http_reads=False):
   """Retry transient Drive connection and per-user quota failures.
 
   ``handle_exception`` is the inner decorator on Drive methods, so an
@@ -53,6 +54,9 @@ def retry_on_connection_error(max_retries=3, delay=1):
       'ssl.sslerror', 'connectionerror', 'timeout'
     ])
 
+  def is_transient_read_error(exc):
+    return retry_http_reads and getattr(exc, 'details', {}).get('upstream_status') in (408, 429, 500, 502, 503, 504)
+
   def decorator(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
@@ -69,7 +73,7 @@ def retry_on_connection_error(max_retries=3, delay=1):
           # Retry connection failures and Google's transient per-user quota
           # failures. Other HTTP errors (including ordinary 403s and 404s)
           # remain fail-fast.
-          if rate_limit_error or is_connection_error(e):
+          if rate_limit_error or is_connection_error(e) or is_transient_read_error(e):
             if rate_limit_error:
               logger.warning("Google Drive Rate Limit Reached, Retrying...")
               if attempt < max_retries - 1:
@@ -323,7 +327,7 @@ class GoogleDrive:
 
   @retry_on_connection_error()
   @handle_exception
-  def get_files_in_folder(self, parent_id):
+  def get_files_in_folder(self, parent_id, include_report_metadata=False):
     logger.info(f'Getting files in folder: {parent_id}')
     files = []
     page_token = None
@@ -333,7 +337,8 @@ class GoogleDrive:
               supportsAllDrives=True,
               includeItemsFromAllDrives=True,
               q=f"'{parent_id}' in parents and trashed = false",
-              fields="nextPageToken, files(id, name, parents, mimeType, size, modifiedTime, createdTime)",
+              fields=("nextPageToken, files(id, name, parents, mimeType, size, modifiedTime, createdTime, version, capabilities(canDownload))"
+                      if include_report_metadata else "nextPageToken, files(id, name, parents, mimeType, size, modifiedTime, createdTime)"),
               pageToken=page_token
           ).execute())
       files.extend(response.get('files', []))
@@ -501,7 +506,7 @@ class GoogleDrive:
       logger.success(f"Successfully deleted file with ID: {file_id}")
       return deletedFile
 
-  @retry_on_connection_error()
+  @retry_on_connection_error(retry_http_reads=True)
   @handle_exception
   def download_file(self, file_id, parse=False):
     """
@@ -533,7 +538,15 @@ class GoogleDrive:
             logger.info(f"Download {int(status.progress() * 100)}.")
 
     except HttpError as e:
-        raise Exception(e)
+        # Keep bounded provider diagnostics instead of replacing every media
+        # failure with a generic 500. Never expose the request URL or file ID.
+        try:
+            reasons = [item.get('reason', '') for item in json.loads(e.content).get('error', {}).get('errors', [])]
+            reason = next((value for value in reasons if isinstance(value, str) and re.fullmatch(r'[A-Za-z0-9_]{1,100}', value)), 'unavailable')
+        except (ValueError, TypeError, AttributeError):
+            reason = 'unavailable'
+        raise ServiceError('Google Drive file read unavailable. Please try again.', status_code=503,
+                           code='drive_read_unavailable', details={'upstream_status': int(e.resp.status), 'reason': reason}) from e
     
     except Exception as e:
        raise Exception(e)

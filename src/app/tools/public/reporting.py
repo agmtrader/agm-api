@@ -1,5 +1,6 @@
 from flask import Blueprint, request, g, send_file
 from io import BytesIO
+import re
 from src.components.tools.public.reporting import get_clients_report, get_client_fees_report, get_nav_report, get_nav_report_monthly, get_bond_report, get_stocks_report, get_etfs_report, get_ust_bond_report, get_proposals_equity_report, get_open_positions_report, get_deposits_withdrawals, get_monthly_deposits_withdrawals, get_trades_report, get_brokerage_commissions, get_management_commissions, get_ending_balances_from_statements, get_ibkr_details, get_ibkr_statement_summary, get_ibkr_statement_transactions
 from src.utils.response import format_response
 from src.components.tools.public.trade_confirmations import get_trade_confirmations_report
@@ -7,8 +8,16 @@ from src.components.tools.public.account_performance import get_account_performa
 from src.components.tools.public import accounting_statements as accounting
 from src.utils.authz import require_scope
 from src.utils.exception import ServiceError
+from src.components.tools.public.reporting import get_compliance_tasks_report
 
 bp = Blueprint('reporting', __name__)
+
+
+@bp.route('/compliance_tasks', methods=['GET'])
+@require_scope('all')
+@format_response
+def compliance_tasks_route():
+    return get_compliance_tasks_report(request.args.get('account_id')), 200, {'Cache-Control': 'private, no-store'}
 
 
 @bp.route('/account_performance', methods=['GET'])
@@ -20,14 +29,15 @@ def account_performance_route():
     ), 200, {'Cache-Control': 'private, no-store'}
 
 
-def _read_report_view(load, fields):
+def _read_report_view(load, fields, extra_views=None):
     view = request.args.get('view', 'full')
-    if view not in ('full', 'summary'):
+    if view not in ('full', 'summary') and view not in (extra_views or {}):
         raise ServiceError('view must be full or summary', 400)
     rows = load()
     if view == 'full':
         return rows
-    return [{field: row.get(field) for field in fields} for row in rows]
+    selected_fields = (extra_views or {}).get(view, fields)
+    return [{field: row.get(field) for field in selected_fields} for row in rows]
 
 
 def _accounting_payload():
@@ -126,7 +136,9 @@ def get_client_fees_report_route():
 @format_response
 def get_nav_report_route():
     """Read the NAV reporting dataset."""
-    return _read_report_view(get_nav_report, ('ClientAccountID', 'Total', 'ReportDate'))
+    return _read_report_view(get_nav_report, ('ClientAccountID', 'Total', 'ReportDate'), {
+        'cash': ('ClientAccountID', 'AccountAlias', 'Cash', 'Cash %', 'Total', 'ReportDate'),
+    })
 
 @bp.route('/nav/monthly', methods=['GET'])
 @format_response
@@ -145,7 +157,13 @@ def get_nav_report_monthly_route():
 def get_open_positions_report_route():
     """Read the open positions reporting dataset."""
     account_ids = [value.strip() for value in request.args['account_ids'].split(',') if value.strip()] if 'account_ids' in request.args else None
-    return get_open_positions_report(include_quotes=request.args.get('quotes') == '1', account_ids=account_ids)
+    view = request.args.get('view', 'full')
+    if view not in ('full', 'count'):
+        raise ServiceError('view must be full or count', 400)
+    rows = get_open_positions_report(include_quotes=view == 'full' and request.args.get('quotes') == '1', account_ids=account_ids)
+    if view == 'count':
+        return {'count': sum(bool(str('' if row.get('OpenDateTime') is None else row.get('OpenDateTime')).strip()) for row in rows)}
+    return rows
 
 @bp.route('/trades', methods=['GET'])
 @format_response
@@ -164,7 +182,45 @@ def get_trades_report_route():
 @format_response
 def get_ibkr_details_route():
     """Download the daily backup of IBKR account details, including account, financial, and account holder information."""
-    return get_ibkr_details()
+    view = request.args.get('view', 'full')
+    if view == 'full':
+        return get_ibkr_details()
+    if view in ('countries', 'financial_review'):
+        projected = []
+        for row in get_ibkr_details():
+            if not isinstance(row, dict):
+                continue
+            details = row.get('ibkrdetails') if isinstance(row.get('ibkrdetails'), list) else [row]
+            for detail in details:
+                if not isinstance(detail, dict):
+                    continue
+                account = detail.get('account') if isinstance(detail.get('account'), dict) else {}
+                if view == 'countries':
+                    people = detail.get('associatedPersons')
+                    person = people[0] if isinstance(people, list) and people and isinstance(people[0], dict) else {}
+                    residence = person.get('residence') if isinstance(person.get('residence'), dict) else {}
+                    projected.append({
+                        'account': {'accountId': account.get('accountId')},
+                        'associatedPersons': [{'residence': {'country': residence.get('country')}}],
+                    })
+                else:
+                    projected.append({
+                        'account': {key: account[key] for key in ('accountId', 'riskScore', 'equity') if key in account},
+                        **{key: detail[key] for key in ('financialInformation', 'sourcesOfWealth') if key in detail},
+                    })
+        return projected
+    account_id = request.args.get('account_id', '')
+    if view != 'fee' or not re.fullmatch(r'[A-Z]\d{1,20}', account_id):
+        raise ServiceError('Provide a valid account_id and fee view', 400)
+    for row in get_ibkr_details():
+        details = row.get('ibkrdetails') if isinstance(row.get('ibkrdetails'), list) else [row]
+        for detail in details:
+            account = detail.get('account') or {}
+            if str(account.get('accountId') or '').strip() == account_id:
+                return {'feeTemplate': next((value for value in (
+                    account.get('feeTemplate'), detail.get('feeTemplate'), account.get('fee_template'),
+                ) if value is not None), None)}
+    return {'feeTemplate': None}
 
 @bp.route('/deposits_withdrawals', methods=['GET'])
 @format_response
@@ -191,7 +247,18 @@ def get_monthly_deposits_withdrawals_route():
 @format_response
 def get_bond_report_route():
     """Download the large RTD bond list dataset, similar in scope to the U.S. Treasury bond report."""
-    return get_bond_report()
+    view = request.args.get('view', 'full')
+    if view not in ('full', 'analysis'):
+        raise ServiceError('view must be full or analysis', 400)
+    rows = get_bond_report()
+    if view == 'full':
+        return rows
+    fields = ('Issuer', 'issuer', 'Symbol', 'symbol', 'Company', 'Coupon', 'coupon',
+              'Maturity', 'maturity', 'Maturity Date', 'maturityDate', 'Years to Maturity', 'yearsToMaturity',
+              'Current Yield', 'currentYield', 'currentYieldPct', 'CY', 'cy', 'Conid', 'conid', 'ISIN', 'isin',
+              'Description', 'description', 'Financial Instrument', 'Name', 'name', 'S&P Equivalent', 'SP Equivalent',
+              'ratingKey', 'Ratings', 'ratings', 'Rating', 'Price', 'price', 'ASK', 'Ask', 'ask', 'BID', 'Bid', 'bid', 'Currency', 'currency')
+    return [{key: row[key] for key in fields if key in row} for row in rows]
 
 @bp.route('/stocks', methods=['GET'])
 @format_response
