@@ -263,12 +263,13 @@ def start_api():
     app.register_blueprint(users.bp, url_prefix='/users')
     app.register_blueprint(application_providers.bp, url_prefix='/application_providers')
 
-    from src.app.clients import management_type_requests, advisor_changes, fee_template_requests, flagged_deposits, document_review_emails, document_review_responsibles
+    from src.app.clients import management_type_requests, advisor_changes, fee_template_requests, flagged_deposits, document_review_emails, document_review_responsibles, document_review_messages
     app.register_blueprint(fee_template_requests.bp, url_prefix='/fee_template_requests')
     app.register_blueprint(flagged_deposits.bp, url_prefix='/flagged_deposits')
     app.register_blueprint(advisor_changes.bp, url_prefix='/advisor_changes')
     app.register_blueprint(management_type_requests.bp, url_prefix='/management_type_requests')
     app.register_blueprint(document_review_emails.bp, url_prefix='/document_review_emails')
+    app.register_blueprint(document_review_messages.bp, url_prefix='/document_review_messages')
     app.register_blueprint(document_review_responsibles.bp, url_prefix='/document_review_responsibles')
 
     # The login view lives in a blueprint, so apply its stricter public-endpoint

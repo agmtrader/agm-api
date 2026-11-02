@@ -359,6 +359,27 @@ class Supabase:
             sent_at = Column(Text, nullable=True)
             error_message = Column(Text, nullable=True)
 
+        class DocumentReviewMessage(self.Base):
+            __tablename__ = 'document_review_message'
+            id = Column(UUID(as_uuid=True), primary_key=True)
+            created = Column(Text, nullable=False)
+            updated = Column(Text, nullable=False)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='CASCADE'), nullable=False)
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='CASCADE'), nullable=False)
+            recipient_contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id', ondelete='SET NULL'), nullable=True)
+            recipient_name = Column(Text, nullable=False)
+            recipient_phone = Column(Text, nullable=False)
+            channel = Column(Text, nullable=False)
+            status = Column(Text, nullable=False)
+            template = Column(Text, nullable=False)
+            holder_scenario = Column(Text, nullable=False)
+            language = Column(Text, nullable=False)
+            missing_document_keys = Column(JSONB, nullable=False)
+            message_text = Column(Text, nullable=False)
+            sent_at = Column(Text, nullable=False)
+            recorded_by = Column(UUID(as_uuid=True), ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+            recorded_by_name = Column(Text, nullable=False)
+
         class FeeTemplateRequest(self.Base):
             __tablename__ = 'fee_template_request'
             id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -475,6 +496,7 @@ class Supabase:
         self.Document = Document
         self.DocumentProcessing = DocumentProcessing
         self.DocumentReviewEmail = DocumentReviewEmail
+        self.DocumentReviewMessage = DocumentReviewMessage
         self.DocumentReviewResponsible = DocumentReviewResponsible
         self.FeeTemplateRequest = FeeTemplateRequest
         self.FlaggedDeposit = FlaggedDeposit
