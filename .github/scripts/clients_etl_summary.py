@@ -117,6 +117,13 @@ def render(payload, execution):
         if delinked:
             lines.append(f'IBKR delinked: {delinked} skipped after broker confirmation; '
                          'previous details remain historical/stale (identifiers in private overview).')
+        for reason, label in (('missing_master_account', 'missing master'),
+                              ('root_master_account', 'master account itself'),
+                              ('unsupported_master_account', 'unsupported parent / STL access deferred')):
+            skipped = sum(o.get('status') == 'skipped' and o.get('reason') == reason
+                          for o in step.get('outcomes', []))
+            if skipped:
+                lines.append(f'IBKR excluded: {skipped} skipped ({label}); not counted as fresh or failed.')
         if payload.get('operational_status') == 'completed_with_accepted_coverage_gaps':
             lines.append('Account coverage gaps match the accepted baseline; retained stale records are not current.')
         groups = defaultdict(list)

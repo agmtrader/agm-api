@@ -72,7 +72,20 @@ def refresh_details(accounts, previous, *, workers=4, rate=5, limit=0,
             reason = 'invalid_account_number'
         elif len(masters) > 1:
             reason = 'conflicting_master_accounts'
-        elif not masters:
+        if not reason and key == 'I6413690':
+            # Owner excludes the FD master itself, not its subaccounts.
+            report['outcomes'].append({'account_id': key, 'status': 'skipped',
+                'reason': 'root_master_account', 'retained_previous': key in by_id})
+            continue
+        prior_refresh = by_id.get(key, {}).get('_agm_refresh') or {}
+        confirmed_delinked = (_delinked_date(prior_refresh.get('date_delinked'))
+                              if prior_refresh.get('error') == 'account_delinked' else None)
+        if not reason and confirmed_delinked:
+            report['outcomes'].append({'account_id': key, 'status': 'skipped',
+                'reason': 'account_delinked', 'date_delinked': confirmed_delinked,
+                'retained_previous': True})
+            continue
+        if not reason and not masters:
             # Existing IBKR response is evidence of routing, not a guessed default.
             master = str(by_id.get(key, {}).get('account', {}).get('masterAccountId') or '').strip().upper()
             if master:
@@ -82,8 +95,10 @@ def refresh_details(accounts, previous, *, workers=4, rate=5, limit=0,
         if not reason and next(iter(masters)) not in IBKRWebAPI.MASTER_ACCOUNT_CREDENTIALS:
             reason = 'unsupported_master_account'
         if reason:
-            report['outcomes'].append({'account_id': key, 'status': 'failed', 'error': reason,
-                                       'retained_previous': key in by_id})
+            deferred = reason in {'missing_master_account', 'unsupported_master_account'}
+            report['outcomes'].append({'account_id': key,
+                'status': 'skipped' if deferred else 'failed',
+                'reason' if deferred else 'error': reason, 'retained_previous': key in by_id})
         else:
             eligible.append((key, next(iter(masters))))
     clients = {}
