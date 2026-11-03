@@ -8,7 +8,7 @@ from src.utils.managers.secret_manager import get_secret
 from src.utils.exception import handle_exception, ServiceError
 from src.utils.logger import logger
 from src.utils.ibkr_errors import raise_ibkr_response_error
-from src.utils.error_diagnostics import safe_diagnostic_text, safe_upstream_details
+from src.utils.error_diagnostics import safe_alias_response, safe_diagnostic_text, safe_upstream_details
 from src.utils.ibkr_statements import statement_document
 from functools import wraps
 from threading import RLock
@@ -574,10 +574,30 @@ class IBKRWebAPI:
             }
 
             response = requests.patch(url, headers=headers, data=signed_jwt)
+            response_is_json = True
+            try:
+                data = response.json()
+                response_body = safe_alias_response(data)
+            except ValueError:
+                response_is_json = False
+                data = None
+                response_body = {'non_json_body': safe_diagnostic_text(response.text, 1000)}
+            diagnostics = {
+                'http_status': response.status_code,
+                'body': response_body,
+            }
+            logger.info(f"IBKR alias update response for {account_id}: {json.dumps(diagnostics, ensure_ascii=True)}")
             if response.status_code != 200:
-                raise_ibkr_response_error(response, account_access="/accounts" in url)
+                try:
+                    raise_ibkr_response_error(response, account_access="/accounts" in url)
+                except ServiceError as exc:
+                    exc.details['ibkr_alias_response'] = diagnostics
+                    raise
 
-            data = response.json()
+            if not response_is_json:
+                raise ServiceError('IBKR returned an invalid alias response.', 502,
+                                   code='ibkr_alias_response_invalid',
+                                   details={'ibkr_alias_response': diagnostics})
             # IBKR can return HTTP 200 for a processed request as well as for
             # a rejected request. The actual outcome is in the nested
             # updateAccountAlias status, not in the HTTP status code.
@@ -600,6 +620,7 @@ class IBKRWebAPI:
                         'master_account': master_account,
                         'ibkr_status': status,
                         'ibkr_request_id': alias_result.get('requestId'),
+                        'ibkr_alias_response': diagnostics,
                     },
                 )
 

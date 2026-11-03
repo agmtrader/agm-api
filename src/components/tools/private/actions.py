@@ -14,6 +14,7 @@ from src.components.clients.contacts import create_contact_screenings_batch_from
 from src.utils.connectors.supabase import db
 import pandas as pd
 from src.utils.logger import logger
+from src.utils.error_diagnostics import safe_alias_response
 from src.utils.connectors.gmail import GmailConnector
 
 
@@ -494,7 +495,7 @@ def update_account_aliases():
         new_alias = f"{account_id} {title}"
         try:
             # When master_account is missing, the IBKR client falls back to the default credentials.
-            update_account_alias(
+            ibkr_response = update_account_alias(
                 account_id=account_id,
                 new_alias=new_alias,
                 master_account=master_account
@@ -504,6 +505,7 @@ def update_account_aliases():
                 'old_alias': old_alias,
                 'new_alias': new_alias,
                 'master_account': master_account,
+                'ibkr_response': {'http_status': 200, 'body': safe_alias_response(ibkr_response)},
             })
             logger.success(f"Updated alias for {account_id}: {old_alias} -> {new_alias}")
         except Exception as e:
@@ -517,6 +519,8 @@ def update_account_aliases():
             if isinstance(e, ServiceError):
                 failed_account['error_code'] = e.code
                 failed_account['error_details'] = e.details
+                if 'ibkr_alias_response' in e.details:
+                    failed_account['ibkr_response'] = e.details['ibkr_alias_response']
             failed_accounts.append(failed_account)
             if isinstance(e, ServiceError):
                 if e.status_code < 500:

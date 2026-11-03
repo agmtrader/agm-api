@@ -2,6 +2,52 @@
 import re
 
 
+def safe_alias_response(value):
+    """Keep alias response structure and diagnostic fields, with bounded output."""
+    fields = {
+        'status', 'statuscode', 'statustext', 'message', 'detail', 'description', 'error', 'errors',
+        'code', 'errorcode', 'value', 'requestid', 'traceid', 'datesubmitted',
+        'accountid', 'referenceaccountid', 'masteraccountid', 'accountalias',
+        'errordescription', 'errormessage', 'reason', 'responsecode', 'result', 'success',
+    }
+    remaining = 160
+
+    def clean(item, field='', depth=0):
+        nonlocal remaining
+        remaining -= 1
+        if remaining < 0 or depth > 8:
+            return '[truncated]'
+        if isinstance(item, dict):
+            result = {}
+            for key, child in list(item.items())[:40]:
+                if remaining <= 0:
+                    result['__truncated__'] = True
+                    break
+                field_name = re.sub(r'[^a-z0-9]', '', str(key).lower())
+                result[safe_diagnostic_text(str(key), 80)] = clean(child, field_name, depth + 1)
+            if len(item) > 40:
+                result['__truncated__'] = True
+            return result
+        if isinstance(item, list):
+            result = []
+            for child in item[:20]:
+                if remaining <= 0:
+                    break
+                result.append(clean(child, field, depth + 1))
+            if len(result) < len(item):
+                result.append('[truncated]')
+            return result
+        if item is None:
+            return None
+        if field not in fields:
+            return '[redacted]'
+        if isinstance(item, bool):
+            return item
+        return safe_diagnostic_text(item)
+
+    return clean(value)
+
+
 def safe_diagnostic_text(value, limit=500):
     """Bound provider error fields; never retain credentials, PDFs or envelopes."""
     if not isinstance(value, (str, int)) or isinstance(value, bool):

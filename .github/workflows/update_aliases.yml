@@ -58,6 +58,9 @@ jobs:
             # Successful responses contain the summary at the top level;
             # aggregate failures contain it under details.
             summary_json=$(echo "$body" | jq -c '.details // .')
+            # Diagnostic responses stay in the Actions log, outside email outputs.
+            echo "IBKR alias responses (sanitized):"
+            echo "$summary_json" | jq -c '((.accounts // []) + (.failed_accounts // []))[] | {account_id, ibkr_response, error_code}'
             updated=$(echo "$summary_json" | jq -r '.updated // 0')
             errors=$(echo "$summary_json" | jq -r '.failed // 0')
             pending=$(echo "$summary_json" | jq -r '.pending // 0')
