@@ -10,8 +10,8 @@ logger.announcement('Initialized Risk Profile Service', type='success')
 
 # Analyst risk assessments are not agency credit ratings. Treasuries include
 # bills, floating-rate notes and TIPS. Allocations are fractions of the portfolio.
-# The owner requires 20 assets per risk proposal. The former 4.5% holding cap
-# cannot fund 100% with 20 holdings, so it no longer applies.
+# Mixed and bond-only profiles use 20 assets. The all-equity profile uses the
+# approved 14-ETF universe. These profiles have no per-holding cap.
 risk_archetypes = [
     {
         "id": 1,
@@ -118,7 +118,7 @@ risk_archetypes = [
         "investment_grade": 0.0,
         "high_yield": 0.0,
         "equity": 1.0,
-        "positions": 20,
+        "positions": 14,
         "largest_position": None,
         "risk_assessment": "Very high",
         "horizon_fit": "10 years",

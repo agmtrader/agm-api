@@ -20,40 +20,19 @@ import heapq
 from sqlalchemy import case, func
 from itertools import count
 
-# Equity ETFs in the market snapshot. New symbols require classification before
-# entering this sleeve; fixed-income and commodity ETFs stay out of equity.
-EQUITY_ETF_SYMBOLS = frozenset({
-    'EEM', 'DIA', 'XLP', 'VEA', 'VT', 'XLY', 'XLE', 'ARKK', 'QQQ', 'XLRE',
-    'IEMG', 'IYR', 'EWJ', 'VOO', 'IBB', 'XLB', 'VTI', 'XLV', 'QQQM', 'RSP',
-    'VNQ', 'IWM', 'VXUS', 'IVV', 'XLK', 'SOXX', 'XLU', 'EFA', 'SPY', 'VWO',
-    'IEFA', 'XLF', 'XLI', 'ACWI', 'SMH', 'SCHB',
-})
-# Reviewed breadth/concentration preferences, not measured fund-quality ratings.
-# Similar index exposures share a family so additional wrappers lose priority.
-# Source references and the limits of these proxies are recorded in PROC-005.
+# Approved ETF universe and breadth preferences. Keep the daily ETF extractor
+# aligned with these symbols. Similar index exposures share a family.
 EQUITY_ETF_SELECTION_POLICY = {
-    'VT': (1.00, 'global'), 'ACWI': (0.98, 'global'),
-    'VTI': (1.00, 'us_market'), 'SCHB': (0.99, 'us_market'),
-    'VOO': (0.98, 'us_market'), 'IVV': (0.98, 'us_market'),
-    'SPY': (0.98, 'us_market'),
-    'VXUS': (0.97, 'international'),
-    'VEA': (0.96, 'developed'), 'IEFA': (0.95, 'developed'),
-    'EFA': (0.94, 'developed'),
-    'RSP': (0.94, 'us_equal_weight'), 'DIA': (0.90, 'us_blue_chip'),
-    'IWM': (0.88, 'us_small_cap'),
-    'IEMG': (0.88, 'emerging'), 'VWO': (0.88, 'emerging'),
-    'EEM': (0.85, 'emerging'), 'EWJ': (0.85, 'japan'),
-    'QQQM': (0.86, 'nasdaq_growth'), 'QQQ': (0.85, 'nasdaq_growth'),
+    'SPY': (0.98, 'us_market'), 'VOO': (0.98, 'us_market'),
+    'QQQ': (0.85, 'nasdaq_growth'), 'DIA': (0.90, 'us_blue_chip'),
     'XLP': (0.72, 'staples'), 'XLV': (0.72, 'healthcare'),
     'XLU': (0.72, 'utilities'), 'XLI': (0.70, 'industrials'),
     'XLF': (0.68, 'financials'), 'XLB': (0.68, 'materials'),
     'XLY': (0.65, 'consumer_discretionary'), 'XLE': (0.62, 'energy'),
     'XLK': (0.62, 'technology'),
-    'VNQ': (0.65, 'real_estate'), 'IYR': (0.62, 'real_estate'),
     'XLRE': (0.62, 'real_estate'),
-    'SOXX': (0.45, 'semiconductors'), 'SMH': (0.45, 'semiconductors'),
-    'IBB': (0.45, 'biotechnology'), 'ARKK': (0.35, 'innovation_theme'),
 }
+EQUITY_ETF_SYMBOLS = frozenset(EQUITY_ETF_SELECTION_POLICY)
 ETF_PLANNING_RETURN_CENTER = 10.0
 ETF_BREADTH_SCORE_WEIGHT = 0.8
 ETF_SAME_EXPOSURE_PENALTY = 0.75
@@ -870,9 +849,13 @@ def _position_limit_for_portfolio_plan(portfolio_plan: dict) -> float | None:
     return None
 
 
-def _total_assets_for_portfolio_plan(portfolio_plan: dict) -> int:
+def _total_assets_for_portfolio_plan(portfolio_plan: dict, distribution: dict) -> int:
     value = portfolio_plan.get('total_assets')
     if value is None or (isinstance(value, str) and not value.strip()):
+        if distribution['etfs'] > 0 and not any(
+            distribution[key] for key in ('treasuries', 'investment_grade', 'bonds_bb')
+        ):
+            return len(EQUITY_ETF_SYMBOLS)
         return TOTAL_ASSETS
     return value
 
@@ -957,6 +940,11 @@ def _populate_investment_proposal_from_distribution(
     active = [bucket for bucket in investment_proposal if weights.get(bucket['name'], 0) > 0]
     if total_assets < len(active):
         raise ServiceError('Total assets must cover every nonzero allocation class.', status_code=422, code='invalid_asset_count')
+    if len(active) == 1 and active[0]['name'] == 'etfs' and total_assets > len(EQUITY_ETF_SYMBOLS):
+        raise ServiceError(
+            f'All-equity proposals can hold up to {len(EQUITY_ETF_SYMBOLS)} approved ETFs.',
+            status_code=422, code='proposal_asset_count_unavailable',
+        )
     merged = context['merged_df'].copy()
     merged['S&P Equivalent_x'] = merged.apply(lambda row: _resolve_rating(row.to_dict()), axis=1)
     used = _initialize_used_symbols(context['bonds_df_no_duplicates'])
@@ -1334,7 +1322,7 @@ def create_investment_proposal_with_risk_profile(risk_profile: dict, starting_am
             investment_proposal=investment_proposal,
             distribution=distribution,
             context=context,
-            total_assets=TOTAL_ASSETS,
+            total_assets=risk_archetype['positions'],
             max_position=risk_archetype['largest_position'],
         )
 
@@ -1364,7 +1352,7 @@ def create_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
             investment_proposal=investment_proposal,
             distribution=distribution,
             context=context,
-            total_assets=_total_assets_for_portfolio_plan(portfolio_plan),
+            total_assets=_total_assets_for_portfolio_plan(portfolio_plan, distribution),
             max_position=_position_limit_for_portfolio_plan(portfolio_plan),
         )
 
@@ -1400,7 +1388,7 @@ def preview_investment_proposal_with_portfolio_plan(portfolio_plan: dict):
             investment_proposal=investment_proposal,
             distribution=distribution,
             context=context,
-            total_assets=_total_assets_for_portfolio_plan(portfolio_plan),
+            total_assets=_total_assets_for_portfolio_plan(portfolio_plan, distribution),
             max_position=_position_limit_for_portfolio_plan(portfolio_plan),
         )
     except ServiceError:

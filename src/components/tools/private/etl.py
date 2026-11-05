@@ -620,12 +620,8 @@ STOCK_SNAPSHOT_TICKERS = [
 ]
 
 ETF_SNAPSHOT_TICKERS = [
-    'SPY', 'VOO', 'IVV', 'VTI', 'QQQ', 'QQQM', 'DIA', 'IWM', 'RSP', 'SCHB',
-    'VEA', 'IEFA', 'EFA', 'VWO', 'IEMG', 'VXUS', 'ACWI', 'VT', 'EEM', 'EWJ',
-    'AGG', 'BND', 'VCIT', 'VCSH', 'LQD', 'HYG', 'JNK', 'SHY', 'IEF', 'TLT',
-    'SGOV', 'BIL', 'TIP', 'MUB', 'BNDX', 'SPAB', 'MBB', 'EMB', 'USFR', 'TFLO',
+    'SPY', 'VOO', 'QQQ', 'DIA',
     'XLK', 'XLF', 'XLV', 'XLE', 'XLY', 'XLI', 'XLP', 'XLU', 'XLB', 'XLRE',
-    'SMH', 'SOXX', 'IBB', 'ARKK', 'VNQ', 'IYR', 'SLV', 'DBC'
 ]
 
 def _initialize_ibkr_market_data_client():
