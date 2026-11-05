@@ -28,7 +28,7 @@ risk_archetypes = [
     },
     {
         "id": 2,
-        "name": "Moderado",
+        "name": "Defensivo",
         "treasuries": 41 / 96,
         "investment_grade": 35 / 96,
         "high_yield": 0.0,
@@ -42,7 +42,7 @@ risk_archetypes = [
     },
     {
         "id": 3,
-        "name": "Balanceado",
+        "name": "Moderado",
         "treasuries": 26 / 96,
         "investment_grade": 30 / 96,
         "high_yield": 5 / 96,
@@ -56,7 +56,7 @@ risk_archetypes = [
     },
     {
         "id": 4,
-        "name": "Crecimiento",
+        "name": "Balanceado",
         "treasuries": 16 / 96,
         "investment_grade": 25 / 96,
         "high_yield": 5 / 96,
