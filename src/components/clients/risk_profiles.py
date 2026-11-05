@@ -14,7 +14,7 @@ logger.announcement('Initialized Risk Profile Service', type='success')
 risk_archetypes = [
     {
         "id": 1,
-        "name": "Conservative A",
+        "name": "Conservador",
         "treasuries": 0.65,
         "investment_grade": 0.35,
         "high_yield": 0.0,
@@ -28,7 +28,7 @@ risk_archetypes = [
     },
     {
         "id": 2,
-        "name": "Conservative B",
+        "name": "Moderado",
         "treasuries": 41 / 96,
         "investment_grade": 35 / 96,
         "high_yield": 0.0,
@@ -42,7 +42,7 @@ risk_archetypes = [
     },
     {
         "id": 3,
-        "name": "Moderate A",
+        "name": "Balanceado",
         "treasuries": 26 / 96,
         "investment_grade": 30 / 96,
         "high_yield": 5 / 96,
@@ -56,7 +56,7 @@ risk_archetypes = [
     },
     {
         "id": 4,
-        "name": "Moderate B",
+        "name": "Crecimiento",
         "treasuries": 16 / 96,
         "investment_grade": 25 / 96,
         "high_yield": 5 / 96,
@@ -70,7 +70,7 @@ risk_archetypes = [
     },
     {
         "id": 5,
-        "name": "Moderate C",
+        "name": "Agresivo",
         "treasuries": 11 / 96,
         "investment_grade": 20 / 96,
         "high_yield": 5 / 96,

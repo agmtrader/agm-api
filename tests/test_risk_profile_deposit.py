@@ -75,7 +75,7 @@ def test_deposit_survives_real_create_storage_and_read_without_any_proposal(clie
     assert saved['score'] == '1'
     result = api.get('/risk_profiles/read').get_json()[0]
     assert result['estimated_deposit'] == 12345.67
-    assert result['assigned_risk_archetype'] == 'Conservative B'
+    assert result['assigned_risk_archetype'] == 'Moderado'
     assert result['answers'] == {'type': 'Conservative'}
 
 
