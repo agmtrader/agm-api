@@ -10,8 +10,7 @@ logger.announcement('Initialized Risk Profile Service', type='success')
 
 # Analyst risk assessments are not agency credit ratings. Treasuries include
 # bills, floating-rate notes and TIPS. Allocations are fractions of the portfolio.
-# Mixed and bond-only profiles use 20 assets. The all-equity profile uses the
-# approved 14-ETF universe. These profiles have no per-holding cap.
+# All active risk profiles use 20 assets and have no per-holding cap.
 risk_archetypes = [
     {
         "id": 1,
@@ -81,48 +80,6 @@ risk_archetypes = [
         "risk_assessment": "High",
         "horizon_fit": "7–10 years",
         "min_score": 2,
-        "max_score": 2.5
-    },
-    {
-        "id": 6,
-        "name": "Aggressive A",
-        "treasuries": 6 / 96,
-        "investment_grade": 10 / 96,
-        "high_yield": 5 / 96,
-        "equity": 75 / 96,
-        "positions": 20,
-        "largest_position": None,
-        "risk_assessment": "High",
-        "horizon_fit": "8–10 years",
-        "min_score": 2.5,
-        "max_score": 2.75
-    },
-    {
-        "id": 7,
-        "name": "Aggressive B",
-        "treasuries": 6 / 96,
-        "investment_grade": 5 / 96,
-        "high_yield": 5 / 96,
-        "equity": 80 / 96,
-        "positions": 20,
-        "largest_position": None,
-        "risk_assessment": "High",
-        "horizon_fit": "10 years",
-        "min_score": 2.75,
-        "max_score": 3
-    },
-    {
-        "id": 8,
-        "name": "Aggressive C",
-        "treasuries": 0.0,
-        "investment_grade": 0.0,
-        "high_yield": 0.0,
-        "equity": 1.0,
-        "positions": 14,
-        "largest_position": None,
-        "risk_assessment": "Very high",
-        "horizon_fit": "10 years",
-        "min_score": 3,
         "max_score": 10
     }
 ]
