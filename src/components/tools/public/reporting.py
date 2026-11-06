@@ -44,6 +44,7 @@ activity_statement_folders = {
 
 batch_folder_id = '1N3LwrG7IossvCrrrFufWMb26VOcRxhi8'
 resources_folder_id = '18Gtm0jl1HRfb1B_3iGidp9uPvM5ZYhOF'
+historical_ending_balances_file_id = '1WYtB9KtvWoRxg-yROembfuP2FLtn3-v4'
 ofac_backup_folder_id = '13W9sXMbFvWtXPsEy6FiZJrQDHV3WYDD6'
 uk_backup_folder_id = '1-57AG_nFE2elzOygdc7PGqdB4Y9k_7h6'
 un_backup_folder_id = '1AwTRSLSi0D3kzyhFx9Be53ugvo7uJgpd'
@@ -942,10 +943,11 @@ def get_management_commissions():
 @handle_exception
 def get_ending_balances_from_statements():
     """
-    Build ending balances directly from monthly activity statement CSV files.
+    Combine the historical ending-balances workbook with later monthly statements.
     
     :return: Response object with ending balances from statements report or error message
     """
+    historical_file = Drive.get_file_info_by_id(historical_ending_balances_file_id)
     statement_files = []
     seen_account_months = set()
     months_by_account = {account: set() for account in activity_statement_folders}
@@ -978,10 +980,12 @@ def get_ending_balances_from_statements():
         )
 
     statement_files.sort(key=lambda item: (item[1], item[2], item[0]))
-    cache_key = tuple(
+    statement_cache_key = tuple(
         (account, year, month, file_info['id'], file_info.get('modifiedTime'))
         for account, year, month, file_info in statement_files
     )
+    current_month = datetime.now(pytz.timezone('America/Costa_Rica')).strftime('%Y-%m')
+    cache_key = (historical_file['id'], historical_file.get('modifiedTime'), current_month, statement_cache_key)
 
     with _ending_balances_cache_lock:
         if _ending_balances_cache['key'] == cache_key:
@@ -996,9 +1000,25 @@ def get_ending_balances_from_statements():
                 statement_rows = _extract_change_in_nav_rows(statement_bytes, account, year, month)
             return file_cache_key, statement_rows
 
-        ending_balances = []
+        workbook = Drive.download_file(file_id=historical_file['id'], parse=False)
+        history = pd.read_excel(io.BytesIO(workbook), sheet_name='Ending Balances', header=None,
+                                names=['Date', 'Description', 'Amount', 'Account', 'EOM'])
+        # The source workbook has data in its first row and a header at the end.
+        history = history[history['Date'] != 'Date'].copy()
+        history['EOM'] = pd.to_datetime(history['EOM'], errors='raise')
+        history['Date'] = pd.to_datetime(history['Date'], errors='raise')
+        history['Amount'] = pd.to_numeric(history['Amount'], errors='raise')
+        if history.empty or history[['Date', 'EOM', 'Description', 'Amount', 'Account']].isna().any().any():
+            raise ServiceError('Historical ending balances workbook is empty or incomplete', status_code=500)
+        history = history[history['EOM'].dt.strftime('%Y-%m') < current_month]
+        if history.empty:
+            raise ServiceError('Historical ending balances workbook has no completed months', status_code=500)
+        # Use source months as a unit to avoid adding overlapping accounts twice.
+        cutoff = history['EOM'].dt.strftime('%Y-%m').max()
+        ending_balances = history.to_dict(orient='records')
         current_file_cache = {}
-        for file_cache_key, statement_rows in read_report_files(statement_files, read_statement):
+        later_files = [item for item in statement_files if f'{item[1]}-{item[2]}' > cutoff]
+        for file_cache_key, statement_rows in read_report_files(later_files, read_statement):
             current_file_cache[file_cache_key] = statement_rows
             ending_balances.extend(statement_rows)
 
