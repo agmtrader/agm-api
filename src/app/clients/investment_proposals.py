@@ -8,8 +8,19 @@ from src.components.clients.investment_proposals import (
     read_investment_proposals,
 )
 from src.utils.response import format_response
+from src.utils.authz import has_scope
+from src.utils.exception import ServiceError
+from src.components.clients.proposal_portfolio import read_proposal_portfolio
 
 bp = Blueprint('investment_proposals', __name__)
+
+@bp.route('/portfolio', methods=['GET'])
+@format_response
+def read_portfolio_route():
+    """Read a contact-linked IBKR portfolio for a capital-addition scenario."""
+    if not has_scope('accounts/read'):
+        raise ServiceError('Account access is required.', 403, code='portfolio_forbidden')
+    return read_proposal_portfolio(request.args.get('account_id'), request.args.get('contact_id'))
 
 @bp.route('/create/risk', methods=['POST'])
 @format_response

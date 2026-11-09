@@ -26,7 +26,7 @@ jobs:
         with:
           project_id: agm-datalake
       - name: Synchronize committed market job source
-        run: python3 dev/sync_market_job.py --source-ref "$GITHUB_SHA" --apply
+        run: python3 operations/sync_market_job.py --source-ref "$GITHUB_SHA" --apply
       - name: Execute market job and wait for its terminal outcome
         id: execute
         shell: bash

@@ -36,6 +36,6 @@ steps:
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     args:
-      - 'dev/deploy_api.sh'
+      - 'operations/deploy_api.sh'
       - 'us-central1-docker.pkg.dev/agm-datalake/cloud-run-source-deploy/agm-api:${_IMAGE_TAG}'
       - '${_IMAGE_TAG}'

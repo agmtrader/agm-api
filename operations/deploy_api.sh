@@ -2,7 +2,7 @@
 # Validate the exact candidate image before changing service traffic.
 set -euo pipefail
 
-task_image=${1:?Usage: bash dev/deploy_api.sh IMAGE [COMMIT]}
+task_image=${1:?Usage: bash operations/deploy_api.sh IMAGE [COMMIT]}
 task_commit=${2:-}
 if [[ "$task_image" != *@* ]]; then
   # Read only the registry tag mapping. `images describe` also queries
@@ -36,7 +36,7 @@ trap cleanup EXIT
 
 gcloud run jobs deploy "$task_job" \
   --project=agm-datalake --region=us-central1 --image="$task_image" \
-  --command=python --args=-m,dev.schema_preflight \
+  --command=python --args=-m,operations.schema_preflight \
   --tasks=1 --parallelism=1 --max-retries=0 --task-timeout=300s \
   --cpu=1 --memory=2Gi \
   --service-account=agm-api@agm-datalake.iam.gserviceaccount.com \

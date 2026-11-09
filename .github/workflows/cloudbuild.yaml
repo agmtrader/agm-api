@@ -36,4 +36,4 @@ jobs:
             --quiet
 
       - name: Synchronize Clients job source after successful API deployment
-        run: python3 dev/sync_clients_job.py --source-ref HEAD --apply
+        run: python3 operations/sync_clients_job.py --source-ref HEAD --apply

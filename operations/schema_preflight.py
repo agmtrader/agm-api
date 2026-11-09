@@ -1,6 +1,6 @@
 """Read-only candidate-image schema check, run before deployment.
 
-Run from the repo root: python -m dev.schema_preflight
+Run from the repo root: python -m operations.schema_preflight
 Uses existing environment/ADC, imports no Flask app and ignores DEV_MODE.
 """
 from time import perf_counter

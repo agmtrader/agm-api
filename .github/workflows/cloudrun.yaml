@@ -32,4 +32,4 @@ jobs:
           candidate_image=$(gcloud run revisions describe "$active_revision" \
             --project=agm-datalake --region=us-central1 \
             --format 'value(status.imageDigest)')
-          bash dev/deploy_api.sh "$candidate_image"
+          bash operations/deploy_api.sh "$candidate_image"
