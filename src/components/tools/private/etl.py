@@ -495,6 +495,11 @@ def task_account_population(accounts, details):
     return selected
 
 # Market data
+# Existing client holdings requested for the bond snapshot. Inclusion in the
+# data feed does not override proposal eligibility or credit-rating controls.
+HELD_BOND_CONIDS = ('584713211', '46953070', '68209141', '786582601',
+                    '44472022', '508663842', '350002280', '367233110')
+
 @_with_ibkr_market_data_session
 def extract_bond_snapshot(config=None):
     """
@@ -519,12 +524,12 @@ def extract_bond_snapshot(config=None):
             retry_count += 1
             time.sleep(2)
 
-        first_snapshot = ibkr_trading_api.get_market_data_snapshot(','.join(conids[:100]))
-        second_snapshot = ibkr_trading_api.get_market_data_snapshot(','.join(conids[101:200]))
-        third_snapshot = ibkr_trading_api.get_market_data_snapshot(','.join(conids[201:300]))
-        fourth_snapshot = ibkr_trading_api.get_market_data_snapshot(','.join(conids[301:400]))
-        fifth_snapshot = ibkr_trading_api.get_market_data_snapshot(','.join(conids[401:500]))
-        df = pd.DataFrame(first_snapshot + second_snapshot + third_snapshot + fourth_snapshot + fifth_snapshot)
+        # Preserve watchlist order and request every identifier exactly once.
+        conids = list(dict.fromkeys([*conids, *HELD_BOND_CONIDS]))
+        snapshots = []
+        for offset in range(0, len(conids), 100):
+            snapshots.extend(ibkr_trading_api.get_market_data_snapshot(','.join(conids[offset:offset + 100])))
+        df = pd.DataFrame(snapshots)
         df.columns = df.columns.str.capitalize()
 
         df['Financial Instrument'] = df['Symbol'] + ' ' + df['Contract_description_2']
