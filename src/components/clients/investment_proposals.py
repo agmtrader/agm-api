@@ -1232,6 +1232,12 @@ def _build_investment_proposal_with_assets(assets: list[dict]):
                     bucket_name = _get_bucket_for_rating(rating)
                     current_yield_pct = _resolve_current_yield_percent(matched_row)
                     expected_bucket = 'investment_grade' if source_bucket == 'INVESTMENT_GRADE' else 'bonds_bb'
+                    # Custom proposals accept other corporate bond ratings and
+                    # unrated bonds in the broader speculative/other group.
+                    # Automated risk and planner selection still use the
+                    # stricter rating-based candidate pools.
+                    if source_bucket == 'HIGH_YIELD' and not bucket_name:
+                        bucket_name = 'bonds_bb'
                     if bucket_name != expected_bucket:
                         raise ServiceError('The bond rating does not match the selected proposal category.',
                                            status_code=422, code='invalid_proposal_asset_class')

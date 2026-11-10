@@ -62,7 +62,8 @@ def main():
                     details = getattr(error, 'details', {})
                     scans.append({'scan_type': scan_type, 'error': str(error), 'details': details})
                     save()
-                    if details.get('ibkr_status') == 500 and details.get('ibkr_message') == 'Finished: EMPTY response is received.':
+                    message = details.get('ibkr_message', '')
+                    if details.get('ibkr_status') == 500 and (message == 'Finished: EMPTY response is received.' or message == f'Unresolvable scanType {scan_type}'):
                         print(json.dumps(scans[-1]), file=sys.stderr, flush=True)
                         continue
                     break
@@ -83,12 +84,13 @@ def main():
                               'rows_without_con_id': missing,
                               'note': 'Results may be capped; sort behavior for BOND is unverified.',
                               'contracts': list(contracts.values())}, indent=2, default=str))
-            if any('error' in scan for scan in scans):
+            if len(scans) < len(scan_types):
                 return 1
     except Exception as error:
         print(f'Scanner failed: {error}', file=sys.stderr)
         return 1
-    return 0
+    from bond_market_data import enrich
+    return enrich()
 
 
 if __name__ == '__main__':

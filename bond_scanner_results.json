@@ -2639,6 +2639,556 @@
       "scan_type": "SCAN_lipperEPSGrowth3yr_DESC",
       "returned_rows": 50,
       "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperEPSGrowth3yr_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperEPSGrowth5yr_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperEPSGrowth5yr_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperPrice2EarningsRatio_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperPrice2EarningsRatio_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperPrice2BookRatio_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperPrice2BookRatio_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperPrice2SalesRatio_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperPrice2SalesRatio_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnAssets1yr_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnAssets1yr_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnAssets3yr_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnAssets3yr_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnEquity1yr_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnEquity1yr_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnEquity3yr_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnEquity3yr_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnInvestment1yr_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnInvestment1yr_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnInvestment3yr_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnInvestment3yr_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperSales2TotalAssets_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperSales2TotalAssets_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperSalesPerShareGrowth1yr_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperSalesPerShareGrowth1yr_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperSalesPerShareGrowth3yr_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperSalesPerShareGrowth3yr_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperTotalAssets2TotalEquity_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperTotalAssets2TotalEquity_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperTotalDebt2TotalCapital_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperTotalDebt2TotalCapital_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperTotalDebt2TotalEquity_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperTotalDebt2TotalEquity_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperPrice2Cash_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperPrice2Cash_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperRelativeStrength_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperRelativeStrength_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnCapital_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnCapital_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnCapital3yr_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnCapital3yr_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperLatestCompositeZScore_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperLatestCompositeZScore_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperLatestPrice2EarningsZScore_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperLatestPrice2EarningsZScore_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperLatestPrice2BookZScore_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperLatestPrice2BookZScore_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperLatestPrice2SalesZScore_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperLatestPrice2SalesZScore_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperLatestSPSGrowthZScore_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperLatestSPSGrowthZScore_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperAverageFinalCompositeZScore_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperAverageFinalCompositeZScore_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperWeightedFinalCompositeZScore_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperWeightedFinalCompositeZScore_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperDividendYieldZScore_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperDividendYieldZScore_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnEquityZScore_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperReturnOnEquityZScore_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperYieldToMaturity_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperEffectiveMaturity_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperEffectiveMaturity_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperCalculatedAverageQuality_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperCalculatedAverageQuality_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperFundLeverageRatio_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_lipperFundLeverageRatio_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfYTM_WgtAvg_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfYTM_WgtAvg_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfCPN_WgtAvg_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfCPN_WgtAvg_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfCurYld_WgtAvg_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfCurYld_WgtAvg_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfMaturity_WgtAvg_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfMaturity_WgtAvg_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfDUR_WgtAvg_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfDUR_WgtAvg_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfMOD_DUR_WgtAvg_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfMOD_DUR_WgtAvg_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfCONVEX_WgtAvg_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfCONVEX_WgtAvg_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfNum_Distinct_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfNum_Distinct_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfPct_Fixed_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfPct_Fixed_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfPct_at_Mty_DESC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "SCAN_etfPct_at_Mty_ASC",
+      "returned_rows": 50,
+      "new_unique_contracts": 0
+    },
+    {
+      "scan_type": "HIGH_ETF_MOODY_RATING_ALL",
+      "error": "The IBKR request could not be completed. Please try again later or contact support.",
+      "details": {
+        "ibkr_status": 500,
+        "ibkr_message": "Finished: EMPTY response is received."
+      }
+    },
+    {
+      "scan_type": "LOW_ETF_MOODY_RATING_ALL",
+      "error": "The IBKR request could not be completed. Please try again later or contact support.",
+      "details": {
+        "ibkr_status": 500,
+        "ibkr_message": "Finished: EMPTY response is received."
+      }
+    },
+    {
+      "scan_type": "HIGH_ETF_SP_RATING_ALL",
+      "error": "The IBKR request could not be completed. Please try again later or contact support.",
+      "details": {
+        "ibkr_status": 500,
+        "ibkr_message": "Unresolvable scanType HIGH_ETF_SP_RATING_ALL"
+      }
+    },
+    {
+      "scan_type": "LOW_ETF_SP_RATING_ALL",
+      "error": "The IBKR request could not be completed. Please try again later or contact support.",
+      "details": {
+        "ibkr_status": 500,
+        "ibkr_message": "Unresolvable scanType LOW_ETF_SP_RATING_ALL"
+      }
+    },
+    {
+      "scan_type": "COMBO_LATEST_TRADE",
+      "error": "The IBKR request could not be completed. Please try again later or contact support.",
+      "details": {
+        "ibkr_status": 500,
+        "ibkr_message": "Unresolvable scanType COMBO_LATEST_TRADE"
+      }
+    },
+    {
+      "scan_type": "COMBO_QUOTES",
+      "error": "The IBKR request could not be completed. Please try again later or contact support.",
+      "details": {
+        "ibkr_status": 500,
+        "ibkr_message": "Unresolvable scanType COMBO_QUOTES"
+      }
+    },
+    {
+      "scan_type": "COMBO_MOST_ACTIVE",
+      "error": "The IBKR request could not be completed. Please try again later or contact support.",
+      "details": {
+        "ibkr_status": 500,
+        "ibkr_message": "Unresolvable scanType COMBO_MOST_ACTIVE"
+      }
+    },
+    {
+      "scan_type": "COMBO_ALL_TRADE_TIME_ASC",
+      "error": "The IBKR request could not be completed. Please try again later or contact support.",
+      "details": {
+        "ibkr_status": 500,
+        "ibkr_message": "Unresolvable scanType COMBO_ALL_TRADE_TIME_ASC"
+      }
+    },
+    {
+      "scan_type": "COMBO_ALL_TRADE_TIME_DESC",
+      "error": "The IBKR request could not be completed. Please try again later or contact support.",
+      "details": {
+        "ibkr_status": 500,
+        "ibkr_message": "Unresolvable scanType COMBO_ALL_TRADE_TIME_DESC"
+      }
+    },
+    {
+      "scan_type": "COMBO_ALL_QUOTE_TIME_ASC",
+      "error": "The IBKR request could not be completed. Please try again later or contact support.",
+      "details": {
+        "ibkr_status": 500,
+        "ibkr_message": "Unresolvable scanType COMBO_ALL_QUOTE_TIME_ASC"
+      }
+    },
+    {
+      "scan_type": "COMBO_ALL_QUOTE_TIME_DESC",
+      "error": "The IBKR request could not be completed. Please try again later or contact support.",
+      "details": {
+        "ibkr_status": 500,
+        "ibkr_message": "Unresolvable scanType COMBO_ALL_QUOTE_TIME_DESC"
+      }
+    },
+    {
+      "scan_type": "COMBO_ALL_TRADE_QUOTE_TIME_ASC",
+      "error": "The IBKR request could not be completed. Please try again later or contact support.",
+      "details": {
+        "ibkr_status": 500,
+        "ibkr_message": "Unresolvable scanType COMBO_ALL_TRADE_QUOTE_TIME_ASC"
+      }
+    },
+    {
+      "scan_type": "COMBO_ALL_TRADE_QUOTE_TIME_DESC",
+      "error": "The IBKR request could not be completed. Please try again later or contact support.",
+      "details": {
+        "ibkr_status": 500,
+        "ibkr_message": "Unresolvable scanType COMBO_ALL_TRADE_QUOTE_TIME_DESC"
+      }
+    },
+    {
+      "scan_type": "COMBO_ALL_VOLUME_ASC",
+      "error": "The IBKR request could not be completed. Please try again later or contact support.",
+      "details": {
+        "ibkr_status": 500,
+        "ibkr_message": "Unresolvable scanType COMBO_ALL_VOLUME_ASC"
+      }
+    },
+    {
+      "scan_type": "COMBO_ALL_VOLUME_DESC",
+      "error": "The IBKR request could not be completed. Please try again later or contact support.",
+      "details": {
+        "ibkr_status": 500,
+        "ibkr_message": "Unresolvable scanType COMBO_ALL_VOLUME_DESC"
+      }
     }
   ],
   "unique_contracts": 1622,
