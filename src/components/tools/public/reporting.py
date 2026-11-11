@@ -619,7 +619,7 @@ def get_monthly_deposits_withdrawals(years: list, months: list, start_date=None,
     combined_deposits_withdrawals_df = combined_deposits_withdrawals_df.fillna('')
 
     if start_date or end_date:
-        parsed_datetimes = pd.to_datetime(combined_deposits_withdrawals_df['Date/Time'], errors='coerce')
+        parsed_datetimes = pd.to_datetime(combined_deposits_withdrawals_df['Date/Time'], format='mixed', errors='coerce')
         mask = parsed_datetimes.notna()
 
         if start_date:

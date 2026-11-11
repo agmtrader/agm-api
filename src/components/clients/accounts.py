@@ -273,6 +273,22 @@ def send_credentials_email(content, client_email, lang='es', cc=''):
     return gmail.send_email(content, client_email, subject, f'credentials_{lang}', bcc='', cc='jc@agmtechnology.com,hc@agmtechnology.com,mjc@agmtechnology.com,' + cc)
 
 @handle_exception
+def send_demo_account_email(payload):
+    fields = ('client_email', 'client_name', 'username', 'password')
+    if any(not isinstance(payload.get(field), str) or not payload[field].strip() for field in fields):
+        raise ServiceError('Recipient, client name, username and password are required', status_code=400)
+    lang = payload.get('lang')
+    if lang not in ('es', 'en'):
+        raise ServiceError('Invalid language', status_code=400)
+    email = payload['client_email'].strip()
+    if '\n' in email or '\r' in email or '@' not in email:
+        raise ServiceError('Invalid recipient email', status_code=400)
+    content = {'client_name': payload['client_name'].strip(), 'username': payload['username'].strip(), 'password': payload['password']}
+    subject = 'Bienvenido a AGM: acceso de demostración' if lang == 'es' else 'Welcome to AGM: demo access'
+    GmailConnector().send_email(content, email, subject, f'demo_account_{lang}', bcc='', cc='')
+    return {'status': 'success'}
+
+@handle_exception
 def send_transfer_instructions_email(content, client_email, lang='es', cc='', initial=True):
     gmail = GmailConnector()
     subject = 'Instrucciones de transferencia' if lang == 'es' else 'Transfer Instructions'

@@ -1,8 +1,18 @@
-from flask import Blueprint, request
+from flask import Blueprint, request, g
 from src.components.clients.flagged_deposits import read_flagged_deposits, create_flagged_deposit
+from src.components.clients import transaction_reviews
 from src.utils.response import format_response
+from src.utils.authz import require_scope
 
 bp = Blueprint('flagged_deposits', __name__)
+
+@bp.route('/reviews', methods=['GET', 'POST'])
+@require_scope('all')
+@format_response
+def reviews():
+    if request.method == 'GET':
+        return transaction_reviews.list_events()
+    return transaction_reviews.append_event(request.get_json(silent=True), g.current_user)
 
 @bp.route('/create', methods=['POST'])
 @format_response

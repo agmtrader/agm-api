@@ -401,6 +401,7 @@ class Supabase:
             account_id = Column(UUID(as_uuid=True), ForeignKey('account.id', ondelete='SET NULL', onupdate='CASCADE'), nullable=False)
             transaction_id = Column(Text, nullable=False)
             comment = Column(Text, nullable=False)
+
         
         class InvestmentProposal(self.Base):
             __tablename__ = 'investment_proposal'

@@ -9,6 +9,7 @@ from src.components.clients.accounts import get_account_statements, update_accou
 from src.utils.authz import require_scope
 from src.components.clients.account_holder_service import get_account_holder_edit_context, change_account_holder_detail
 from src.components.clients.accounts import get_registration_tasks, get_login_messages
+from src.components.clients.accounts import send_demo_account_email
 from src.components.clients import external_transfers
 from src.utils.exception import ServiceError
 
@@ -150,6 +151,12 @@ def send_credentials_email_route():
         send_welcome=payload.get('send_welcome', False),
         client_name=payload.get('client_name', ''),
     )
+
+@bp.route('/send_demo_account_email', methods=['POST'])
+@require_scope('all')
+@format_response
+def send_demo_account_email_route():
+    return send_demo_account_email(request.get_json(silent=True) or {})
 
 @bp.route('/send_transfer_instructions_email', methods=['POST'])
 @format_response

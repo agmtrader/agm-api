@@ -32,6 +32,7 @@ tmp/
 sandbox.py
 
 *.sql
+!operations/transaction_review_event.sql
 !supabase/migrations/*.sql
 
 # Byte-compiled / optimized / DLL files
