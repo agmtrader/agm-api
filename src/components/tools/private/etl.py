@@ -617,7 +617,7 @@ def extract_bond_snapshot(config=None):
     A failed or incomplete scanner/enrichment fails before the source upload.
     Sessions are bounded to avoid the known brokerage-session lifetime limit.
     """
-    from bond_market_data import build_comparison
+    from src.components.tools.private.bond_market_data import build_comparison
     api = IBKRTradingAPI()
     with api.market_data_session(credential='aguiagm2024'):
         catalogue = api.get_market_scanner_params()
