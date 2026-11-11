@@ -1,10 +1,12 @@
 from flask import Blueprint, request
+from uuid import UUID
 
 from src.components.clients.accounts import create_account, read_accounts, submit_documents, read_instructions, send_to_ibkr, send_account_credentials_email, send_transfer_instructions_email, send_welcome_email, send_funding_notification_email, send_missing_documents_email, link_account_contact, read_account_contacts, update_account_contact, read_account_comments, create_account_comment, update_account_comment, delete_account_comment
 
 from src.components.clients.accounts import read_account_details, get_forms, submit_documents, update_account, get_pending_tasks, apply_fee_template, add_trading_permissions, get_product_country_bundles, get_complex_asset_transfer_brokers, read_ibkr_account_positions, transfer_positions_externally_complex, get_status_of_instruction, add_clp_capability, deposit_funds, get_wire_instructions, change_financial_information, change_account_holder_external_id, withdraw_funds, get_financial_ranges, get_business_and_occupation, view_active_bank_instructions, view_withdrawable_cash, close_account
 
-from src.components.clients.accounts import get_account_statements
+from src.components.clients.accounts import get_account_statements, update_account_alias
+from src.utils.authz import require_scope
 from src.components.clients.account_holder_service import get_account_holder_edit_context, change_account_holder_detail
 from src.components.clients.accounts import get_registration_tasks, get_login_messages
 from src.components.clients import external_transfers
@@ -13,6 +15,33 @@ from src.utils.exception import ServiceError
 from src.utils.response import format_response
 
 bp = Blueprint('accounts', __name__)
+
+@bp.route('/ibkr/alias', methods=['POST'])
+@require_scope('all')
+@format_response
+def update_alias_route():
+    """Submit one alias using account identifiers from the stored account."""
+    payload = request.get_json(silent=True) or {}
+    account_id = payload.get('account_id')
+    alias = payload.get('alias')
+    if not isinstance(account_id, str) or not account_id.strip():
+        raise ServiceError('Account ID is required.', 400)
+    try:
+        UUID(account_id.strip())
+    except ValueError:
+        raise ServiceError('Invalid account ID.', 400)
+    if not isinstance(alias, str) or not alias.strip() or len(alias.strip()) > 80:
+        raise ServiceError('Alias must be between 1 and 80 characters.', 400)
+    accounts = read_accounts(query={'id': account_id.strip()})
+    if len(accounts) != 1:
+        raise ServiceError('Account not found.', 404)
+    account = accounts[0]
+    number = account.get('ibkr_account_number')
+    master = account.get('master_account')
+    if not number or master not in ('I6413690', 'F10740574'):
+        raise ServiceError('A supported master account and IBKR account number are required.', 409)
+    update_account_alias(account_id=number, new_alias=alias.strip(), master_account=master)
+    return {'status': 'submitted', 'message': 'Verify the alias in IBKR before submitting another change.'}
 
 @bp.route('/comments', methods=['GET'])
 @format_response
