@@ -500,8 +500,7 @@ def task_account_population(accounts, details):
 HELD_BOND_CONIDS = ('584713211', '46953070', '68209141', '786582601',
                     '44472022', '508663842', '350002280', '367233110')
 
-@_with_ibkr_market_data_session
-def extract_bond_snapshot(config=None):
+def _extract_watchlist_bond_snapshot(config=None):
     """
     Extract the bond snapshot.
     
@@ -610,6 +609,95 @@ def extract_bond_snapshot(config=None):
     except Exception as e:
         logger.error(f'Error extracting bond snapshot: {e}')
         raise Exception(f'Error extracting bond snapshot: {e}')
+
+def extract_bond_snapshot(config=None):
+    """Build the corporate bond report from a fresh IBKR scanner run.
+
+    A failed or incomplete scanner/enrichment fails before the source upload.
+    Sessions are bounded to avoid the known brokerage-session lifetime limit.
+    """
+    from bond_market_data import build_comparison
+    api = IBKRTradingAPI()
+    with api.market_data_session(credential='aguiagm2024'):
+        catalogue = api.get_market_scanner_params()
+    if not isinstance(catalogue, dict) or not isinstance(catalogue.get('scan_type_list'), list):
+        raise ValueError('IBKR scanner catalogue unavailable')
+    codes = list(dict.fromkeys(item['code'] for item in catalogue['scan_type_list']
+                              if isinstance(item, dict) and isinstance(item.get('code'), str) and item['code']))
+    if not codes:
+        raise ValueError('IBKR scanner catalogue is empty')
+    contracts = {}
+    successful, rejected = set(), 0
+    required = {'TOP_PERC_GAIN', 'TOP_PERC_LOSE', 'MOST_ACTIVE', 'MOST_ACTIVE_USD',
+                'TOP_TRADE_COUNT', 'TOP_TRADE_RATE', 'TOP_PRICE_RANGE',
+                'TOP_VOLUME_RATE', 'NOT_YET_TRADED_TODAY', 'MOST_ACTIVE_AVG_USD'}
+    if not required.issubset(codes):
+        raise ValueError('IBKR scanner catalogue lacks required bond scans')
+    for start in range(0, len(codes), 100):
+        with api.market_data_session(credential='aguiagm2024'):
+            for code in codes[start:start + 100]:
+                time.sleep(1.5)
+                try:
+                    response = api.run_market_scanner('BOND', code, '', [])
+                except ServiceError as exc:
+                    details = exc.details or {}
+                    message = details.get('ibkr_message', '')
+                    if details.get('ibkr_status') == 500 and (message == 'Finished: EMPTY response is received.' or message == f'Unresolvable scanType {code}'):
+                        rejected += 1
+                        continue
+                    raise
+                if not isinstance(response, dict) or not isinstance(response.get('contracts'), list):
+                    raise ValueError(f'Malformed scanner response for {code}')
+                successful.add(code)
+                for row in response['contracts']:
+                    if not isinstance(row, dict) or row.get('con_id') is None or row.get('sec_type') != 'BOND':
+                        raise ValueError(f'Invalid bond scanner record for {code}')
+                    contracts.setdefault(str(row['con_id']), row)
+    if not required.issubset(successful) or not contracts:
+        raise ValueError('Required bond scanner types failed or returned no contracts')
+    logger.info(f'Bond scanner types={len(codes)} successful={len(successful)} unavailable={rejected} unique={len(contracts)}')
+    ids = list(contracts)
+    records = {}
+    # Each batch has its own brokerage session so market-data subscriptions are
+    # released on logout and one user cannot exhaust concurrent market lines.
+    for start in range(0, len(ids), 50):
+        batch = ids[start:start + 50]
+        with api.market_data_session(credential='aguiagm2024'):
+            response = requests.get(api.BASE_URL + '/v1/api/trsrv/secdef',
+                headers=api._require_sso_headers(), params={'conids': ','.join(batch)}, timeout=(10, 90))
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict) or not isinstance(payload.get('secdef'), list):
+                raise ValueError('Malformed bond security definitions')
+            definitions = {str(row['conid']): row for row in payload['secdef'] if isinstance(row, dict) and row.get('conid') is not None}
+            snapshots = api.get_market_data_snapshot(','.join(batch))
+            if not isinstance(snapshots, list):
+                raise ValueError('Malformed bond market snapshots')
+            snapshots = {str(row['conid']): row for row in snapshots if isinstance(row, dict) and row.get('conid') is not None}
+            if set(batch) != set(definitions) or set(batch) != set(snapshots):
+                raise ValueError('Incomplete bond security definitions or snapshots')
+            if any(not row.get('SYMBOL') or not row.get('CONTRACT_DESCRIPTION_2') for row in snapshots.values()):
+                raise ValueError('Bond snapshot missing instrument identity')
+            for conid, definition in definitions.items():
+                bond = definition.get('bond')
+                if not definition.get('currency') or not isinstance(bond, dict) or bond.get('isDefaulted') not in ('Y', 'N', 'T', 'F'):
+                    raise ValueError(f'Missing currency or default status for bond {conid}')
+            stamp = datetime.now(pytz.UTC).isoformat()
+            for conid in batch:
+                records[conid] = {'conid': conid, 'scanner': contracts[conid], 'snapshot': snapshots[conid],
+                                  'definition': definitions[conid], 'retrieved_at_utc': stamp}
+    report = build_comparison(records)
+    if report.empty:
+        raise ValueError('No eligible USD non-defaulted scanner bonds')
+    # Preserve the established public report schema; supplemental provenance is
+    # available only in the development comparison.
+    report = report.iloc[:, :34].copy()
+    report_config = config or _get_file_config('bonds_snapshot', [market_data_etl])
+    if report_config is None:
+        raise ValueError('Missing report config for bonds_snapshot')
+    _upload_market_snapshot(report_config, report)
+    return report
+
 
 STOCK_SNAPSHOT_TICKERS = [
     'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'GOOG', 'META', 'TSLA', 'AVGO',
@@ -1897,7 +1985,7 @@ market_data_report_configs = [
         'flex': False,
         'backup_name': 'bonds_snapshot' + '_' + today_date + '.csv',
         'extract_func': extract_bond_snapshot,
-        'transform_func': process_bonds,
+        'transform_func': None,
         'output_filename': 'ibkr_bonds_snapshot.csv'
     },
     {

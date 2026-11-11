@@ -9,7 +9,7 @@ import zipfile
 import google.auth
 from google.auth.transport.requests import AuthorizedSession
 
-ALLOWED = {'src/jobs/__init__.py', 'src/jobs/market_etl.py', 'src/jobs/storage.py',
+ALLOWED = {'bond_market_data.py', 'src/jobs/__init__.py', 'src/jobs/market_etl.py', 'src/jobs/storage.py',
            'src/utils/ibkr_compliance.py',
            'src/jobs/market_result.py', 'src/components/tools/private/etl.py',
            'src/utils/connectors/ibkr_trading_api.py'}
