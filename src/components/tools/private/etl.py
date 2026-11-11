@@ -9,7 +9,7 @@ import pandas as pd
 import requests
 import re
 import json
-from functools import wraps
+from functools import partial, wraps
 from copy import deepcopy
 import xml.etree.ElementTree as ET
 from io import StringIO, BytesIO
@@ -32,11 +32,12 @@ Drive = LazyClient(GoogleDrive)
 ibkr_trading_api = LazyClient(IBKRTradingAPI)
 
 
-def _with_ibkr_market_data_session(func):
+def _with_ibkr_market_data_session(func, *, credential=None):
     """Wrap one market-data extract in the complete IBKR session lifecycle."""
     @wraps(func)
     def wrapped(*args, **kwargs):
-        with ibkr_trading_api.market_data_session():
+        session_options = {'credential': credential} if credential is not None else {}
+        with ibkr_trading_api.market_data_session(**session_options):
             try:
                 return func(*args, **kwargs)
             finally:
@@ -1043,7 +1044,7 @@ def _extract_equity_like_snapshot(
         _upload_market_snapshot(market_data_snapshot_config, df)
     return df
 
-@_with_ibkr_market_data_session
+@partial(_with_ibkr_market_data_session, credential='aguiagm2024')
 def extract_stock_snapshot(config=None, dev_mode: bool | None = None):
     return _extract_equity_like_snapshot(
         tickers=STOCK_SNAPSHOT_TICKERS,
@@ -1053,7 +1054,7 @@ def extract_stock_snapshot(config=None, dev_mode: bool | None = None):
         dev_mode=dev_mode,
     )
 
-@_with_ibkr_market_data_session
+@partial(_with_ibkr_market_data_session, credential='aguiagm2024')
 def extract_etf_snapshot(
     config=None,
     upload: bool = True,
@@ -1120,7 +1121,20 @@ def _get_market_data_snapshot_in_chunks(api_client, conids: list, chunk_size: in
 
     return snapshots
 
-@_with_ibkr_market_data_session
+UST_ADDITIONAL_CONIDS = (
+    '593154351', '48791675', '659498601', '522982420', '303377645',
+    '29108910', '523641236', '282967237', '46937128', '389291071',
+    '326483986', '661772874', '558175919', '262951326', '627802995',
+    '57534805', '350345444', '644075864', '504966467', '610211624',
+    '46937453', '375110649', '29108927', '72950915', '467744763',
+    '575882634', '439085946', '540208769', '401365518', '355030552',
+    '144479791', '307138395', '123224264', '84164798', '546185388',
+    '473099415', '222829296', '404874094', '102531942', '184313918',
+    '266367965', '615307212',
+)
+
+
+@partial(_with_ibkr_market_data_session, credential='aguiagm2024')
 def extract_ust_bond_snapshot(config=None):
     
     from src.utils.connectors.drive import GoogleDrive
@@ -1129,17 +1143,17 @@ def extract_ust_bond_snapshot(config=None):
 
     ust_conids = _collect_watchlist_bond_conids(
         api_client=ibkr_trading_api,
-        watchlist_id='122',
-        max_retries=5,
-        sleep_seconds=2,
-        target_size=500
+        watchlist_id='NAMED_USTREASALL',
+        max_retries=1,
     )
     if not ust_conids:
-        raise Exception('No UST bond conids found in watchlist 122')
+        raise Exception('No UST bond conids found in watchlist NAMED_USTREASALL')
+
+    ust_conids = list(dict.fromkeys([*ust_conids, *UST_ADDITIONAL_CONIDS]))
 
     snapshot = _get_market_data_snapshot_in_chunks(
         api_client=ibkr_trading_api,
-        conids=ust_conids[:350],
+        conids=ust_conids,
         chunk_size=75,
         sleep_seconds=0.25
     )
@@ -1166,14 +1180,15 @@ def extract_ust_bond_snapshot(config=None):
     df['Trading Currency'] = 'USD'
     df['Sector'] = ''
 
-    def extract_numbers(text):
-        return ''.join(filter(str.isdigit, text))
-
-    df['Last'] = df['Last_price'].astype(str).apply(extract_numbers)
-    # Convert extracted strings to numeric, coercing errors to NaN, then replace NaN with 0.0 to avoid ValueError
-    df['Last'] = pd.to_numeric(df['Last'], errors='coerce').fillna(0.0)
-
-    df['Current Yield'] = ((1000 * df['Coupon'].astype(float)) / df['Last'].astype(float)) * 100
+    # IBKR field 31 may prefix the decimal price with C (prior close) or H
+    # (halted); retain its decimal precision and leave unavailable prices blank.
+    raw_last = df.get('Last_price', pd.Series(index=df.index, dtype='object'))
+    df['Last'] = pd.to_numeric(
+        raw_last.astype('string').str.strip().str.replace(r'^[CH]', '', regex=True),
+        errors='coerce',
+    )
+    df['Last'] = df['Last'].where(df['Last'] > 0)
+    df['Current Yield'] = 100 * df['Coupon'].astype(float) / df['Last']
 
     rename_map = {
         'Company_name': 'Company Name',
