@@ -195,8 +195,13 @@ class IBKRTradingAPI(IBKRWebAPI):
             headers = self._require_sso_headers()
             payload = None
 
-            for attempt in range(1, 4):
-                response = requests.get(url, headers=headers)
+            # IBKR can acknowledge session initialization before its accounts
+            # are loaded. Poll this read-only readiness endpoint for a bounded
+            # interval during market-data sessions; never use an empty response.
+            market_context = getattr(self, '_market_data_context', None)
+            max_attempts = 20 if market_context else 3
+            for attempt in range(1, max_attempts + 1):
+                response = requests.get(url, headers=headers, timeout=(10, 20))
                 if response.status_code != 200:
                     raise_ibkr_response_error(response, trading_session=True, account_access=True)
 
@@ -210,8 +215,10 @@ class IBKRTradingAPI(IBKRWebAPI):
                 if has_accounts_shape:
                     break
 
-                if attempt < 3:
-                    time.sleep(0.5)
+                if attempt < max_attempts:
+                    if market_context and attempt == 1:
+                        logger.warning('IBKR_ACCOUNTS_NOT_READY polling read-only account bootstrap')
+                    time.sleep(1 if market_context else 0.5)
 
             if not isinstance(payload, dict):
                 raise Exception(f"Invalid accounts payload type: {type(payload).__name__}")
@@ -226,7 +233,11 @@ class IBKRTradingAPI(IBKRWebAPI):
                 payload["aliases"].setdefault(account_id, account_id)
 
             if not payload["accounts"] or not payload.get("selectedAccount"):
-                raise Exception(f"Incomplete accounts payload after retry: {payload}")
+                raise ServiceError('IBKR brokerage accounts did not become ready.',
+                                   status_code=502, code='ibkr_accounts_not_ready')
+
+            if market_context and attempt > 1:
+                logger.warning(f'IBKR_ACCOUNTS_READY attempts={attempt}')
 
             return payload
         finally:
