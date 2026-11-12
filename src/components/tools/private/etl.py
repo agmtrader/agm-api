@@ -16,6 +16,7 @@ from io import StringIO, BytesIO
 import hashlib
 import math
 import uuid
+import traceback
 from googleapiclient.http import MediaIoBaseUpload
 
 from src.utils.connectors.drive import GoogleDrive
@@ -195,6 +196,13 @@ def extract_data(etl_config) -> dict:
             steps.append(dict(outcome, name=step_name))
         except Exception as e:
             logger.error(f'Error during {step_name}: {e}')
+            if file_config.get('pipeline') == 'market_data':
+                frames = traceback.extract_tb(e.__traceback__)
+                locations = [f'{frame.filename.rsplit("/", 1)[-1]}:{frame.lineno}:{frame.name}'
+                             for frame in frames[-8:]]
+                logger.error(f'MARKET_EXTRACT_FAILURE source={step_name} '
+                             f'error_type={type(e).__name__} code={getattr(e, "code", None)} '
+                             f'locations={locations}')
             steps.append({'name': step_name, 'status': 'failed', 'error': str(e)})
         if file_config.get('_session_recoveries'):
             steps[-1]['session_recoveries'] = deepcopy(file_config['_session_recoveries'])
@@ -663,6 +671,7 @@ def extract_bond_snapshot(config=None):
     # released on logout and one user cannot exhaust concurrent market lines.
     for start in range(0, len(ids), 50):
         batch = ids[start:start + 50]
+        logger.info(f'BOND_ENRICHMENT_BATCH start={start} size={len(batch)} total={len(ids)}')
         with api.market_data_session(credential='aguiagm2024'):
             response = requests.get(api.BASE_URL + '/v1/api/trsrv/secdef',
                 headers=api._require_sso_headers(), params={'conids': ','.join(batch)}, timeout=(10, 90))
