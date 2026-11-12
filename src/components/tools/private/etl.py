@@ -714,17 +714,14 @@ def extract_bond_snapshot(config=None):
 
 
 STOCK_SNAPSHOT_TICKERS = [
-    'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'GOOG', 'META', 'TSLA', 'AVGO',
-    'LLY', 'JPM', 'V', 'XOM', 'UNH', 'MA', 'COST', 'PG', 'WMT', 'HD',
-    'NFLX', 'JNJ', 'BAC', 'ABBV', 'CRM', 'ORCL', 'KO', 'MRK', 'CVX', 'WFC',
-    'CSCO', 'AMD', 'PEP', 'ACN', 'MCD', 'LIN', 'TMO', 'ADBE', 'ABT', 'DIS',
-    'IBM', 'GE', 'QCOM', 'CAT', 'NOW', 'TXN', 'PM', 'VZ', 'AMGN', 'INTU',
-    'ISRG', 'BKNG', 'SPGI', 'GS', 'RTX', 'NEE', 'AXP', 'PGR', 'UBER', 'PFE',
-    'LOW', 'HON', 'UNP', 'BLK', 'T', 'SCHW', 'TJX', 'SYK', 'ETN', 'COP',
-    'C', 'BA', 'PANW', 'DE', 'ADP', 'VRTX', 'MDT', 'LMT', 'CB', 'MU',
-    'ADI', 'MMC', 'PLD', 'AMAT', 'SBUX', 'GILD', 'LRCX', 'FI', 'REGN', 'NKE',
-    'SO', 'KLAC', 'BMY', 'UPS', 'ELV', 'MO', 'DUK', 'MCO', 'ICE', 'COIN',
+    'AAPL', 'AMZN', 'NVDA', 'TSLA', 'META', 'BA', 'BRK B', 'LMT', 'GOLD',
+    'DIS', 'SPCX', 'MSFT', 'GOOGL', 'NFLX', 'JPM', 'V', 'MA', 'WMT', 'COST', 'KO',
+    'PEP', 'MCD', 'NKE', 'XOM', 'JNJ', 'PG', 'AMD', 'IBM', 'SBUX',
 ]
+
+# IBKR search returns other securities with the same symbol; require the
+# specific US-listed contracts shown in the requested watchlist.
+STOCK_SNAPSHOT_CONIDS = {'GOLD': '146266831', 'BRK B': '72063691', 'SPCX': '890493863'}
 
 ETF_SNAPSHOT_TICKERS = [
     'SPY', 'VOO', 'QQQ', 'DIA',
@@ -761,6 +758,12 @@ def _resolve_snapshot_conids(
             logger.warning(f'MARKET_DATA_SYMBOL_FAILED ticker={ticker} stage=resolve reason=unexpected_response')
             continue
 
+        expected_conid = STOCK_SNAPSHOT_CONIDS.get(ticker) if tickers is STOCK_SNAPSHOT_TICKERS else None
+        if expected_conid:
+            results = [item for item in results if str(item.get('conid')) == expected_conid]
+            if not results:
+                logger.warning(f'MARKET_DATA_SYMBOL_FAILED ticker={ticker} stage=resolve reason=expected_contract_missing')
+                continue
         exact_matches = [
             item for item in results
             if str(item.get('symbol', '')).upper() == ticker.upper()
