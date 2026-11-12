@@ -636,7 +636,7 @@ def extract_bond_snapshot(config=None):
     if not codes:
         raise ValueError('IBKR scanner catalogue is empty')
     contracts = {}
-    successful, rejected = set(), 0
+    successful, empty, rejected = set(), set(), 0
     required = {'TOP_PERC_GAIN', 'TOP_PERC_LOSE', 'MOST_ACTIVE', 'MOST_ACTIVE_USD',
                 'TOP_TRADE_COUNT', 'TOP_TRADE_RATE', 'TOP_PRICE_RANGE',
                 'TOP_VOLUME_RATE', 'NOT_YET_TRADED_TODAY', 'MOST_ACTIVE_AVG_USD'}
@@ -651,7 +651,11 @@ def extract_bond_snapshot(config=None):
                 except ServiceError as exc:
                     details = exc.details or {}
                     message = details.get('ibkr_message', '')
-                    if details.get('ibkr_status') == 500 and (message == 'Finished: EMPTY response is received.' or message == f'Unresolvable scanType {code}'):
+                    if details.get('ibkr_status') == 500 and message == 'Finished: EMPTY response is received.':
+                        empty.add(code)
+                        rejected += 1
+                        continue
+                    if details.get('ibkr_status') == 500 and message == f'Unresolvable scanType {code}':
                         rejected += 1
                         continue
                     raise
@@ -662,7 +666,7 @@ def extract_bond_snapshot(config=None):
                     if not isinstance(row, dict) or row.get('con_id') is None or row.get('sec_type') != 'BOND':
                         raise ValueError(f'Invalid bond scanner record for {code}')
                     contracts.setdefault(str(row['con_id']), row)
-    if not required.issubset(successful) or not contracts:
+    if not required.issubset(successful | empty) or not contracts:
         raise ValueError('Required bond scanner types failed or returned no contracts')
     logger.info(f'Bond scanner types={len(codes)} successful={len(successful)} unavailable={rejected} unique={len(contracts)}')
     ids = list(contracts)
