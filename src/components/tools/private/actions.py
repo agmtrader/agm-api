@@ -436,65 +436,80 @@ def send_unfunded_emails():
     
 @handle_exception
 def update_account_aliases():
-    """Fetch clients report, filter accounts without alias, update each alias, and return list."""
-    from src.components.tools.public.reporting import get_clients_report
-    from src.components.clients.accounts import update_account_alias
+    """Update missing aliases from fresh account details joined to internal accounts."""
+    from collections import Counter
+    from src.components.tools.public.reporting import get_ibkr_details
+    from src.components.clients.accounts import read_accounts, update_account_alias
 
-    def _is_blank(value):
-        if value is None:
-            return True
-        if isinstance(value, str):
-            return value.strip() == ''
-        return pd.isna(value)
+    accounts = read_accounts({}, view='list')
+    details = get_ibkr_details()
+    if not isinstance(accounts, list) or not isinstance(details, list):
+        raise ValueError('Invalid accounts or account-details population')
 
-    clients = get_clients_report()
-    pending_accounts = [
-        c for c in clients
-        if _is_blank(c.get('Alias')) and c.get('Status') not in ('Rejected', 'Closed', 'Funded Pending')
-        and str(c.get('Account ID') or '').strip() not in DAILY_ALIAS_ACCOUNT_EXCLUSIONS
-    ]
-
-    # The clients report does not reliably include the master account used by
-    # IBKR. Resolve it from our account table, which is the source of truth for
-    # the credentials associated with each account.
-    from src.components.clients.accounts import read_accounts
-    pending_account_ids = [
-        str(account.get('Account ID') or '').strip()
-        for account in pending_accounts
-        if str(account.get('Account ID') or '').strip()
-    ]
-    account_rows = read_accounts({'ibkr_account_number': pending_account_ids}) if pending_account_ids else []
-    master_accounts_by_number = {
-        str(row.get('ibkr_account_number') or '').strip(): row.get('master_account')
-        for row in account_rows
-        if str(row.get('ibkr_account_number') or '').strip()
-    }
+    by_number = {}
+    for row in details:
+        if not isinstance(row, dict):
+            raise ValueError('Invalid account-details record')
+        entries = row.get('ibkrdetails') if isinstance(row.get('ibkrdetails'), list) else [row]
+        for detail in entries:
+            if not isinstance(detail, dict) or not isinstance(detail.get('account'), dict):
+                raise ValueError('Invalid account-details record')
+            number = str(detail['account'].get('accountId') or '').strip().upper()
+            if number:
+                by_number.setdefault(number, []).append(detail)
+    numbers = Counter(str(row.get('ibkr_account_number') or '').strip().upper() for row in accounts)
+    pending_accounts = []
+    skipped_accounts = []
+    for row in accounts:
+        number = str(row.get('ibkr_account_number') or '').strip().upper()
+        if not number:
+            continue
+        matches = by_number.get(number, [])
+        detail = matches[0] if len(matches) == 1 else None
+        source = detail.get('account', {}) if detail else {}
+        alias = source.get('accountAlias')
+        status = re.sub(r'[^a-z]+', ' ', str(source.get('clearingStatusDescription') or '').lower()).strip()
+        reason = None
+        if number in DAILY_ALIAS_ACCOUNT_EXCLUSIONS:
+            continue
+        if numbers[number] != 1 or not detail:
+            reason = 'Missing or ambiguous account details or internal account'
+        elif (detail.get('_agm_refresh') or {}).get('status') != 'fresh':
+            reason = 'Account details are stale or unavailable'
+        elif alias is not None and not isinstance(alias, str):
+            reason = 'Invalid alias value'
+        elif isinstance(alias, str) and alias.strip() not in ('', '-'):
+            continue
+        elif not status:
+            reason = 'Missing account status'
+        elif status in ('rejected', 'closed', 'funded pending'):
+            continue
+        if reason:
+            skipped_accounts.append({'account_id': number, 'reason': reason})
+            continue
+        pending_accounts.append({'account_id': number, 'title': source.get('accountTitle'),
+                                 'old_alias': alias, 'master_account': row.get('master_account')})
 
     updated_accounts = []
     failed_accounts = []
-    skipped_accounts = []
-
     for account in pending_accounts:
-        account_id = str(account.get('Account ID') or '').strip()
-        title = str(account.get('Title') or '').strip()
-        old_alias = account.get('Alias')
-        table_master_account = master_accounts_by_number.get(account_id)
-        report_master_account = account.get('Master Account') or None
-        master_account = table_master_account or report_master_account or None
+        account_id = account['account_id']
+        title = str(account.get('title') or '').strip()
+        old_alias = account.get('old_alias')
+        master_account = str(account.get('master_account') or '').strip().upper()
 
-        if not account_id or not title:
+        if not title or master_account not in ('I6413690', 'F10740574') or len(f"{account_id} {title}") > 80:
             skipped_accounts.append({
                 'account_id': account_id or None,
                 'old_alias': old_alias,
                 'master_account': master_account,
-                'reason': 'Missing Account ID or Title'
+                'reason': 'Missing title, unsupported master account, or alias exceeds 80 characters'
             })
             logger.warning(f"Skipping alias update for account_id={account_id!r} title={title!r}")
             continue
 
         new_alias = f"{account_id} {title}"
         try:
-            # When master_account is missing, the IBKR client falls back to the default credentials.
             ibkr_response = update_account_alias(
                 account_id=account_id,
                 new_alias=new_alias,

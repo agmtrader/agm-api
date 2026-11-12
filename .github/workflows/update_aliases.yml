@@ -68,11 +68,13 @@ jobs:
 
             accounts_lines=$(echo "$summary_json" | jq -r '(.accounts // [])[] | "- " + ((.old_alias // "None") + " -> " + .new_alias)')
             error_lines=$(echo "$summary_json" | jq -r '(.failed_accounts // [])[] | "- " + (.account_id // "unknown") + ": " + (.error // "Unknown error")')
+            skipped_lines=$(echo "$summary_json" | jq -r '(.skipped_accounts // []) | group_by(.reason)[] | "- " + (.[0].reason // "Unknown reason") + ": " + (length | tostring)')
             if [ -z "$accounts_lines" ]; then accounts_lines="- None"; fi
             if [ -z "$error_lines" ]; then error_lines="- None"; fi
+            if [ -z "$skipped_lines" ]; then skipped_lines="- None"; fi
 
-            summary_output=$(printf "Alias update summary\nPending: %s\nAliases updated: %s\nErrors: %s\nSkipped: %s\n\nUpdated aliases:\n%s\n\nErrors:\n%s\n" \
-              "$pending" "$updated" "$errors" "$skipped" "$accounts_lines" "$error_lines")
+            summary_output=$(printf "Alias update summary\nPending: %s\nAliases updated: %s\nErrors: %s\nSkipped: %s\n\nUpdated aliases:\n%s\n\nErrors:\n%s\n\nSkipped reasons:\n%s\n" \
+              "$pending" "$updated" "$errors" "$skipped" "$accounts_lines" "$error_lines" "$skipped_lines")
 
             printf "summary<<EOF\n%s\nEOF\n" "$summary_output" >> "$GITHUB_OUTPUT"
             printf "aliases_updated=%s\nerrors=%s\n" "$updated" "$errors" >> "$GITHUB_OUTPUT"
