@@ -28,6 +28,14 @@ def run_screenings_route():
     apply_screenings = request.args.get('apply_screenings', 'true').lower() == 'true'
     return run_screenings(apply_screenings=apply_screenings)
 
+@bp.route('/review_document_metadata', methods=['GET'])
+@format_response
+def review_document_metadata_route():
+    """Return aggregate document metadata gaps without changing records."""
+    from src.components.tools.private.document_metadata_review import review_document_metadata
+    from src.utils.connectors.supabase import db
+    return review_document_metadata(db)
+
 @bp.route('/send_compliance_manual_update_email', methods=['POST'])
 @format_response
 def send_compliance_manual_update_email_route():

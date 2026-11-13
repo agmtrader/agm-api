@@ -1,0 +1,34 @@
+name: Daily Document Metadata Review
+
+on:
+  schedule:
+    - cron: '0 14 * * *' # 08:00 Costa Rica
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AGM_API_EMAIL: ${{ secrets.AGM_API_EMAIL }}
+      AGM_API_PASSWORD: ${{ secrets.AGM_API_PASSWORD }}
+    steps:
+      - name: Read aggregate metadata review
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$AGM_API_EMAIL" && test -n "$AGM_API_PASSWORD"
+          token_response=$(curl -fsS --max-time 30 -X POST -H 'Content-Type: application/json' \
+            -d "$(jq -n '{email: env.AGM_API_EMAIL, password: env.AGM_API_PASSWORD}')" \
+            https://api.agmtechnology.com/token)
+          token=$(printf '%s' "$token_response" | jq -er '.access_token | select(type == "string" and length > 0)')
+          response=$(curl -fsS --max-time 120 -H "Authorization: Bearer $token" \
+            https://api.agmtechnology.com/actions/review_document_metadata)
+          printf '%s' "$response" | jq -e '.status == "success" and (.total_links | type == "number") and (.categories | type == "array")' >/dev/null
+          {
+            echo '## Document metadata review'
+            printf '%s' "$response" | jq -r '"Generated: \(.generated_at)\nTotal links: \(.total_links)\n\(.notice)", (.categories[] | "\(.category): \(.total) links; \(.checks | to_entries | map("\(.key): \(.value)") | join(", "))")'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
