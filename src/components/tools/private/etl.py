@@ -196,6 +196,18 @@ def extract_data(etl_config) -> dict:
             steps.append(dict(outcome, name=step_name))
         except Exception as e:
             logger.error(f'Error during {step_name}: {e}')
+            if file_config.get('pipeline') == 'clients' and step_name == 'account_details':
+                frames = traceback.extract_tb(e.__traceback__)
+                locations = [f'{frame.filename.rsplit("/", 1)[-1]}:{frame.lineno}:{frame.name}'
+                             for frame in frames[-8:]]
+                logger.error(f'CLIENTS_ACCOUNT_DETAILS_FAILURE error_type={type(e).__name__} '
+                             f'locations={locations}')
+                # Report a bounded, recognizable exception without exposing the
+                # provider exception message or interrupting the remaining stages.
+                try:
+                    raise RuntimeError('Clients ETL account details extraction failed') from None
+                except RuntimeError:
+                    logger.exception('Account details refresh failed; review the Clients ETL outcome')
             if file_config.get('pipeline') == 'market_data':
                 frames = traceback.extract_tb(e.__traceback__)
                 locations = [f'{frame.filename.rsplit("/", 1)[-1]}:{frame.lineno}:{frame.name}'
@@ -414,13 +426,7 @@ def extract_account_details_backup(config=None):
     if config is None:
         raise ValueError('Account details config missing')
     folder = config['backup_folder_id']
-    files = [f for f in Drive.get_files_in_folder(folder)
-             if re.fullmatch(r'account_details_\d+\.json', f.get('name', ''))]
-    previous_file = Drive.get_most_recent_file(files) if files else None
-    previous = Drive.download_file(previous_file['id'], parse=True) if previous_file else []
-    if not isinstance(previous, list):
-        raise ValueError('Prior account details must be a list')
-    details, report = refresh_details(read_accounts({}), previous,
+    details, report = refresh_details(read_accounts({}), [],
         limit=config.get('refresh_limit', 0),
         progress=lambda outcome: logger.info(
             f"IBKR refresh {outcome['account_id']}: {outcome['status']}"))
@@ -433,6 +439,8 @@ def extract_account_details_backup(config=None):
         return report
     if report['sampled']:
         raise ValueError('Sampled account details cannot be published')
+    if not report['summary']['successful']:
+        raise ValueError('No account details refreshed; previous report preserved')
     # Upload first. A failed upload must not delete the previous good backup.
     uploaded = Drive.upload_file(file_name=config['backup_name'], mime_type='application/json',
         file_data=base64.b64encode(json.dumps(details, default=str).encode()).decode(), parent_folder_id=folder)
@@ -440,6 +448,9 @@ def extract_account_details_backup(config=None):
     report_name = config['backup_name'].replace('.json', '.refresh.json')
     Drive.upload_file(file_name=report_name, mime_type='application/json',
         file_data=base64.b64encode(json.dumps(report, default=str).encode()).decode(), parent_folder_id=folder)
+    if not uploaded.get('id'):
+        raise ValueError('Account details upload did not return a source ID')
+    config['_details_extracted_source'] = {'id': uploaded['id'], 'name': config['backup_name']}
     return report
 
 
@@ -1587,6 +1598,12 @@ def process_report(config):
         files = files_for_config if config_name == 'tasks_for_subaccounts' else files_for_config or files
         if config_name == 'account_details':
             files = [f for f in files if re.fullmatch(r'account_details_\d+\.json', f.get('name', ''))]
+            source = config.get('_details_extracted_source')
+            if not isinstance(source, dict) or not source.get('id'):
+                raise ValueError('No account details from this ETL run; previous report preserved')
+            files = [f for f in files if f.get('id') == source['id']]
+            if len(files) != 1:
+                raise ValueError('Current-run account details source is missing or ambiguous')
 
         if len(files) == 0:
             logger.error(f'No files found in backup folder.')
@@ -1943,7 +1960,11 @@ def process_bonds(df):
         )
     )
     duration_not_applicable = int(perpetual_rows.sum())
-    duration_failures = int(df['Duration'].isna().sum()) - duration_not_applicable
+    missing_price_rows = df['Price'].isna() & df['Duration'].isna() & ~perpetual_rows
+    missing_price_count = int(missing_price_rows.sum())
+    if missing_price_count:
+        logger.warning(f"Bond duration unavailable for {missing_price_count} of {len(df)} rows because price is missing; values were left blank.")
+    duration_failures = int(df['Duration'].isna().sum()) - duration_not_applicable - missing_price_count
     if duration_failures:
         logger.error(
             f"Bond duration calculation failed for {duration_failures} of {len(df)} rows; "
@@ -2243,6 +2264,7 @@ def _runtime_etl_config(etl_config, now=None):
 
     for file_config in runtime_config.get('files', []):
         file_config.pop('_task_extracted_source', None)
+        file_config.pop('_details_extracted_source', None)
         file_config.pop('_manual_input_error', None)
         file_config.pop('_extracted_source', None)
         file_config.pop('_session_recoveries', None)
@@ -2389,6 +2411,11 @@ def get_bond_duration(maturity_date, coupon_rate, price, frequency):
     Returns:
         duration: Macaulay Duration in years
     """
+
+    if pd.isna(price):
+        logger.warning("Bond duration unavailable because price is missing "
+                       f"(maturity_date={maturity_date!r}, coupon_rate={coupon_rate!r}, price={price!r}, frequency={frequency!r})")
+        return None
 
     try:
         # Default to semi-annual frequency if not provided because it's the most common frequency.
