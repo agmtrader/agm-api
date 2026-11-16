@@ -253,6 +253,9 @@ def start_api():
     app.register_blueprint(reporting.bp, url_prefix='/reporting')
     app.register_blueprint(trade_tickets.bp, url_prefix='/trade_tickets')
 
+    from src.app.tools.private import trader
+    app.register_blueprint(trader.bp, url_prefix='/trader')
+
     # Clients
     from src.app.clients import accounts, advisors, contacts, investment_proposals, risk_profiles, users, application_providers
     app.register_blueprint(accounts.bp, url_prefix='/accounts')

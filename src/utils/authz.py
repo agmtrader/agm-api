@@ -18,6 +18,8 @@ from src.utils.exception import ServiceError
 
 
 PUBLIC_ENDPOINTS = {"index", "docs", "token", "users.login", "application_providers.read_route"}
+TRADER_LOGIN_CODE_SCOPE = "trader/send_login_code"
+TRADER_LOGIN_CODE_ENDPOINT = "trader.send_login_code"
 ADVISOR_SELF_SCOPES = {
     "advisors/me/accounts",
     "advisors/me/open_positions",
@@ -233,6 +235,17 @@ def enforce_route_scope():
 
     if request.endpoint in PUBLIC_ENDPOINTS:
         return None
+    scopes = getattr(g, "current_user_scopes", set())
+    if request.endpoint == TRADER_LOGIN_CODE_ENDPOINT or TRADER_LOGIN_CODE_SCOPE in scopes:
+        if (
+            request.endpoint == TRADER_LOGIN_CODE_ENDPOINT
+            and request.method == "POST"
+            and scopes == {TRADER_LOGIN_CODE_SCOPE}
+        ):
+            return None
+        return _authorization_denied(
+            403, "Insufficient scope", "trader_mail_scope", TRADER_LOGIN_CODE_SCOPE
+        )
     required = required_scope_for_path(request.path, request.method)
     if required is None or has_scope(required):
         return None
