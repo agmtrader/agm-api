@@ -1187,8 +1187,24 @@ def extract_ust_bond_snapshot(config=None):
     df = pd.DataFrame(snapshot)
     df.columns = df.columns.str.capitalize()
 
-    df['Financial Instrument'] = df['Symbol'] + ' ' + df['Contract_description_2']
-    df['Symbol'] = 'IBCID' + df['Conidex']
+    def snapshot_text(column):
+        values = df.get(column, pd.Series(index=df.index, dtype=object))
+        return values.map(lambda value: value.strip() if isinstance(value, str) else '')
+
+    symbols = snapshot_text('Symbol')
+    descriptions = snapshot_text('Contract_description_2')
+    conids = df.get('Conidex', pd.Series(index=df.index, dtype=object)).astype('string').str.strip()
+    usable = symbols.ne('') & descriptions.ne('') & conids.fillna('').ne('')
+    if not usable.all():
+        skipped = conids[~usable].fillna('unknown')
+        logger.warning(f'Treasury snapshot skipped {len(skipped)} of {len(df)} rows with missing '
+                       f'instrument text or contract ID; example conids: {skipped.head(10).tolist()}')
+    df = df.loc[usable].copy()
+    if df.empty:
+        raise ValueError('No Treasury snapshot rows had complete instrument text and contract IDs')
+
+    df['Financial Instrument'] = symbols[usable] + ' ' + descriptions[usable]
+    df['Symbol'] = 'IBCID' + conids[usable]
 
     from src.components.tools.public.trade_tickets import extract_bond_details
     for index, row in df.iterrows():
