@@ -359,6 +359,25 @@ class Supabase:
             sent_at = Column(Text, nullable=True)
             error_message = Column(Text, nullable=True)
 
+        class SlsOutreachEmail(self.Base):
+            __tablename__ = 'sls_outreach_email'
+            id = Column(UUID(as_uuid=True), primary_key=True)
+            created = Column(Text, nullable=False)
+            updated = Column(Text, nullable=False)
+            fingerprint = Column(Text, nullable=False)
+            account_id = Column(UUID(as_uuid=True), ForeignKey('account.id'), nullable=False)
+            contact_id = Column(UUID(as_uuid=True), ForeignKey('contact.id'), nullable=False)
+            actor_id = Column(UUID(as_uuid=True), ForeignKey('user.id'), nullable=False)
+            recipient_email = Column(Text, nullable=False)
+            purpose = Column(Text, nullable=False)
+            language = Column(Text, nullable=False)
+            subject = Column(Text, nullable=False)
+            message = Column(Text, nullable=False)
+            tasks = Column(JSONB, nullable=False)
+            status = Column(Text, nullable=False)
+            provider_message_id = Column(Text, nullable=True)
+            sent_at = Column(Text, nullable=True)
+
         class DocumentReviewMessage(self.Base):
             __tablename__ = 'document_review_message'
             id = Column(UUID(as_uuid=True), primary_key=True)
@@ -497,6 +516,7 @@ class Supabase:
         self.Document = Document
         self.DocumentProcessing = DocumentProcessing
         self.DocumentReviewEmail = DocumentReviewEmail
+        self.SlsOutreachEmail = SlsOutreachEmail
         self.DocumentReviewMessage = DocumentReviewMessage
         self.DocumentReviewResponsible = DocumentReviewResponsible
         self.FeeTemplateRequest = FeeTemplateRequest

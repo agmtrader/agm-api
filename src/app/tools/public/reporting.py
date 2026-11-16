@@ -71,6 +71,34 @@ def tasks_review_route():
     return get_tasks_review(request.args), 200, {'Cache-Control': 'private, no-store'}
 
 
+def _sls_outreach_admin():
+    email = str(g.current_user.get('email') or '').lower()
+    if not email.endswith('@agmtechnology.com'):
+        raise ServiceError('SLS outreach requires an AGM administrator.', 403)
+
+
+@bp.route('/sls_outreach/<account_id>', methods=['GET', 'POST'])
+@require_scope('all')
+@format_response
+def sls_outreach_route(account_id):
+    from src.components.clients import sls_outreach
+    _sls_outreach_admin()
+    account_id = sls_outreach.identifier(account_id)
+    if request.method == 'GET':
+        offset = request.args.get('offset', default=0, type=int)
+        if offset < 0:
+            raise ServiceError('Invalid outreach history offset.', 400)
+        return sls_outreach.outreach_context(account_id, offset), 200, {'Cache-Control': 'private, no-store'}
+    payload = request.get_json()
+    if not isinstance(payload, dict):
+        raise ServiceError('An outreach request is required.', 400)
+    if payload.get('action') == 'preview':
+        return sls_outreach.preview(account_id, payload), 200, {'Cache-Control': 'private, no-store'}
+    if payload.get('action') == 'send':
+        return sls_outreach.send(account_id, g.current_principal_id, payload), 200, {'Cache-Control': 'private, no-store'}
+    raise ServiceError('Invalid outreach action.', 400)
+
+
 @bp.route('/account_performance', methods=['GET'])
 @require_scope('all')
 @format_response

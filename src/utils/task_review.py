@@ -124,6 +124,7 @@ def review_view(feeds, health, args):
             or fresh not in ('all', 'fresh', 'stale', 'unavailable') or restriction not in ('all', 'restricted', 'unrestricted', 'unknown')
             or offset < 0 or not 1 <= limit <= 200 or len(query) > 200 or (master and not re.fullmatch(r'[A-Z]+\d+|unknown', master))):
         raise ValueError('Invalid task review filters')
+    account_id = args.get('account_id', '').strip().upper()
     detail = args.get('detail')
     rows, accounts, raw = build_review(feeds, health, detail)
     if detail is not None:
@@ -135,6 +136,7 @@ def review_view(feeds, health, args):
         coverage = row.get('coverage', {})
         row_fresh = coverage.get(source, {}).get('status', 'unavailable') if account_view and source != 'all' else row['freshness']
         return ((source == 'all' or account_view or row['source'] == source)
+            and (not account_id or row['account_id'].strip().upper() == account_id)
             and (not master or (row['master_account'] or 'unknown') == master)
             and (fresh == 'all' or row_fresh == fresh)
             and (restriction == 'all' or row['restriction'] == restriction)
