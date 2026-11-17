@@ -5,9 +5,10 @@ import json
 import shutil
 from pathlib import Path
 
+from agm_mcp import VERSION
+
 HERE = Path(__file__).resolve().parent
-DEFAULT = (Path.home() / "Library/Mobile Documents/com~apple~CloudDocs"
-           / "Codex/Marketplaces/agm/plugins/agm")
+DEFAULT = Path.home() / "Documents/Codex/agm-marketplace/plugins/agm"
 
 
 def write_json(path, value):
@@ -34,16 +35,20 @@ def main():
         shutil.copy2(HERE / name, destination / name)
     shutil.copyfile(HERE.parent.parent / "public/static/docs.html", destination / "docs.html")
     shutil.copyfile(HERE / "README.md", destination / "README.md")
+    skill = root / "skills/agm-api"
+    skill.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(HERE / "skills/agm-api/SKILL.md", skill / "SKILL.md")
     existing.setdefault("mcpServers", {}).update(config["mcpServers"])
     write_json(mcp_path, existing)
     manifest["mcpServers"] = "./.mcp.json"
-    if manifest.get("version") == "0.1.5":
-        manifest["version"] = "0.2.0"
+    if manifest.get("version") in {"0.1.4", "0.1.5", "0.2.0", VERSION}:
+        manifest["version"] = VERSION
     interface = manifest.get("interface", {})
-    note = " Includes the AGM API connector for documented routes using your AGM account."
+    old_note = " Includes the AGM API connector for documented routes using your AGM account."
+    note = " Includes a read-only AGM API connector that uses your AGM account."
     for container, field in ((manifest, "description"), (interface, "longDescription")):
         if isinstance(container.get(field), str) and note not in container[field]:
-            container[field] += note
+            container[field] = container[field].replace(old_note, "") + note
     write_json(manifest_path, manifest)
     print(f"Updated AGM plugin source: {root}")
 

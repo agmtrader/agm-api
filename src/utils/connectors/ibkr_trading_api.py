@@ -11,6 +11,9 @@ from src.utils.exception import ServiceError, handle_exception
 from src.utils.logger import logger
 from src.utils.ibkr_errors import raise_ibkr_response_error
 
+IBKR_TRADING_USERNAME = "aguiagm2024"
+
+
 class IBKRTradingAPI(IBKRWebAPI):
     def __init__(self):
         super().__init__()
@@ -25,12 +28,16 @@ class IBKRTradingAPI(IBKRWebAPI):
         return headers
 
     @handle_exception
-    def create_sso_session(self, credential: str = "aguiagm2024", ip: str | None = None) -> dict:
+    def create_sso_session(self, credential: str | None = None, ip: str | None = None) -> dict:
+        if credential is not None and credential != IBKR_TRADING_USERNAME:
+            raise ServiceError("The IBKR Trading API does not allow a username override.",
+                               status_code=400, code="ibkr_trading_username_override")
+
+        original_creds = self._apply_credentials("I6413690")
         try:
-            original_creds = self._apply_credentials("I6413690")
             if not ip:
                 ip = requests.get("https://api.ipify.org", timeout=10).text.strip()
-            logger.info(f"Creating SSO browser session for credential: {credential}, ip: {ip}")
+            logger.info("Creating IBKR Trading API SSO session")
             url = f"{self.BASE_URL}/gw/api/v1/sso-sessions"
             token = self.get_bearer_token()
             if not token:
@@ -41,7 +48,7 @@ class IBKRTradingAPI(IBKRWebAPI):
                 "Content-Type": "application/jwt",
             }
             payload = {
-                "credential": credential,
+                "credential": IBKR_TRADING_USERNAME,
                 "ip": ip,
             }
 
@@ -58,7 +65,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def read_account_positions(self, account_id: str, credential: str = "aguiagm2024") -> dict:
+    def read_account_positions(self, account_id: str, credential: str | None = None) -> dict:
         """Open a short-lived IBKR session and read positions for one account."""
         if not account_id:
             raise ServiceError("account_id is required", status_code=400, code="validation_error")
@@ -94,7 +101,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @contextmanager
-    def market_data_session(self, credential: str = "agmtech212", ip: str | None = None):
+    def market_data_session(self, credential: str | None = None, ip: str | None = None):
         """Run market-data calls inside one complete IBKR brokerage lifecycle.
 
         IBKR's ``iserver`` endpoints require the account bootstrap request after
@@ -102,9 +109,9 @@ class IBKRTradingAPI(IBKRWebAPI):
         context prevents callers from using a half-ready session or leaking a
         brokerage session when an ETL step fails.
         """
-        self._market_data_context = {'credential': credential, 'ip': ip, 'recoveries': [], 'failures': []}
+        self.create_sso_session(credential=credential, ip=ip)
+        self._market_data_context = {'ip': ip, 'recoveries': [], 'failures': []}
         try:
-            self.create_sso_session(credential=credential, ip=ip)
             self.initialize_brokerage_session()
             # IBKR documents this settlement interval before further /iserver calls.
             time.sleep(2)
@@ -167,7 +174,7 @@ class IBKRTradingAPI(IBKRWebAPI):
                 context['recoveries'].append(record)
                 logger.warning(f'IBKR_MARKET_SESSION_RECOVERY reason={error.code} endpoint={endpoint} attempt=1 limit=1')
                 if error.code == 'ibkr_session_expired':
-                    self.create_sso_session(credential=context['credential'], ip=context['ip'])
+                    self.create_sso_session(ip=context['ip'])
                     self.initialize_brokerage_session()
                     time.sleep(2)
                 self.get_brokerage_accounts()

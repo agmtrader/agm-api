@@ -486,7 +486,7 @@ def get_complex_asset_transfer_brokers_route():
 def read_ibkr_account_positions_route():
     """Read current positions for an IBKR account through the trading API."""
     account_id = request.args.get('account_id')
-    credential = request.args.get('credential') or 'aguiagm2024'
+    credential = request.args.get('credential') or None
     if not account_id:
         return {"error": "account_id is required"}, 400
     return read_ibkr_account_positions(account_id=account_id, credential=credential)

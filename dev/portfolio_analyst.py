@@ -23,7 +23,6 @@ if str(ROOT) not in sys.path:
 
 DEFAULT_ACCOUNT = "U20566763"
 DEFAULT_MASTER = "F10740574"
-DEFAULT_CREDENTIAL = "aguiagm2024"
 DEFAULT_REFERENCE = Path.home() / "Downloads/AGM_Technology_(BVI)_Inc._Inception_September_28_2026 (1).pdf"
 
 
@@ -34,13 +33,12 @@ class ReportError(Exception):
 class PAClient:
     """Target-master entitlement plus explicitly configured SSO provisioning."""
 
-    def __init__(self, master=DEFAULT_MASTER, credential=DEFAULT_CREDENTIAL, sso_master="I6413690"):
+    def __init__(self, master=DEFAULT_MASTER, sso_master="I6413690"):
         from src.utils.connectors.ibkr_web_api import IBKRWebAPI
         if master not in IBKRWebAPI.MASTER_ACCOUNT_CREDENTIALS:
             raise ReportError("Unsupported master account")
         self.master = master
         self.sso_master = sso_master
-        self.credential = credential
         self.signer = None
         self.sso_token = None
         self.receipts = []
@@ -99,6 +97,7 @@ class PAClient:
 
     def connect(self, ip=None):
         import requests
+        from src.utils.connectors.ibkr_trading_api import IBKR_TRADING_USERNAME
         from src.utils.connectors.ibkr_web_api import IBKRWebAPI
         self.signer = IBKRWebAPI()
         if self.sso_master not in self.signer.MASTER_ACCOUNT_CREDENTIALS:
@@ -117,7 +116,7 @@ class PAClient:
                 raise ReportError("Unable to determine public IP; supply --ip") from None
         ipaddress.ip_address(ip)
         sso = self.request("POST", "/gw/api/v1/sso-sessions",
-                           {"credential": self.credential, "ip": ip}, token=token, signed=True)
+                           {"credential": IBKR_TRADING_USERNAME, "ip": ip}, token=token, signed=True)
         self.sso_token = sso.get("access_token")
         if not isinstance(self.sso_token, str) or not self.sso_token:
             raise ReportError("SSO response did not contain an access token")
@@ -814,7 +813,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--account", default=DEFAULT_ACCOUNT)
     parser.add_argument("--master", default=DEFAULT_MASTER)
-    parser.add_argument("--credential", default=DEFAULT_CREDENTIAL)
     parser.add_argument("--sso-master", default="I6413690", help="SSO provisioning context; distinct from account master")
     parser.add_argument("--period", choices=["1D", "7D", "MTD", "1M", "YTD", "1Y"], default="1Y")
     parser.add_argument("--ip")
@@ -827,7 +825,7 @@ def main():
     output = args.output or ROOT / "output/pdf" / f"{args.account}_PortfolioAnalyst_{args.period}_{stamp}.pdf"
     if output.exists():
         raise ReportError("Output already exists; choose another --output before contacting IBKR")
-    client = PAClient(args.master, args.credential, args.sso_master)
+    client = PAClient(args.master, args.sso_master)
     client.connect(args.ip)
     bundle = client.collect(args.account, args.period)
     pdf = render_report(bundle, args.reference)

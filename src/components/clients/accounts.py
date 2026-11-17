@@ -503,11 +503,11 @@ def get_complex_asset_transfer_brokers() -> dict:
     return ibkr_web_api.get_complex_asset_transfer_brokers()
 
 @handle_exception
-def read_ibkr_account_positions(account_id: str, credential: str = 'aguiagm2024') -> list:
+def read_ibkr_account_positions(account_id: str, credential: str | None = None) -> list:
     """Read current IBKR positions through a short-lived authenticated session."""
     return ibkr_trading_api.read_account_positions(
         account_id=account_id,
-        credential=credential or 'aguiagm2024',
+        credential=credential,
     )
 
 @handle_exception

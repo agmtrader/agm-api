@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 import requests
 
+from src.utils.connectors.ibkr_trading_api import IBKR_TRADING_USERNAME
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 from src.utils.connectors.supabase import db
 from src.utils.exception import ServiceError
@@ -81,7 +82,7 @@ class PortfolioReader:
         except (requests.RequestException, ValueError):
             raise ServiceError('Could not determine the IBKR session IP.', 502, code='portfolio_provider_error') from None
         result = self.request('POST', '/gw/api/v1/sso-sessions', token=sso, signed=True,
-                              payload={'credential': 'aguiagm2024', 'ip': ip})
+                              payload={'credential': IBKR_TRADING_USERNAME, 'ip': ip})
         self.session_token = result.get('access_token') if isinstance(result, dict) else None
         if not isinstance(self.session_token, str) or not self.session_token:
             raise ServiceError('IBKR session creation failed.', 502, code='portfolio_provider_error')

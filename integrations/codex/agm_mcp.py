@@ -7,7 +7,6 @@ import json
 import os
 import re
 import stat
-import subprocess
 import sys
 import tempfile
 from html.parser import HTMLParser
@@ -17,25 +16,36 @@ from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 ORIGIN = "https://api.agmtechnology.com"
+VERSION = "0.3.0"
 DOCS = Path(__file__).with_name("docs.html")
 if not DOCS.is_file():  # Development checkout; installed plugins bundle a snapshot.
     DOCS = Path(__file__).resolve().parents[2] / "public/static/docs.html"
 STATE = Path.home() / ".local/state/agm-codex"
 AUTH = {"/token", "/users/login"}
 PUBLIC_READS = {"/", "/docs", "/application_providers/read"}
-# A GET can dispatch a job, send email or refresh shared data. New GETs go
-# through the confirmed tool until their behavior has been reviewed.
+# A GET can dispatch jobs or send email. Allow only reviewed read routes.
 READS = PUBLIC_READS | {
-    "/accounts/comments", "/accounts/contacts", "/accounts/read",
+    "/accounts/comments", "/accounts/contacts", "/accounts/instructions", "/accounts/read",
     "/accounts/ibkr/financial_ranges", "/accounts/ibkr/business_and_occupation",
+    "/accounts/ibkr/product_country_bundles", "/accounts/ibkr/complex_asset_transfer_brokers",
     "/advisors/me/accounts", "/advisors/me/latest_nav", "/advisors/me/nav",
     "/advisors/me/account_contacts", "/advisors/me/account_proposals",
     "/advisors/me/open_positions", "/advisors/read",
     "/contacts/read", "/contacts/screening", "/contacts/documents",
-    "/fee_template_requests/read", "/flagged_deposits/read", "/advisor_changes/read",
+    "/contacts/document_review", "/contacts/document_review/<uuid:document_id>",
+    "/document_review_emails/read", "/document_review_messages/read", "/document_review_responsibles/read",
+    "/fee_template_requests/read", "/flagged_deposits/read", "/flagged_deposits/reviews", "/advisor_changes/read",
     "/risk_profiles/list", "/risk_profiles/read", "/investment_proposals/read",
     "/reporting/tasks_review", "/reporting/pending_tasks", "/reporting/registration_tasks",
     "/reporting/compliance_tasks", "/trade_tickets/list", "/trade_tickets/read",
+    "/reporting/rtd", "/reporting/ust_bonds", "/reporting/stocks", "/reporting/etfs",
+    "/reporting/proposals_equity", "/reporting/clients", "/reporting/clients/fees",
+    "/reporting/nav", "/reporting/nav/monthly", "/reporting/open_positions",
+    "/reporting/trades", "/reporting/deposits_withdrawals", "/reporting/deposits_withdrawals/monthly",
+    "/reporting/brokerage_commissions", "/reporting/management_commissions",
+    "/reporting/ending_balances_from_statements", "/reporting/ibkr_details",
+    "/reporting/ibkr_statement_summary", "/reporting/ibkr_statement_transactions",
+    "/users/read",
 }
 MAX_INLINE = 256 * 1024
 MAX_DOWNLOAD = 128 * 1024 * 1024
@@ -76,15 +86,15 @@ class RouteTable(HTMLParser):
             self.row.append("".join(self.cell).strip())
             self.cell = None
         elif tag == "tr" and self.row:
-            path, methods, description, query, body = self.row
+            path, methods, description, query, _ = self.row
             for method in methods.split(", "):
+                if method != "GET" or path not in READS:
+                    continue
                 if not path.startswith("/") or (path != "/" and not all(
                     re.fullmatch(SEGMENT, part) or VAR.fullmatch(part)
                     for part in path.removeprefix("/").split("/")
                 )):
                     raise BridgeError("Unsupported path in AGM documentation.")
-                if method not in {"GET", "POST", "PATCH", "PUT", "DELETE", "HEAD", "OPTIONS"}:
-                    raise BridgeError("Unsupported method in AGM documentation.")
                 if (method, path) in self.routes:
                     raise BridgeError("Duplicate operation in AGM documentation.")
                 self.routes[method, path] = {
@@ -92,9 +102,7 @@ class RouteTable(HTMLParser):
                     "description": " ".join(description.split()),
                     "path_parameters": [name for _, name in VAR.findall(path)],
                     "query_parameters": query.splitlines(),
-                    "json_fields": body.splitlines(),
-                    "tool": ("terminal_login" if path in AUTH else
-                             "read_api" if method == "GET" and path in READS else "execute_api"),
+                    "tool": "read_api",
                 }
             self.row = None
 
@@ -152,7 +160,7 @@ def send(method, path, query="", body=None, authorized=True):
     except HTTPError as error:
         return error
     except (URLError, TimeoutError):
-        raise BridgeError("Could not complete the AGM API request. Check the API before retrying any operation that may have changed state.") from None
+        raise BridgeError("Could not complete the AGM API request. Check the AGM API connection.") from None
 
 
 def login(path):
@@ -177,27 +185,6 @@ def login(path):
     finally:
         Path(name).unlink(missing_ok=True)
     print("Signed in to AGM. The connector can now use your account's API permissions.")
-
-
-def confirm(method, path, query, body):
-    details = f"{method} {path}" + ("?" + query if query else "")
-    if body is not None:
-        details += "\n\nJSON: " + body.decode()
-    if len(details) > 1700:
-        details = details[:1700] + "\n…\nReview the complete tool arguments in Codex before allowing."
-    script = '''
-on run argv
-    display dialog (item 1 of argv) with title "AGM API request" buttons {"Cancel", "Allow once"} default button "Cancel" cancel button "Cancel" giving up after 60
-    if button returned of result is "Allow once" then return "allow"
-end run
-'''
-    try:
-        result = subprocess.run(["/usr/bin/osascript", "-e", script, details], check=False,
-                                capture_output=True, text=True, timeout=65)
-    except (OSError, subprocess.TimeoutExpired):
-        raise BridgeError("Could not show the local AGM approval dialog.") from None
-    if result.returncode != 0 or result.stdout.strip() != "allow":
-        raise BridgeError("AGM request was not approved and was not sent.")
 
 
 def render_path(template, parameters):
@@ -258,7 +245,7 @@ def response_result(response, save_response):
         return {**info, **save_result(response)}
     data = response.read(MAX_INLINE + 1)
     if len(data) > MAX_INLINE:
-        return {**info, "message": "Response exceeds the inline limit. Use filters or request save_response on your next authorized call. Do not replay a mutation to retrieve its result."}
+        return {**info, "message": "Response exceeds the inline limit. Use filters or request save_response on your next authorized call."}
     mime = info["content_type"]
     if mime == "application/json" or mime.endswith("+json"):
         try:
@@ -281,29 +268,26 @@ REQUEST_SCHEMA = {
     **OP_SCHEMA,
     "path_parameters": {"type": "object", "description": "Values for placeholders in the documented path."},
     "query": {"type": "object", "description": "Query parameters; arrays repeat a key."},
-    "body": {"type": ["object", "array"], "description": "JSON body as required by the documented route."},
     "save_response": {"type": "boolean", "description": "Save the raw successful response to a private local file instead of returning its contents."},
 }
 
 
-def tool(name, description, properties, required=(), read=True):
+def tool(name, description, properties, required=()):
     return {"name": name, "description": description,
             "inputSchema": {"type": "object", "properties": properties,
                             "required": list(required), "additionalProperties": False},
-            "annotations": {"readOnlyHint": read, "destructiveHint": not read,
-                            "idempotentHint": read, "openWorldHint": True}}
+            "annotations": {"readOnlyHint": True, "destructiveHint": False,
+                            "idempotentHint": True, "openWorldHint": True}}
 
 
 TOOLS = [
-    tool("find_endpoints", "Search the bundled AGM API method/path catalog and get exact parameter notes. Omit search to browse; use offset to paginate.",
+    tool("find_endpoints", "Search the read-only AGM API catalog and get exact parameter notes. Omit search to browse; use offset to paginate.",
          {"search": {"type": "string"}, "offset": {"type": "integer", "minimum": 0},
           "limit": {"type": "integer", "minimum": 1, "maximum": 30}}),
     tool("describe_endpoint", "Describe one exact AGM API operation and identify the tool needed to invoke it.",
          OP_SCHEMA, ("method", "path")),
     tool("read_api", "Read data from an AGM API endpoint listed as read_api. Uses the local AGM user's bearer session.",
-         {key: value for key, value in REQUEST_SCHEMA.items() if key != "body"}, ("method", "path")),
-    tool("execute_api", "Call a documented AGM API endpoint listed as execute_api. May change records, send email, move cash, or run jobs; present the exact request for review and call only when the user explicitly asks for that operation. A local Allow once dialog must be accepted.",
-         REQUEST_SCHEMA, ("method", "path"), read=False),
+         REQUEST_SCHEMA, ("method", "path")),
 ]
 
 
@@ -320,23 +304,12 @@ def call_tool(name, args, routes):
                 "operations": matches[offset:end]}
     operation = routes.get((args["method"].upper(), args["path"]))
     if operation is None:
-        raise BridgeError("That method/path is not in the AGM documentation. Use find_endpoints.")
+        raise BridgeError("This endpoint is unavailable in the read-only AGM connector. Use find_endpoints.")
     if name == "describe_endpoint":
         return operation
-    if operation["tool"] == "terminal_login":
-        raise BridgeError("Use the connector login command in your own terminal. Do not send credentials through Codex.")
-    if name != operation["tool"]:
-        raise BridgeError("Use " + operation["tool"] + " for this operation.")
-    method = operation["method"]
     path = render_path(operation["path"], args.get("path_parameters", {}))
     query = query_string(args.get("query", {}))
-    value = args.get("body")
-    if value is not None and (not isinstance(value, (list, dict)) or method in {"GET", "HEAD"}):
-        raise BridgeError("Only non-GET/HEAD requests can carry a JSON object or array body.")
-    body = json.dumps(value, allow_nan=False, ensure_ascii=False).encode("utf-8") if value is not None else None
-    if name == "execute_api":
-        confirm(method, path, query, body)
-    with send(method, path, query, body, path not in PUBLIC_READS) as response:
+    with send("GET", path, query, authorized=path not in PUBLIC_READS) as response:
         return response_result(response, args.get("save_response") is True)
 
 
@@ -346,8 +319,8 @@ def dispatch(message, routes):
         requested = message.get("params", {}).get("protocolVersion")
         return {"protocolVersion": requested if requested in SUPPORTED_PROTOCOLS else SUPPORTED_PROTOCOLS[0],
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "agm-api", "version": "0.2.0"},
-                "instructions": "Find and describe documented AGM endpoints first. Never ask for an AGM password or JWT in chat. For execute_api, follow the user's explicit intent and use the local approval dialog."}
+                "serverInfo": {"name": "agm-api", "version": VERSION},
+                "instructions": "Find and describe documented AGM endpoints first. Never ask for an AGM password or JWT in chat. Only reviewed read-only GET routes are available."}
     if method == "ping":
         return {}
     if method == "tools/list":
@@ -370,7 +343,7 @@ def dispatch(message, routes):
         except (ValueError, TypeError, AttributeError, KeyError):
             return {"isError": True, "content": [{"type": "text", "text": "Invalid AGM tool arguments or response format."}]}
         except (OSError, TimeoutError):
-            return {"isError": True, "content": [{"type": "text", "text": "Local storage or upstream transport failed. Check the API before retrying any operation that may have changed state."}]}
+            return {"isError": True, "content": [{"type": "text", "text": "Local storage or upstream transport failed. Check the AGM API connection."}]}
     raise KeyError(method)
 
 
