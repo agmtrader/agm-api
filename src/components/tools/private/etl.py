@@ -1594,8 +1594,7 @@ def process_report(config):
         if config_name == 'compliance_tasks':
             if config.get('_manual_input_error'):
                 raise ValueError(config['_manual_input_error'])
-            # This backup folder is shared with the historical subaccount export.
-            # Never fall back to another report, or parse IDs via pandas floats.
+            # The folder can contain legacy files. Only consider Compliance CSVs.
             candidates = [f for f in files if re.fullmatch(r'compliance_tasks_\d+\.csv', f.get('name', ''))]
             if not candidates:
                 raise ValueError('Compliance CSV backup missing; previous report preserved')
@@ -1619,7 +1618,7 @@ def process_report(config):
         files_for_config = [f for f in files if f.get('name', '') == backup_name]
         if not files_for_config:
             files_for_config = [f for f in files if any(f.get('name', '').startswith(config_name + separator) for separator in ('_', ' '))]
-        files = files_for_config if config_name == 'tasks_for_subaccounts' else files_for_config or files
+        files = files_for_config or files
         if config_name == 'account_details':
             files = [f for f in files if re.fullmatch(r'account_details_\d+\.json', f.get('name', ''))]
             source = config.get('_details_extracted_source')
@@ -2140,28 +2139,6 @@ clients_report_configs = [
         'transform_func': None,
         'task_type': 'registration',
         'output_filename': 'ibkr_registration_tasks.csv',
-    },
-    {
-        'name': 'tasks_for_subaccounts',
-        'pipeline': 'clients',
-        'backup_folder_id': '1u0IUkD7-lBUy9uhgHD-5xzw3l8OePJdE',
-        'flex': False,
-        'backup_name': 'tasks_for_subaccounts' + ' ' + today_date + ' ' + 'agmtech212.csv',
-        'batch_name': 'tasks_for_subaccounts.csv',
-        'extract_func': None,
-        'transform_func': None,
-        'output_filename': 'ibkr_tasks_for_subaccounts.csv',
-    },
-    {
-        'name': 'ContactListSummary',
-        'pipeline': 'clients',
-        'backup_folder_id': '11rmflCuYs7seB2z1xBGo1n51dGB15L6-',
-        'flex': False,
-        'backup_name': 'ContactListSummary' + ' ' + today_date + ' ' + 'agmtech212.csv',
-        'batch_name': 'ContactListSummary.csv',
-        'extract_func': None,
-        'transform_func': None,
-        'output_filename': 'ibkr_contact_list_summary.csv',
     },
     {
         'name': 'clients',
