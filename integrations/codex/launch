@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+if [ -x /opt/homebrew/bin/python3 ]; then
+    exec /opt/homebrew/bin/python3 -B "$(dirname "$0")/agm_mcp.py" "$@"
+fi
+exec python3 -B "$(dirname "$0")/agm_mcp.py" "$@"

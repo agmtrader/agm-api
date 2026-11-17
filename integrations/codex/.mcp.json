@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "agm-api": {
+      "command": "./mcp/launch",
+      "args": ["serve"],
+      "cwd": ".",
+      "startup_timeout_sec": 15,
+      "tool_timeout_sec": 150
+    }
+  }
+}
