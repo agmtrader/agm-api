@@ -140,6 +140,7 @@ def extract_data(etl_config) -> dict:
     logger.announcement('Extracting information for reports.', type='info')
 
     steps = []
+    task_exclusions = {}
     # Manual sources are placed in the batch folder before the ETL starts.
     # Their extraction status reflects that initial snapshot: present means
     # successful input, absent means skipped (not an extraction failure).
@@ -174,7 +175,16 @@ def extract_data(etl_config) -> dict:
             })
             continue
         try:
-            result = extract_func(file_config)
+            if file_config.get('task_type') in ('pending', 'registration'):
+                result = extract_func(file_config, excluded_accounts=task_exclusions)
+            else:
+                result = extract_func(file_config)
+            if step_name == 'account_details' and isinstance(result, dict):
+                task_exclusions = {
+                    row['account_id']: row['reason'] for row in result.get('outcomes', [])
+                    if row['status'] == 'skipped'
+                    and row.get('reason') in ('account_delinked', 'dual_credential_denied')
+                }
             # DataFrames are data, never boolean execution metadata.
             if isinstance(result, pd.DataFrame):
                 outcome = {'status': 'success', 'row_count': len(result)}
@@ -458,7 +468,7 @@ def extract_account_details_backup(config=None):
     return report
 
 
-def extract_task_backup(config, progress=None):
+def extract_task_backup(config, progress=None, *, excluded_accounts=None):
     """Collect one API task feed; publish only a fully encoded/verified snapshot."""
     from src.components.clients.accounts import read_accounts
     from src.components.tools.private.ibkr_task_refresh import decode_snapshot, encode_snapshot, refresh_tasks
@@ -483,7 +493,8 @@ def extract_task_backup(config, progress=None):
         details = Drive.download_file(file_id=details_source['id'], parse=True)
         accounts = task_account_population(accounts, details)
     config['_task_extract_stage'] = 'refresh_ibkr_tasks'
-    rows, report = refresh_tasks(accounts, previous, source, progress=progress)
+    rows, report = refresh_tasks(accounts, previous, source, progress=progress,
+                                 excluded_accounts=excluded_accounts)
     config['_task_extract_stage'] = 'encode_and_publish_snapshot'
     raw = encode_snapshot(rows)
     # Reuse the same byte/MD5-verified publication path for dated backups.

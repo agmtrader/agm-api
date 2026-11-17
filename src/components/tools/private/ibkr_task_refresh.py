@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 import requests
 
-from src.components.tools.private.ibkr_details_refresh import Pacer
+from src.components.tools.private.ibkr_details_refresh import Pacer, denied_by_both_credentials
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 
 
@@ -103,8 +103,8 @@ def decode_snapshot(raw, source):
 
 
 def refresh_tasks(accounts, previous, source, *, workers=4, rate=4,
-                  client_factory=IBKRWebAPI, get=requests.get, progress=None):
-    """Keep a coverage row even for confirmed empty, stale and unreadable accounts.
+                  client_factory=IBKRWebAPI, get=requests.get, progress=None, excluded_accounts=None):
+    """Keep coverage for included accounts, including empty, stale and unavailable reads.
 
     Credential selection matches the details refresher: only configured masters;
     one recorded alternate credential read on HTTP 403. No transport retries.
@@ -112,6 +112,7 @@ def refresh_tasks(accounts, previous, source, *, workers=4, rate=4,
     if source not in SOURCES or not 1 <= workers <= 10 or not 0 < rate <= 8:
         raise ValueError('Invalid task refresh configuration')
     previous = decode_snapshot(encode_snapshot(previous), source) if previous else []
+    excluded_accounts = excluded_accounts or {}
     started = time.monotonic()
     stamp = datetime.now(timezone.utc).isoformat()
     prior_accounts = {row['account_id']: row for row in previous if row['record_type'] == 'account'}
@@ -145,6 +146,8 @@ def refresh_tasks(accounts, previous, source, *, workers=4, rate=4,
             return token
 
     def fetch(key, masters):
+        if key in excluded_accounts:
+            return [], {'account_id': key, 'status': 'skipped', 'reason': excluded_accounts[key]}
         prior = prior_accounts.get(key)
         base = {field: '' for field in COLUMNS}
         base.update(schema_version='1', source=source, record_type='account', account_id=key,
@@ -162,7 +165,8 @@ def refresh_tasks(accounts, previous, source, *, workers=4, rate=4,
             master = next(iter(masters), (prior or {}).get('master_account', ''))
             base['master_account'] = master
             if master not in IBKRWebAPI.MASTER_ACCOUNT_CREDENTIALS:
-                raise ValueError('unsupported_master_account' if master else 'missing_master_account')
+                return [], {'account_id': key, 'status': 'skipped',
+                            'reason': 'unsupported_master_account' if master else 'missing_master_account'}
             contexts = [master] + [m for m in IBKRWebAPI.MASTER_ACCOUNT_CREDENTIALS if m != master][:1]
             response = None
             for context in contexts:
@@ -176,6 +180,9 @@ def refresh_tasks(accounts, previous, source, *, workers=4, rate=4,
                 base.update(credential_master=context, http_status=str(response.status_code))
                 if response.status_code != 403:
                     break
+            if denied_by_both_credentials(attempts):
+                return [], {'account_id': key, 'status': 'skipped', 'reason': 'dual_credential_denied',
+                            'attempts': attempts}
             if response.status_code != 200:
                 raise ValueError(f'http_{response.status_code}')
             payload = response.json()
@@ -239,10 +246,12 @@ def refresh_tasks(accounts, previous, source, *, workers=4, rate=4,
     rows = [row for key in sorted(output) for row in output[key]]
     rows = decode_snapshot(encode_snapshot(rows), source)
     counts = Counter(row['refresh_status'] for row in rows if row['record_type'] == 'account')
-    report = {'status': 'success' if counts['fresh'] == len(candidates) else 'partial',
+    skipped = sum(outcome['status'] == 'skipped' for outcome in outcomes)
+    failed = counts['stale'] + counts['unavailable']
+    report = {'status': 'partial' if failed else 'success',
               'source': source, 'started_at': stamp, 'seconds': round(time.monotonic() - started, 3),
               'summary': {'total': len(candidates), 'successful': counts['fresh'],
-                          'failed': counts['stale'] + counts['unavailable'], 'retained_stale': counts['stale'],
+                          'failed': failed, 'skipped': skipped, 'retained_stale': counts['stale'],
                           'unavailable': counts['unavailable'], 'task_rows': sum(row['record_type'] == 'task' for row in rows)},
               'outcomes': sorted(outcomes, key=lambda item: item['account_id'])}
     return rows, report

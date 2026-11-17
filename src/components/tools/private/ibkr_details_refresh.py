@@ -9,6 +9,12 @@ import requests
 from src.utils.connectors.ibkr_web_api import IBKRWebAPI
 
 
+def denied_by_both_credentials(attempts):
+    return (len(attempts) == 2
+            and len({attempt['credential_master'] for attempt in attempts}) == 2
+            and all(attempt.get('http_status') == 403 for attempt in attempts))
+
+
 def _delinked_date(value):
     """Only a valid, nonfuture broker lifecycle date explains an absent master."""
     if not isinstance(value, str) or not re.fullmatch(r'\d{8}', value):
@@ -167,9 +173,12 @@ def refresh_details(accounts, previous, *, workers=4, rate=5, limit=0,
                 detail['_agm_refresh'] = {'status': 'fresh', 'last_success_at': datetime.now(timezone.utc).isoformat()}
                 outcome.update(status='success', retained_previous=False)
         except Exception as exc:
-            outcome['error'] = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
-            if outcome['attempts']:
-                outcome['attempts'][-1]['error'] = outcome['error']
+            if denied_by_both_credentials(outcome['attempts']):
+                outcome.update(status='skipped', reason='dual_credential_denied')
+            else:
+                outcome['error'] = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
+                if outcome['attempts']:
+                    outcome['attempts'][-1]['error'] = outcome['error']
         outcome['seconds'] = round(time.monotonic() - tick, 3)
         return detail, outcome
 

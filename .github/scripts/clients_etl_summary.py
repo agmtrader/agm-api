@@ -1,5 +1,5 @@
 """Format a terminal clients overview for Actions and email; no remote operations."""
-from collections import defaultdict
+from collections import Counter, defaultdict
 import json
 import os
 from pathlib import Path
@@ -12,6 +12,13 @@ TASK_EXTRACT_STAGES = {
     'load_account_population': 'load account routing inputs',
     'refresh_ibkr_tasks': 'refresh IBKR tasks',
     'encode_and_publish_snapshot': 'encode and publish task snapshot',
+}
+ACCOUNT_EXCLUSIONS = {
+    'account_delinked': 'confirmed delinked',
+    'missing_master_account': 'missing master',
+    'root_master_account': 'master account itself',
+    'unsupported_master_account': 'unsupported parent / STL access deferred',
+    'dual_credential_denied': 'HTTP 403 under both configured credentials',
 }
 
 
@@ -135,7 +142,8 @@ def render(payload, execution):
                          'previous details remain historical/stale (identifiers in private overview).')
         for reason, label in (('missing_master_account', 'missing master'),
                               ('root_master_account', 'master account itself'),
-                              ('unsupported_master_account', 'unsupported parent / STL access deferred')):
+                              ('unsupported_master_account', 'unsupported parent / STL access deferred'),
+                              ('dual_credential_denied', ACCOUNT_EXCLUSIONS['dual_credential_denied'])):
             skipped = sum(o.get('status') == 'skipped' and o.get('reason') == reason
                           for o in step.get('outcomes', []))
             if skipped:
@@ -159,6 +167,15 @@ def render(payload, execution):
         )
         if denied_by_both:
             lines.append(f'  - {denied_by_both} accounts denied by IBKR under both configured credential contexts')
+
+    for step in extract.get('steps', []):
+        if step.get('name') not in ('pending_tasks', 'registration_tasks'):
+            continue
+        excluded = Counter(o.get('reason') for o in step.get('outcomes', []) if o.get('status') == 'skipped')
+        reasons = [f'{excluded[reason]} {label}' for reason, label in ACCOUNT_EXCLUSIONS.items()
+                   if excluded[reason]]
+        if reasons:
+            lines.append(f'{step["name"]} excluded: {", ".join(reasons)}.')
 
     warnings = []
     for warning in payload.get('warnings', []):
