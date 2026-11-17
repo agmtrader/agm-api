@@ -1,4 +1,4 @@
-from flask import Blueprint, request
+from flask import Blueprint, g, request
 from src.components.clients.contacts import (
     read_contacts,
     create_contact,
@@ -135,6 +135,29 @@ def delete_contact_document_route():
     payload = request.get_json(force=True)
     return delete_contact_document(document_id=payload.get('document_id'),
                                    contact_document_id=payload.get('contact_document_id'))
+
+
+@bp.route('/document_review', methods=['GET'])
+@require_scope('all')
+@format_response
+def document_review_queue_route():
+    from src.components.clients.document_review import read_review_queue
+    from src.utils.connectors.supabase import db
+    page = request.args.get('page', default='1')
+    if not page.isascii() or not page.isdecimal() or len(page) > 5:
+        raise ServiceError('Invalid document review page.', 400)
+    return read_review_queue(db, request.args.get('queue'), int(page)), 200, {'Cache-Control': 'private, no-store'}
+
+
+@bp.route('/document_review/<uuid:document_id>', methods=['GET', 'PATCH'])
+@require_scope('all')
+@format_response
+def document_review_file_route(document_id):
+    from src.components.clients.document_review import read_review_file, save_review
+    from src.utils.connectors.supabase import db
+    result = (read_review_file(db, document_id) if request.method == 'GET' else
+              save_review(db, document_id, request.get_json(silent=True), g.current_principal_id))
+    return result, 200, {'Cache-Control': 'private, no-store'}
 
 
 @bp.route('/screening', methods=['GET'])
