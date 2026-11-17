@@ -196,6 +196,10 @@ def extract_data(etl_config) -> dict:
             steps.append(dict(outcome, name=step_name))
         except Exception as e:
             logger.error(f'Error during {step_name}: {e}')
+            outcome = {'name': step_name, 'status': 'failed', 'error': str(e)}
+            if file_config.get('pipeline') == 'clients' and file_config.get('task_type'):
+                outcome['task_extract_stage'] = file_config.get('_task_extract_stage')
+                outcome['error_type'] = type(e).__name__
             if file_config.get('pipeline') == 'clients' and step_name == 'account_details':
                 frames = traceback.extract_tb(e.__traceback__)
                 locations = [f'{frame.filename.rsplit("/", 1)[-1]}:{frame.lineno}:{frame.name}'
@@ -215,7 +219,7 @@ def extract_data(etl_config) -> dict:
                 logger.error(f'MARKET_EXTRACT_FAILURE source={step_name} '
                              f'error_type={type(e).__name__} code={getattr(e, "code", None)} '
                              f'locations={locations}')
-            steps.append({'name': step_name, 'status': 'failed', 'error': str(e)})
+            steps.append(outcome)
         if file_config.get('_session_recoveries'):
             steps[-1]['session_recoveries'] = deepcopy(file_config['_session_recoveries'])
         if file_config.get('_session_failures'):
@@ -459,6 +463,7 @@ def extract_task_backup(config, progress=None):
     from src.components.clients.accounts import read_accounts
     from src.components.tools.private.ibkr_task_refresh import decode_snapshot, encode_snapshot, refresh_tasks
 
+    config['_task_extract_stage'] = 'load_previous_snapshot'
     source = config['task_type']
     folder = config['backup_folder_id']
     pattern = rf'{source}_tasks_\d+\.csv'
@@ -468,6 +473,7 @@ def extract_task_backup(config, progress=None):
         previous = decode_snapshot(Drive.download_file(file_id=previous_file['id'], parse=False), source)
     else:
         previous = []
+    config['_task_extract_stage'] = 'load_account_population'
     accounts = read_accounts({}, view='list')
     details_config = _get_file_config('account_details', [_get_etl_config_by_name('clients')])
     detail_files = [file for file in Drive.get_files_in_folder(details_config['backup_folder_id'])
@@ -476,7 +482,9 @@ def extract_task_backup(config, progress=None):
     if details_source:
         details = Drive.download_file(file_id=details_source['id'], parse=True)
         accounts = task_account_population(accounts, details)
+    config['_task_extract_stage'] = 'refresh_ibkr_tasks'
     rows, report = refresh_tasks(accounts, previous, source, progress=progress)
+    config['_task_extract_stage'] = 'encode_and_publish_snapshot'
     raw = encode_snapshot(rows)
     # Reuse the same byte/MD5-verified publication path for dated backups.
     uploaded = _publish_report(config['backup_name'], 'text/csv', base64.b64encode(raw).decode('ascii'), folder_id=folder)

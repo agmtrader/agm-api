@@ -20,15 +20,49 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$AGM_API_EMAIL" && test -n "$AGM_API_PASSWORD"
-          token_response=$(curl -fsS --max-time 30 -X POST -H 'Content-Type: application/json' \
+          report="$RUNNER_TEMP/document-metadata-summary.md"
+          stage='Check scheduler credentials'
+          status=unavailable
+          finish() {
+            if [[ $1 != 0 ]]; then
+              printf '## Document metadata review — failed\n\nStage: %s\n\nHTTP status: %s\n\nNo aggregate counts were produced.\n' "$stage" "$status" > "$report"
+            fi
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          }
+          trap 'finish "$?"' EXIT
+          [[ -n "$AGM_API_EMAIL" && -n "$AGM_API_PASSWORD" ]] || exit 1
+
+          stage='Request API token'
+          status=$(curl -sS --max-time 30 -o "$RUNNER_TEMP/metadata-token.json" -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
             -d "$(jq -n '{email: env.AGM_API_EMAIL, password: env.AGM_API_PASSWORD}')" \
             https://api.agmtechnology.com/token)
-          token=$(printf '%s' "$token_response" | jq -er '.access_token | select(type == "string" and length > 0)')
-          response=$(curl -fsS --max-time 120 -H "Authorization: Bearer $token" \
+          [[ "$status" == 200 ]] || exit 1
+          token=$(jq -er '.access_token | select(type == "string" and length > 0)' "$RUNNER_TEMP/metadata-token.json")
+          rm -f "$RUNNER_TEMP/metadata-token.json"
+
+          stage='Read aggregate review'
+          status=unavailable
+          payload="$RUNNER_TEMP/document-metadata-response.json"
+          status=$(curl -sS --max-time 120 -o "$payload" -w '%{http_code}' -H "Authorization: Bearer $token" \
             https://api.agmtechnology.com/actions/review_document_metadata)
-          printf '%s' "$response" | jq -e '.status == "success" and (.total_links | type == "number") and (.categories | type == "array")' >/dev/null
+          if [[ "$status" == 403 ]] && jq -e '.message == "Scope required: actions/review_document_metadata"' "$payload" >/dev/null 2>&1; then
+            stage='Read aggregate review (scheduler identity lacks actions/review_document_metadata)'
+          fi
+          [[ "$status" == 200 ]] || exit 1
+
+          stage='Validate aggregate review'
+          jq -e '.status == "success" and (.total_links | type == "number") and (.categories | type == "array")' "$payload" >/dev/null
           {
             echo '## Document metadata review'
-            printf '%s' "$response" | jq -r '"Generated: \(.generated_at)\nTotal links: \(.total_links)\n\(.notice)", (.categories[] | "\(.category): \(.total) links; \(.checks | to_entries | map("\(.key): \(.value)") | join(", "))")'
-          } | tee -a "$GITHUB_STEP_SUMMARY"
+            jq -r '"Generated: \(.generated_at)\nTotal links: \(.total_links)\n\(.notice)", (.categories[] | "\(.category): \(.total) links; \(.checks | to_entries | map("\(.key): \(.value)") | join(", "))")' "$payload"
+          } > "$report"
+          mv "$payload" "$RUNNER_TEMP/document-metadata-report.json"
+      - name: Retain document metadata report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: document-metadata-review
+          path: |
+            ${{ runner.temp }}/document-metadata-summary.md
+            ${{ runner.temp }}/document-metadata-report.json
+          if-no-files-found: error
