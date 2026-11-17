@@ -51,10 +51,31 @@ jobs:
           [[ "$status" == 200 ]] || exit 1
 
           stage='Validate aggregate review'
-          jq -e '.status == "success" and (.total_links | type == "number") and (.categories | type == "array")' "$payload" >/dev/null
+          jq -e '.status == "success" and (.total_links | type == "number") and
+            (.categories | type == "array") and
+            ([.unlinked_documents.documents, .duplicate_checksums.groups,
+              .duplicate_contact_candidates.contacts, .ocr_coverage.linked_documents] |
+              all(type == "number"))' "$payload" >/dev/null
           {
-            echo '## Document metadata review'
+            echo '## Document and contact review'
+            echo '### Metadata gaps'
             jq -r '"Generated: \(.generated_at)\nTotal links: \(.total_links)\n\(.notice)", (.categories[] | "\(.category): \(.total) links; \(.checks | to_entries | map("\(.key): \(.value)") | join(", "))")' "$payload"
+            jq -r '
+              "",
+              "### Unlinked documents",
+              "\(.unlinked_documents.unlinked) of \(.unlinked_documents.documents) stored documents have no contact-document link.",
+              "",
+              "### Duplicate document checksums",
+              "\(.duplicate_checksums.groups) repeated checksum groups across \(.duplicate_checksums.documents_in_groups) documents. Missing checksums: \(.duplicate_checksums.missing_checksums).",
+              "",
+              "### Duplicate-contact candidates",
+              "\(.duplicate_contact_candidates.contacts_with_shared_signals) of \(.duplicate_contact_candidates.contacts) contacts share at least one signal.",
+              "Shared groups by signal: \(.duplicate_contact_candidates.shared_email_groups) email, \(.duplicate_contact_candidates.shared_phone_groups) phone, \(.duplicate_contact_candidates.shared_name_birthday_groups) name and birthday.",
+              .duplicate_contact_candidates.coverage,
+              "",
+              "### OCR coverage",
+              "Of \(.ocr_coverage.linked_documents) unique linked documents: \(.ocr_coverage.complete) completed with text, \(.ocr_coverage.failed_without_completion) failed without completion, \(.ocr_coverage.other_incomplete) otherwise incomplete, and \(.ocr_coverage.no_extraction_record) have no extraction record."
+            ' "$payload"
           } > "$report"
           mv "$payload" "$RUNNER_TEMP/document-metadata-report.json"
       - name: Retain document metadata report
