@@ -655,6 +655,9 @@ def extract_bond_snapshot(config=None):
     if not codes:
         raise ValueError('IBKR scanner catalogue is empty')
     contracts = {}
+    # IBKR returned this contract without usable currency or default status on Nov 17.
+    excluded_conid = '909304143'
+    excluded_scans = set()
     successful, empty, rejected = set(), set(), 0
     required = {'TOP_PERC_GAIN', 'TOP_PERC_LOSE', 'MOST_ACTIVE', 'MOST_ACTIVE_USD',
                 'TOP_TRADE_COUNT', 'TOP_TRADE_RATE', 'TOP_PRICE_RANGE',
@@ -684,7 +687,13 @@ def extract_bond_snapshot(config=None):
                 for row in response['contracts']:
                     if not isinstance(row, dict) or row.get('con_id') is None or row.get('sec_type') != 'BOND':
                         raise ValueError(f'Invalid bond scanner record for {code}')
-                    contracts.setdefault(str(row['con_id']), row)
+                    conid = str(row['con_id'])
+                    if conid == excluded_conid:
+                        excluded_scans.add(code)
+                        continue
+                    contracts.setdefault(conid, row)
+    if excluded_scans:
+        logger.warning(f'Bond scanner excluded conid={excluded_conid} scan_types={",".join(sorted(excluded_scans))}')
     if not required.issubset(successful | empty) or not contracts:
         raise ValueError('Required bond scanner types failed or returned no contracts')
     logger.info(f'Bond scanner types={len(codes)} successful={len(successful)} unavailable={rejected} unique={len(contracts)}')
