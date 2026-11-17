@@ -30,13 +30,13 @@ jobs:
             cat "$report" >> "$GITHUB_STEP_SUMMARY"
           }
           trap 'finish "$?"' EXIT
-          [[ -n "$AGM_API_EMAIL" && -n "$AGM_API_PASSWORD" ]]
+          [[ -n "$AGM_API_EMAIL" && -n "$AGM_API_PASSWORD" ]] || exit 1
 
           stage='Request API token'
           status=$(curl -sS --max-time 30 -o "$RUNNER_TEMP/metadata-token.json" -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
             -d "$(jq -n '{email: env.AGM_API_EMAIL, password: env.AGM_API_PASSWORD}')" \
             https://api.agmtechnology.com/token)
-          [[ "$status" == 200 ]]
+          [[ "$status" == 200 ]] || exit 1
           token=$(jq -er '.access_token | select(type == "string" and length > 0)' "$RUNNER_TEMP/metadata-token.json")
           rm -f "$RUNNER_TEMP/metadata-token.json"
 
@@ -48,7 +48,7 @@ jobs:
           if [[ "$status" == 403 ]] && jq -e '.message == "Scope required: actions/review_document_metadata"' "$payload" >/dev/null 2>&1; then
             stage='Read aggregate review (scheduler identity lacks actions/review_document_metadata)'
           fi
-          [[ "$status" == 200 ]]
+          [[ "$status" == 200 ]] || exit 1
 
           stage='Validate aggregate review'
           jq -e '.status == "success" and (.total_links | type == "number") and (.categories | type == "array")' "$payload" >/dev/null
