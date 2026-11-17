@@ -655,6 +655,7 @@ def extract_bond_snapshot(config=None):
     if not codes:
         raise ValueError('IBKR scanner catalogue is empty')
     contracts = {}
+    scanner_types_by_conid = {}
     successful, empty, rejected = set(), set(), 0
     required = {'TOP_PERC_GAIN', 'TOP_PERC_LOSE', 'MOST_ACTIVE', 'MOST_ACTIVE_USD',
                 'TOP_TRADE_COUNT', 'TOP_TRADE_RATE', 'TOP_PRICE_RANGE',
@@ -684,7 +685,9 @@ def extract_bond_snapshot(config=None):
                 for row in response['contracts']:
                     if not isinstance(row, dict) or row.get('con_id') is None or row.get('sec_type') != 'BOND':
                         raise ValueError(f'Invalid bond scanner record for {code}')
-                    contracts.setdefault(str(row['con_id']), row)
+                    conid = str(row['con_id'])
+                    contracts.setdefault(conid, row)
+                    scanner_types_by_conid.setdefault(conid, set()).add(code)
     if not required.issubset(successful | empty) or not contracts:
         raise ValueError('Required bond scanner types failed or returned no contracts')
     logger.info(f'Bond scanner types={len(codes)} successful={len(successful)} unavailable={rejected} unique={len(contracts)}')
@@ -703,22 +706,35 @@ def extract_bond_snapshot(config=None):
             if not isinstance(payload, dict) or not isinstance(payload.get('secdef'), list):
                 raise ValueError('Malformed bond security definitions')
             definitions = {str(row['conid']): row for row in payload['secdef'] if isinstance(row, dict) and row.get('conid') is not None}
-            snapshots = api.get_market_data_snapshot(','.join(batch))
+            if set(batch) != set(definitions):
+                raise ValueError('Incomplete bond security definitions')
+            eligible_batch = []
+            for conid in batch:
+                definition = definitions[conid]
+                bond = definition.get('bond')
+                currency = definition.get('currency')
+                if (not isinstance(currency, str) or not currency.strip()
+                        or not isinstance(bond, dict) or bond.get('isDefaulted') not in ('Y', 'N', 'T', 'F')):
+                    scans = ','.join(sorted(scanner_types_by_conid[conid]))
+                    logger.warning(f'Bond scanner excluded conid={conid} scan_types={scans} reason=missing_currency_or_default_status')
+                    continue
+                eligible_batch.append(conid)
+            if not eligible_batch:
+                continue
+            snapshots = api.get_market_data_snapshot(','.join(eligible_batch))
             if not isinstance(snapshots, list):
                 raise ValueError('Malformed bond market snapshots')
             snapshots = {str(row['conid']): row for row in snapshots if isinstance(row, dict) and row.get('conid') is not None}
-            if set(batch) != set(definitions) or set(batch) != set(snapshots):
-                raise ValueError('Incomplete bond security definitions or snapshots')
+            if set(eligible_batch) != set(snapshots):
+                raise ValueError('Incomplete bond market snapshots')
             if any(not row.get('SYMBOL') or not row.get('CONTRACT_DESCRIPTION_2') for row in snapshots.values()):
                 raise ValueError('Bond snapshot missing instrument identity')
-            for conid, definition in definitions.items():
-                bond = definition.get('bond')
-                if not definition.get('currency') or not isinstance(bond, dict) or bond.get('isDefaulted') not in ('Y', 'N', 'T', 'F'):
-                    raise ValueError(f'Missing currency or default status for bond {conid}')
             stamp = datetime.now(pytz.UTC).isoformat()
-            for conid in batch:
+            for conid in eligible_batch:
                 records[conid] = {'conid': conid, 'scanner': contracts[conid], 'snapshot': snapshots[conid],
                                   'definition': definitions[conid], 'retrieved_at_utc': stamp}
+    if not records:
+        raise ValueError('No scanner bonds with usable currency and default status')
     report = build_comparison(records)
     if report.empty:
         raise ValueError('No eligible USD non-defaulted scanner bonds')
