@@ -7,6 +7,14 @@ import uuid
 import re
 
 
+TASK_EXTRACT_STAGES = {
+    'load_previous_snapshot': 'load previous task snapshot',
+    'load_account_population': 'load account routing inputs',
+    'refresh_ibkr_tasks': 'refresh IBKR tasks',
+    'encode_and_publish_snapshot': 'encode and publish task snapshot',
+}
+
+
 def text(value):
     return 'unknown' if value is None else ' '.join(str(value).split())
 
@@ -16,7 +24,8 @@ def safe_error(value):
     value = str(value or '')
     if value in {'missing_master_account', 'details_master_mismatch', 'details_account_mismatch',
                  'invalid_account_number', 'unsupported_master_account', 'conflicting_master_account',
-                 'PermissionError', 'TimeoutError', 'PreconditionFailed', 'NonZeroExitCode', 'DeadlineExceeded'}:
+                 'PermissionError', 'TimeoutError', 'PreconditionFailed', 'NonZeroExitCode', 'DeadlineExceeded',
+                 'ValueError', 'ServiceError', 'HTTPError', 'ConnectionError'}:
         return value
     if re.fullmatch(r'\d{3}', value):
         return value
@@ -57,7 +66,14 @@ def failures(stage, name, key):
             error = item.get('error')
             if not error and item.get('name') == 'account_details' and item.get('summary'):
                 error = f'{item["summary"].get("failed", "unknown")} account failures (details below)'
-            details.append(f'{safe_name(item.get("name"))}: {safe_error(error)}')
+            label = safe_name(item.get('name'))
+            stage_label = TASK_EXTRACT_STAGES.get(item.get('task_extract_stage'))
+            if stage_label:
+                label = f'{label} / {stage_label}'
+            reason = safe_error(error)
+            if stage_label and reason.startswith('Failure details withheld'):
+                reason = safe_error(item.get('error_type'))
+            details.append(f'{label}: {reason}')
     return details
 
 
@@ -136,6 +152,13 @@ def render(payload, execution):
         if not details and counts.get('failed'):
             details.append('details unavailable; see full overview')
         section(lines, 'IBKR account failures', details)
+        denied_by_both = sum(
+            outcome.get('status') == 'failed'
+            and [attempt.get('http_status') for attempt in outcome.get('attempts', [])] == [403, 403]
+            for outcome in step.get('outcomes', [])
+        )
+        if denied_by_both:
+            lines.append(f'  - {denied_by_both} accounts denied by IBKR under both configured credential contexts')
 
     warnings = []
     for warning in payload.get('warnings', []):
