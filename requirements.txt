@@ -1,8 +1,8 @@
 # Core Python Dependencies
 certifi==2024.7.4
 numpy==2.0.2
-opencv-python-headless==5.0.0.93
 pandas==2.2.3
+Pillow==11.3.0
 python-dotenv==1.0.1
 pytz==2024.1
 
@@ -11,7 +11,6 @@ Flask==3.1.1
 Flask_Cors==6.0.0
 flask_jwt_extended==4.6.0
 Flask-Limiter==3.5.0
-Flask_RESTful==0.3.10
 gunicorn==23.0.0
 PyJWT==2.9.0
 Requests==2.32.5
@@ -19,13 +18,7 @@ Requests==2.32.5
 urllib3==2.6.3
 charset-normalizer==3.4.4
 chardet==5.2.0
-requests_cache==1.2.1
-retry_requests==2.0.0
-websocket_client==1.8.0
 Werkzeug==3.1.5
-gevent==25.4.2
-gevent-websocket==0.10.1
-flask_socketio==5.5.1
 bcrypt==4.2.1
 
 # Database
@@ -34,14 +27,11 @@ SQLAlchemy==2.0.35
 
 # Google Services
 google_api_python_client==2.136.0
-google_auth_oauthlib==1.2.1
 google-cloud-documentai==3.15.0
 google-cloud-secret-manager==2.23.1
 
 # Text Processing and Utilities
-beautifulsoup4==4.12.3
 Jinja2==3.1.6
-nltk==3.9.1
 openpyxl==3.1.5
 xlwt==1.3.0
 premailer==3.10.0
@@ -49,29 +39,12 @@ protobuf==5.29.5
 rich==13.9.3
 tenacity==9.0.0
 xlrd==2.0.1
-uuid==1.30
 cryptography==45.0.5
 
-# Financial Data
-ib_insync==0.9.86
-yfinance==0.2.37
-
-dnspython==2.7.0
-
+# Gemini assistant
 langchain==1.0.2
-langchain-text-splitters==1.0.0
-langchain-community ==0.4
-bs4==0.0.2
 langchain_google_genai==3.0.0
 
-# QR code generation
-qrcode[pil]==8.2
-
-# PDF Generation
-reportlab==4.1.0
+# Accounting PDF extraction and Google OCR backfill page handling.
+# Accounting's Tesseract binary is retained in Dockerfile.
 pypdfium2==5.11.0
-easyocr==1.7.2
-pymupdf==1.28.0
-transformers==4.57.6
-sentencepiece==0.2.1
-sacremoses==0.1.1

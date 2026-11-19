@@ -1,22 +1,12 @@
 import base64
 from dataclasses import dataclass, field
-from functools import lru_cache
 import hashlib
-from io import BytesIO
 import json
 import os
 from pathlib import Path
 import threading
 from typing import Optional, Protocol, Sequence
 import unicodedata
-
-import cv2
-import easyocr
-import numpy as np
-from PIL import Image, ImageOps
-import pypdfium2
-import torch
-from easyocr.utils import reformat_input
 
 from src.utils.exception import handle_exception
 from src.utils.logger import logger
@@ -32,25 +22,20 @@ OCR_LANGUAGE_MAP = {
     'spa': 'es',
     'spanish': 'es',
 }
-DEFAULT_OCR_DEVICE = 'auto'
 OCR_ROTATIONS = (0, 90, 180, 270)
 OCR_RENDER_DPI = 300
 OCR_MAX_RENDER_DIMENSION = 3500
-OCR_MIN_LONG_EDGE = 1800
 OCR_MAX_FILE_BYTES = 50 * 1024 * 1024
 OCR_MAX_PAGES = 100
 OCR_MAX_IMAGE_PIXELS = 50_000_000
-OCR_ENHANCEMENT_RETRY_CONFIDENCE = 0.65
+OCR_LOW_AVERAGE_CONFIDENCE_THRESHOLD = 0.65
 OCR_LOW_CONFIDENCE_REGION_THRESHOLD = 0.50
 OCR_HIGH_QUALITY_SCORE = 80.0
 OCR_REVIEW_QUALITY_SCORE = 50.0
 POSITIONED_OCR_DPI = 200
-EASYOCR_PROVIDER = 'local_easyocr_positioned'
 GOOGLE_DOCUMENT_AI_PROVIDER = 'google_document_ai_enterprise_ocr'
-POSITIONED_OCR_PROVIDER = EASYOCR_PROVIDER
 DEFAULT_OCR_PROVIDER = GOOGLE_DOCUMENT_AI_PROVIDER
 OCR_PIPELINE_VERSION = 'v6'
-EASYOCR_VERSION = str(getattr(easyocr, '__version__', 'unknown'))
 OCR_REVIEW_PROVIDER_QUALITY_SCORE = 0.65
 OCR_LOW_PROVIDER_QUALITY_SCORE = 0.40
 OCR_REVIEW_DEFECT_CONFIDENCE = 0.80
@@ -74,13 +59,9 @@ PROJECT_DIRECTORY = Path(__file__).resolve().parents[3]
 OCR_DATA_DIRECTORY = Path(
     os.getenv('OCR_DATA_DIRECTORY', PROJECT_DIRECTORY / '.cache' / 'ocr')
 ).expanduser()
-POSITIONED_OCR_MODEL_DIRECTORY = Path(
-    os.getenv('EASYOCR_MODEL_DIRECTORY', OCR_DATA_DIRECTORY / 'models')
-).expanduser()
-POSITIONED_OCR_CACHE_DIRECTORY = Path(
+OCR_CACHE_DIRECTORY = Path(
     os.getenv('OCR_CACHE_DIRECTORY', OCR_DATA_DIRECTORY / 'results')
 ).expanduser()
-POSITIONED_OCR_CACHE_VERSION = OCR_PIPELINE_VERSION
 SUPPORTED_RASTER_MIME_TYPES = {
     'image/bmp',
     'image/gif',
@@ -199,8 +180,8 @@ class DocumentOCRResult:
     """Canonical OCR output shared by every downstream document workflow."""
 
     pages: list[DocumentOCRPage]
-    provider: str = POSITIONED_OCR_PROVIDER
-    model_version: str = EASYOCR_VERSION
+    provider: str = GOOGLE_DOCUMENT_AI_PROVIDER
+    model_version: str = 'default'
     pipeline_version: str = OCR_PIPELINE_VERSION
     device: str | None = None
     languages: list[str] = field(default_factory=list)
@@ -303,86 +284,13 @@ def _get_ocr_language_codes(source_language: Optional[str]) -> str:
     return '+'.join(parts) if parts else 'es'
 
 
-def _get_easyocr_languages(source_language: Optional[str]) -> list[str]:
+def _get_ocr_languages(source_language: Optional[str]) -> list[str]:
     raw_languages = _get_ocr_language_codes(source_language).split('+')
     languages = []
     for language in raw_languages + ['en']:
         if language and language not in languages:
             languages.append(language)
     return languages or ['es', 'en']
-
-
-def _mps_is_available() -> bool:
-    return bool(
-        hasattr(torch.backends, 'mps')
-        and torch.backends.mps.is_available()
-    )
-
-
-def _resolve_easyocr_device(requested_device: Optional[str] = None) -> str:
-    configured_device = str(
-        requested_device
-        if requested_device is not None
-        else os.getenv('EASYOCR_DEVICE', DEFAULT_OCR_DEVICE)
-    ).strip().lower() or DEFAULT_OCR_DEVICE
-
-    if configured_device == 'cpu':
-        return 'cpu'
-
-    if configured_device == 'cuda':
-        if torch.cuda.is_available():
-            return 'cuda'
-        logger.warning('EASYOCR_DEVICE=cuda was requested but CUDA is unavailable. Falling back to CPU.')
-        return 'cpu'
-
-    if configured_device == 'mps':
-        if _mps_is_available():
-            return 'mps'
-        logger.warning('EASYOCR_DEVICE=mps was requested but MPS is unavailable. Falling back to CPU.')
-        return 'cpu'
-
-    if configured_device != DEFAULT_OCR_DEVICE:
-        logger.warning(f'Unsupported EASYOCR_DEVICE value: {configured_device}. Falling back to auto detection.')
-
-    if torch.cuda.is_available():
-        return 'cuda'
-
-    if _mps_is_available():
-        return 'mps'
-
-    return 'cpu'
-
-
-def _active_reader_device(reader, fallback: str) -> str:
-    return str(getattr(reader, 'device', fallback)) if reader is not None else fallback
-
-
-def _create_easyocr_reader(languages_key: tuple[str, ...], device: str):
-    return easyocr.Reader(
-        list(languages_key),
-        gpu=device,
-        model_storage_directory=str(POSITIONED_OCR_MODEL_DIRECTORY),
-        user_network_directory=str(POSITIONED_OCR_MODEL_DIRECTORY / 'user_network'),
-        verbose=False,
-    )
-
-
-@lru_cache(maxsize=8)
-def _get_easyocr_reader(languages_key: tuple[str, ...], device: str):
-    logger.info(
-        f'Initializing EasyOCR reader with device={device} '
-        f'languages={list(languages_key)}'
-    )
-    try:
-        return _create_easyocr_reader(languages_key, device)
-    except Exception as exc:
-        if device == 'cpu':
-            raise
-        logger.warning(
-            f'EasyOCR initialization failed on device={device}: {exc}. '
-            'Falling back to CPU.'
-        )
-        return _create_easyocr_reader(languages_key, 'cpu')
 
 
 def assess_ocr_text(
@@ -473,7 +381,7 @@ def assess_ocr_text(
         reasons.append('confidence_unavailable')
     elif bounded_confidence < OCR_LOW_CONFIDENCE_REGION_THRESHOLD:
         reasons.append('very_low_average_confidence')
-    elif bounded_confidence < OCR_ENHANCEMENT_RETRY_CONFIDENCE:
+    elif bounded_confidence < OCR_LOW_AVERAGE_CONFIDENCE_THRESHOLD:
         reasons.append('low_average_confidence')
     if normalized_empty_page_count:
         reasons.append('empty_pages')
@@ -506,126 +414,6 @@ def assess_ocr_text(
         suspicious_character_ratio=suspicious_character_ratio,
         reasons=reasons,
     )
-
-
-def score_ocr_text(text: str, average_confidence: float | None = None) -> float:
-    """Rank alternate OCR attempts using document-neutral quality signals."""
-
-    assessment = assess_ocr_text(text, average_confidence)
-    return assessment.score + min(50.0, assessment.character_count / 10.0)
-
-
-def _extract_best_ocr_text_from_image(
-    reader,
-    image: Image.Image,
-    rotations: Sequence[int] = OCR_ROTATIONS,
-) -> tuple[str, float, int]:
-    best_text = ''
-    best_score = float('-inf')
-    best_rotation = 0
-
-    for rotation in rotations:
-        rotated = image if rotation == 0 else image.rotate(rotation, expand=True)
-        try:
-            page_result = reader.readtext(
-                np.array(rotated),
-                detail=1,
-                paragraph=False,
-            )
-        finally:
-            if rotation != 0:
-                rotated.close()
-
-        candidate_text = '\n'.join(
-            str(item[1]).strip()
-            for item in page_result
-            if len(item) >= 2 and str(item[1]).strip()
-        ).strip()
-        confidence_weights = [
-            (float(item[2]), max(1, len(str(item[1]).strip())))
-            for item in page_result
-            if len(item) >= 3 and str(item[1]).strip()
-        ]
-        confidence_weight = sum(weight for _, weight in confidence_weights)
-        average_confidence = (
-            sum(confidence * weight for confidence, weight in confidence_weights)
-            / confidence_weight
-            if confidence_weight
-            else None
-        )
-        candidate_score = score_ocr_text(candidate_text, average_confidence)
-
-        if candidate_score > best_score:
-            best_text = candidate_text
-            best_score = candidate_score
-            best_rotation = rotation
-
-    return best_text, best_score, best_rotation
-
-
-def _polygon_bounds(
-    polygon: Sequence[Sequence[float]],
-) -> tuple[float, float, float, float]:
-    xs = [point[0] for point in polygon]
-    ys = [point[1] for point in polygon]
-    return min(xs), min(ys), max(xs), max(ys)
-
-
-def _paragraph_confidence(
-    paragraph_polygon: Sequence[Sequence[float]],
-    word_regions: Sequence[Sequence[object]],
-) -> float | None:
-    """Average confidence of words whose centers fall inside a paragraph."""
-
-    left, top, right, bottom = _polygon_bounds(paragraph_polygon)
-    matching_confidences = []
-    for word_polygon, _, confidence in word_regions:
-        word_left, word_top, word_right, word_bottom = _polygon_bounds(word_polygon)
-        center_x = (word_left + word_right) / 2
-        center_y = (word_top + word_bottom) / 2
-        if left <= center_x <= right and top <= center_y <= bottom:
-            matching_confidences.append(float(confidence))
-    if not matching_confidences:
-        return None
-    return sum(matching_confidences) / len(matching_confidences)
-
-
-def _upscale_for_ocr(image: Image.Image) -> tuple[Image.Image, float]:
-    longest_edge = max(image.width, image.height)
-    if longest_edge >= OCR_MIN_LONG_EDGE:
-        return image.copy(), 1.0
-    scale = OCR_MIN_LONG_EDGE / longest_edge
-    return (
-        image.resize(
-            (
-                max(1, round(image.width * scale)),
-                max(1, round(image.height * scale)),
-            ),
-            Image.Resampling.LANCZOS,
-        ),
-        scale,
-    )
-
-
-def _enhance_for_ocr(image: Image.Image) -> Image.Image:
-    image_array = np.array(image.convert('RGB'))
-    lab = cv2.cvtColor(image_array, cv2.COLOR_RGB2LAB)
-    luminance, channel_a, channel_b = cv2.split(lab)
-    enhanced_luminance = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(
-        luminance
-    )
-    enhanced = cv2.cvtColor(
-        cv2.merge((enhanced_luminance, channel_a, channel_b)),
-        cv2.COLOR_LAB2RGB,
-    )
-    sharpened = cv2.addWeighted(
-        enhanced,
-        1.35,
-        cv2.GaussianBlur(enhanced, (0, 0), 1.0),
-        -0.35,
-        0,
-    )
-    return Image.fromarray(sharpened)
 
 
 def _regions_average_confidence(
@@ -738,254 +526,6 @@ def _build_ocr_result(
     return result
 
 
-def _recognize_positioned_regions(
-    reader,
-    image: Image.Image,
-) -> tuple[list[DocumentOCRRegion], list[DocumentOCRRegion]]:
-    """Recognize paragraphs while retaining word-level text and coordinates."""
-
-    image_array = np.array(image)
-    image_bgr, image_gray = reformat_input(image_array)
-    horizontal_lists, free_lists = reader.detect(
-        image_bgr,
-        reformat=False,
-    )
-    horizontal_list = horizontal_lists[0]
-    free_list = free_lists[0]
-    paragraph_regions = reader.recognize(
-        image_gray,
-        horizontal_list,
-        free_list,
-        detail=1,
-        paragraph=True,
-        reformat=False,
-    )
-    word_regions = reader.recognize(
-        image_gray,
-        horizontal_list,
-        free_list,
-        detail=1,
-        paragraph=False,
-        reformat=False,
-    )
-
-    paragraphs = [
-        DocumentOCRRegion(
-            polygon=[[float(x), float(y)] for x, y in polygon],
-            text=str(text).strip(),
-            confidence=_paragraph_confidence(polygon, word_regions),
-        )
-        for polygon, text, *_ in paragraph_regions
-        if str(text).strip()
-    ]
-    words = [
-        DocumentOCRRegion(
-            polygon=[[float(x), float(y)] for x, y in polygon],
-            text=str(text).strip(),
-            confidence=float(confidence),
-        )
-        for polygon, text, confidence, *_ in word_regions
-        if str(text).strip()
-    ]
-    return paragraphs, words
-
-
-def _recognize_positioned_page(
-    reader,
-    image: Image.Image,
-    rotations: Sequence[int],
-) -> tuple[
-    list[DocumentOCRRegion],
-    list[DocumentOCRRegion],
-    float,
-    float,
-    int,
-]:
-    positioned_image = image
-    rotation = 0
-    try:
-        if len(rotations) > 1 or rotations[0] != 0:
-            _, _, rotation = _extract_best_ocr_text_from_image(
-                reader,
-                image,
-                rotations,
-            )
-            if rotation:
-                positioned_image = image.rotate(rotation, expand=True)
-
-        regions, words = _recognize_positioned_regions(reader, positioned_image)
-        return (
-            regions,
-            words,
-            float(positioned_image.width),
-            float(positioned_image.height),
-            rotation,
-        )
-    finally:
-        if positioned_image is not image:
-            positioned_image.close()
-
-
-def _recognize_page_with_fallback(
-    reader,
-    image: Image.Image,
-    rotations: Sequence[int],
-    languages: Sequence[str],
-    configured_device: str,
-    page_number: int,
-) -> tuple[
-    list[DocumentOCRRegion],
-    list[DocumentOCRRegion],
-    float,
-    float,
-    int,
-    object,
-]:
-    try:
-        regions, words, page_width, page_height, rotation = (
-            _recognize_positioned_page(reader, image, rotations)
-        )
-    except Exception as exc:
-        active_device = str(getattr(reader, 'device', configured_device))
-        if active_device == 'cpu':
-            raise
-        logger.warning(
-            f'OCR page {page_number} failed on device={active_device}: '
-            f'{exc}. Retrying on CPU.'
-        )
-        reader = _get_easyocr_reader(tuple(languages), 'cpu')
-        regions, words, page_width, page_height, rotation = (
-            _recognize_positioned_page(reader, image, rotations)
-        )
-
-    return regions, words, page_width, page_height, rotation, reader
-
-
-def _recognize_raster_candidate(
-    reader,
-    image: Image.Image,
-    rotations: Sequence[int],
-    languages: Sequence[str],
-    device: str,
-    page_number: int,
-    source_scale: float,
-    enhance_low_quality: bool,
-) -> tuple[DocumentOCRPage, object, OCRQualityAssessment]:
-    prepared_image, upscale = _upscale_for_ocr(image)
-    candidate_rotations = tuple(rotations)
-
-    try:
-        regions, words, page_width, page_height, rotation, reader = (
-            _recognize_page_with_fallback(
-                reader,
-                prepared_image,
-                candidate_rotations,
-                languages,
-                device,
-                page_number,
-            )
-        )
-        average_confidence = _regions_average_confidence(regions)
-        text = '\n'.join(region.text for region in regions if region.text).strip()
-        assessment = assess_ocr_text(text, average_confidence)
-
-        should_retry_enhanced = (
-            enhance_low_quality
-            and (
-                assessment.status != 'high'
-                or average_confidence is None
-                or average_confidence < OCR_ENHANCEMENT_RETRY_CONFIDENCE
-            )
-        )
-        if should_retry_enhanced:
-            enhanced_image = _enhance_for_ocr(prepared_image)
-            try:
-                (
-                    enhanced_regions,
-                    enhanced_words,
-                    enhanced_width,
-                    enhanced_height,
-                    _,
-                    reader,
-                ) = (
-                    _recognize_page_with_fallback(
-                        reader,
-                        enhanced_image,
-                        (rotation,),
-                        languages,
-                        device,
-                        page_number,
-                    )
-                )
-            finally:
-                enhanced_image.close()
-
-            enhanced_confidence = _regions_average_confidence(enhanced_regions)
-            enhanced_text = '\n'.join(
-                region.text for region in enhanced_regions if region.text
-            ).strip()
-            enhanced_assessment = assess_ocr_text(
-                enhanced_text,
-                enhanced_confidence,
-            )
-            if score_ocr_text(
-                enhanced_text,
-                enhanced_confidence,
-            ) > score_ocr_text(text, average_confidence):
-                regions = enhanced_regions
-                words = enhanced_words
-                page_width = enhanced_width
-                page_height = enhanced_height
-                assessment = enhanced_assessment
-
-        return (
-            DocumentOCRPage(
-                page_number=page_number,
-                regions=regions,
-                width=page_width,
-                height=page_height,
-                render_scale=source_scale * upscale,
-                rotation=rotation,
-                words=words,
-            ),
-            reader,
-            assessment,
-        )
-    finally:
-        prepared_image.close()
-
-
-def _ocr_cache_path(
-    file_bytes: bytes,
-    languages: Sequence[str],
-    render_dpi: int,
-    rotations: Sequence[int],
-    mime_type: str,
-    enhance_low_quality: bool,
-    max_render_dimension: Optional[int] = None,
-) -> Path:
-    document_hash = hashlib.sha256(file_bytes).hexdigest()[:20]
-    normalized_rotations = tuple(int(rotation) for rotation in rotations)
-
-    settings = json.dumps(
-        {
-            'languages': list(languages),
-            'mime_type': mime_type,
-            'enhance_low_quality': enhance_low_quality,
-            'dpi': render_dpi,
-            'rotations': normalized_rotations,
-            'max_render_dimension': max_render_dimension,
-            'version': POSITIONED_OCR_CACHE_VERSION,
-        },
-        sort_keys=True,
-    ).encode('utf-8')
-    settings_hash = hashlib.sha256(settings).hexdigest()[:12]
-    return (
-        POSITIONED_OCR_CACHE_DIRECTORY
-        / f'{document_hash}_{settings_hash}_regions_{POSITIONED_OCR_CACHE_VERSION}.json'
-    )
-
-
 def _serialize_ocr_page(page: DocumentOCRPage) -> dict:
     return {
         'page_number': page.page_number,
@@ -1061,7 +601,7 @@ def _deserialize_ocr_page(payload: dict, page_number: int) -> DocumentOCRPage:
         ]
 
     return DocumentOCRPage(
-        page_number=page_number,
+        page_number=int(payload.get('page_number', page_number)),
         regions=_deserialize_regions('regions'),
         width=float(payload['width']),
         height=float(payload['height']),
@@ -1078,455 +618,6 @@ def _deserialize_ocr_page(payload: dict, page_number: int) -> DocumentOCRPage:
         ),
         quality_defects=list(payload.get('quality_defects') or []),
     )
-
-
-def _read_ocr_cache(cache_path: Path) -> tuple[dict[str, dict], str | None]:
-    try:
-        payload = json.loads(cache_path.read_text(encoding='utf-8'))
-    except (OSError, ValueError, TypeError) as exc:
-        logger.warning(f'Ignoring unreadable OCR cache {cache_path}: {exc}')
-        return {}, None
-
-    if not isinstance(payload, dict):
-        logger.warning(f'Ignoring invalid OCR cache payload: {cache_path}')
-        return {}, None
-    if payload.get('pipeline_version') != OCR_PIPELINE_VERSION:
-        logger.info(f'Ignoring stale OCR cache version: {cache_path}')
-        return {}, None
-    pages = payload.get('pages')
-    if not isinstance(pages, dict):
-        logger.warning(f'Ignoring OCR cache without a pages mapping: {cache_path}')
-        return {}, None
-    cached_device = str(payload.get('device') or '').strip() or None
-    return pages, cached_device
-
-
-def _write_ocr_cache(
-    cache_path: Path,
-    pages: dict[str, dict],
-    *,
-    device: str,
-    languages: Sequence[str],
-) -> None:
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = cache_path.with_suffix(
-        f'.{os.getpid()}.{threading.get_ident()}.tmp'
-    )
-    payload = {
-        'pipeline_version': OCR_PIPELINE_VERSION,
-        'provider': POSITIONED_OCR_PROVIDER,
-        'model_version': EASYOCR_VERSION,
-        'device': device,
-        'languages': list(languages),
-        'pages': pages,
-    }
-    try:
-        temporary_path.write_text(
-            json.dumps(payload, ensure_ascii=False),
-            encoding='utf-8',
-        )
-        temporary_path.replace(cache_path)
-    finally:
-        if temporary_path.exists():
-            temporary_path.unlink()
-
-
-def _normalize_raster_frame(frame: Image.Image) -> Image.Image:
-    oriented_image = ImageOps.exif_transpose(frame)
-    try:
-        has_transparency = (
-            'A' in oriented_image.getbands()
-            or 'transparency' in oriented_image.info
-        )
-        if not has_transparency:
-            return oriented_image.convert('RGB')
-
-        rgba_image = oriented_image.convert('RGBA')
-        try:
-            normalized_image = Image.new('RGB', rgba_image.size, 'white')
-            normalized_image.paste(rgba_image, mask=rgba_image.getchannel('A'))
-            return normalized_image
-        finally:
-            rgba_image.close()
-    finally:
-        if oriented_image is not frame:
-            oriented_image.close()
-
-
-def _extract_raster_image_ocr(
-    file_bytes: bytes,
-    languages: Sequence[str],
-    device: str,
-    rotations: Sequence[int],
-    max_render_dimension: Optional[int],
-    cached_pages: dict[str, dict],
-    cache_path: Path,
-    use_cache: bool,
-    enhance_low_quality: bool,
-    max_pages: int,
-    max_image_pixels: int,
-    page_numbers: Sequence[int] | None,
-    cached_device: str | None,
-) -> DocumentOCRResult:
-    try:
-        source_image = Image.open(BytesIO(file_bytes))
-    except Exception as exc:
-        raise ValueError(f'Failed to open image for OCR: {exc}') from exc
-
-    try:
-        frame_count = int(getattr(source_image, 'n_frames', 1))
-    except Exception as exc:
-        source_image.close()
-        raise ValueError(f'Failed to inspect image pages: {exc}') from exc
-    if frame_count > max_pages:
-        source_image.close()
-        raise ValueError(
-            f'Document exceeds OCR page limit: {frame_count} pages '
-            f'(maximum {max_pages}).'
-        )
-
-    available_page_numbers = list(range(1, frame_count + 1))
-    selected_page_numbers = (
-        list(page_numbers) if page_numbers is not None else available_page_numbers
-    )
-    invalid_page_numbers = [
-        page_number
-        for page_number in selected_page_numbers
-        if page_number not in available_page_numbers
-    ]
-    if invalid_page_numbers:
-        source_image.close()
-        raise ValueError(
-            f'OCR page selection is outside the raster document: '
-            f'{invalid_page_numbers}.'
-        )
-    missing_page_numbers = [
-        page_number
-        for page_number in selected_page_numbers
-        if str(page_number) not in cached_pages
-    ]
-    reader = (
-        _get_easyocr_reader(tuple(languages), device)
-        if missing_page_numbers
-        else None
-    )
-    pages: list[DocumentOCRPage] = []
-    try:
-        for page_number in selected_page_numbers:
-            cached_page = cached_pages.get(str(page_number))
-            if cached_page is not None:
-                try:
-                    pages.append(_deserialize_ocr_page(cached_page, page_number))
-                except (KeyError, TypeError, ValueError) as exc:
-                    logger.warning(
-                        f'Ignoring invalid OCR cache page {page_number}: {exc}'
-                    )
-                else:
-                    continue
-
-            try:
-                source_image.seek(page_number - 1)
-                frame = source_image.copy()
-                try:
-                    source_page = _normalize_raster_frame(frame)
-                finally:
-                    frame.close()
-            except Exception as exc:
-                raise ValueError(
-                    f'Failed to decode image page {page_number}: {exc}'
-                ) from exc
-
-            pixel_count = source_page.width * source_page.height
-            if pixel_count > max_image_pixels:
-                source_page.close()
-                raise ValueError(
-                    f'Image page {page_number} exceeds OCR pixel limit: '
-                    f'{pixel_count} pixels (maximum {max_image_pixels}).'
-                )
-
-            render_scale = 1.0
-            processing_page = source_page
-            largest_dimension = max(source_page.width, source_page.height)
-            if max_render_dimension and largest_dimension > max_render_dimension:
-                render_scale = max_render_dimension / largest_dimension
-                processing_page = source_page.resize(
-                    (
-                        max(1, round(source_page.width * render_scale)),
-                        max(1, round(source_page.height * render_scale)),
-                    ),
-                    Image.Resampling.LANCZOS,
-                )
-
-            logger.info(
-                f'Raster OCR page {page_number}: '
-                f'image={processing_page.width}x{processing_page.height} '
-                f'enhance_low_quality={enhance_low_quality}'
-            )
-            try:
-                page, reader, assessment = _recognize_raster_candidate(
-                    reader,
-                    processing_page,
-                    rotations,
-                    languages,
-                    device,
-                    page_number,
-                    render_scale,
-                    enhance_low_quality,
-                )
-            finally:
-                if processing_page is not source_page:
-                    processing_page.close()
-                source_page.close()
-
-            logger.info(
-                f'Raster OCR page {page_number}: chars={len(page.text)} '
-                f'quality={assessment.status} score={assessment.score:.1f} '
-                f'confidence={assessment.average_confidence}'
-            )
-            pages.append(page)
-            cached_pages[str(page_number)] = _serialize_ocr_page(page)
-            if use_cache:
-                _write_ocr_cache(
-                    cache_path,
-                    cached_pages,
-                    device=_active_reader_device(reader, device),
-                    languages=languages,
-                )
-    finally:
-        source_image.close()
-
-    result = _build_ocr_result(
-        pages,
-        file_bytes=file_bytes,
-        languages=languages,
-        device=_active_reader_device(reader, cached_device or device),
-    )
-    if not result.text:
-        raise ValueError('Image OCR completed but produced no positioned text.')
-    return result
-
-
-def _extract_document_ocr_easyocr(
-    file_bytes: bytes,
-    source_language: Optional[str] = None,
-    *,
-    mime_type: str = 'application/pdf',
-    languages: Optional[Sequence[str]] = None,
-    ocr_device: Optional[str] = None,
-    render_dpi: int = POSITIONED_OCR_DPI,
-    rotations: Sequence[int] = OCR_ROTATIONS,
-    max_render_dimension: Optional[int] = None,
-    enhance_low_quality: bool = True,
-    use_cache: bool = True,
-    max_file_bytes: int = OCR_MAX_FILE_BYTES,
-    max_pages: int = OCR_MAX_PAGES,
-    max_image_pixels: int = OCR_MAX_IMAGE_PIXELS,
-    page_numbers: Optional[Sequence[int]] = None,
-) -> DocumentOCRResult:
-    """Extract positioned text from a PDF or image without business analysis.
-
-    This is the shared OCR boundary for every consumer. It returns text,
-    positions, confidence, generic quality signals, and reproducibility
-    metadata. Translation and document-specific field extraction belong
-    downstream and must not be implemented here.
-    """
-
-    if not file_bytes:
-        raise ValueError('Document data is empty.')
-    if max_file_bytes <= 0:
-        raise ValueError('max_file_bytes must be greater than zero.')
-    if len(file_bytes) > max_file_bytes:
-        raise ValueError(
-            f'Document exceeds OCR file limit: {len(file_bytes)} bytes '
-            f'(maximum {max_file_bytes}).'
-        )
-    if max_pages <= 0:
-        raise ValueError('max_pages must be greater than zero.')
-    if max_image_pixels <= 0:
-        raise ValueError('max_image_pixels must be greater than zero.')
-    if render_dpi <= 0:
-        raise ValueError('render_dpi must be greater than zero.')
-    if max_render_dimension is not None and max_render_dimension <= 0:
-        raise ValueError('max_render_dimension must be greater than zero.')
-
-    normalized_mime_type = str(mime_type or '').split(';', 1)[0].strip().lower()
-    if normalized_mime_type not in {
-        'application/pdf',
-        *SUPPORTED_RASTER_MIME_TYPES,
-    }:
-        raise ValueError(
-            f'Unsupported OCR mime type: {normalized_mime_type or "unknown"}'
-        )
-
-    selected_languages = list(languages or _get_easyocr_languages(source_language))
-    selected_languages = list(dict.fromkeys(selected_languages))
-    if not selected_languages:
-        raise ValueError('At least one OCR language is required.')
-
-    selected_rotations = tuple(int(rotation) for rotation in rotations)
-    if not selected_rotations or any(
-        rotation not in OCR_ROTATIONS for rotation in selected_rotations
-    ):
-        raise ValueError('rotations must contain one or more of 0, 90, 180, or 270.')
-
-    selected_page_numbers = None
-    if page_numbers is not None:
-        selected_page_numbers = sorted({int(page_number) for page_number in page_numbers})
-        if not selected_page_numbers or any(
-            page_number <= 0 for page_number in selected_page_numbers
-        ):
-            raise ValueError('page_numbers must contain positive page numbers.')
-
-    device = _resolve_easyocr_device(ocr_device)
-    cache_path = _ocr_cache_path(
-        file_bytes,
-        selected_languages,
-        render_dpi,
-        selected_rotations,
-        normalized_mime_type,
-        enhance_low_quality,
-        max_render_dimension=max_render_dimension,
-    )
-    cached_pages: dict[str, dict] = {}
-    cached_device = None
-    if use_cache and cache_path.exists():
-        cached_pages, cached_device = _read_ocr_cache(cache_path)
-
-    if normalized_mime_type in SUPPORTED_RASTER_MIME_TYPES:
-        return _extract_raster_image_ocr(
-            file_bytes=file_bytes,
-            languages=selected_languages,
-            device=device,
-            rotations=selected_rotations,
-            max_render_dimension=max_render_dimension,
-            cached_pages=cached_pages,
-            cache_path=cache_path,
-            use_cache=use_cache,
-            enhance_low_quality=enhance_low_quality,
-            max_pages=max_pages,
-            max_image_pixels=max_image_pixels,
-            page_numbers=selected_page_numbers,
-            cached_device=cached_device,
-        )
-
-    try:
-        pdf = pypdfium2.PdfDocument(BytesIO(file_bytes))
-    except Exception as exc:
-        raise ValueError(f'Failed to open PDF for OCR rendering: {exc}') from exc
-
-    pdf_page_count = len(pdf)
-    if pdf_page_count > max_pages:
-        pdf.close()
-        raise ValueError(
-            f'Document exceeds OCR page limit: {pdf_page_count} pages '
-            f'(maximum {max_pages}).'
-        )
-
-    pdf_page_numbers = (
-        selected_page_numbers
-        if selected_page_numbers is not None
-        else list(range(1, pdf_page_count + 1))
-    )
-    invalid_page_numbers = [
-        page_number
-        for page_number in pdf_page_numbers
-        if page_number > pdf_page_count
-    ]
-    if invalid_page_numbers:
-        pdf.close()
-        raise ValueError(
-            f'OCR page selection is outside the PDF: {invalid_page_numbers}.'
-        )
-
-    missing_pages = [
-        page_number
-        for page_number in pdf_page_numbers
-        if str(page_number) not in cached_pages
-    ]
-    reader = None
-    if missing_pages:
-        reader = _get_easyocr_reader(tuple(selected_languages), device)
-
-    default_scale = render_dpi / 72
-    pages: list[DocumentOCRPage] = []
-    try:
-        for page_number in pdf_page_numbers:
-            page = pdf[page_number - 1]
-            largest_page_dimension = max(float(page.get_width()), float(page.get_height()))
-            scale = default_scale
-            if max_render_dimension and largest_page_dimension > 0:
-                scale = min(scale, max_render_dimension / largest_page_dimension)
-
-            rendered_width = max(1, round(float(page.get_width()) * scale))
-            rendered_height = max(1, round(float(page.get_height()) * scale))
-            rendered_pixels = rendered_width * rendered_height
-            if rendered_pixels > max_image_pixels:
-                page.close()
-                raise ValueError(
-                    f'PDF page {page_number} exceeds OCR pixel limit after '
-                    f'rendering: {rendered_pixels} pixels '
-                    f'(maximum {max_image_pixels}).'
-                )
-
-            cached_page = cached_pages.get(str(page_number))
-            if cached_page is not None:
-                try:
-                    pages.append(_deserialize_ocr_page(cached_page, page_number))
-                except (KeyError, TypeError, ValueError) as exc:
-                    logger.warning(
-                        f'Ignoring invalid OCR cache page {page_number}: {exc}'
-                    )
-                else:
-                    page.close()
-                    continue
-
-            bitmap = page.render(scale=scale)
-            image: Image.Image = bitmap.to_pil()
-            try:
-                regions, words, page_width, page_height, rotation, reader = (
-                    _recognize_page_with_fallback(
-                        reader,
-                        image,
-                        selected_rotations,
-                        selected_languages,
-                        device,
-                        page_number,
-                    )
-                )
-            finally:
-                image.close()
-                page.close()
-
-            ocr_page = DocumentOCRPage(
-                page_number=page_number,
-                regions=regions,
-                width=page_width,
-                height=page_height,
-                render_scale=scale,
-                rotation=rotation,
-                words=words,
-            )
-            pages.append(ocr_page)
-            cached_pages[str(page_number)] = _serialize_ocr_page(ocr_page)
-            if use_cache:
-                _write_ocr_cache(
-                    cache_path,
-                    cached_pages,
-                    device=_active_reader_device(reader, device),
-                    languages=selected_languages,
-                )
-    finally:
-        pdf.close()
-
-    result = _build_ocr_result(
-        pages,
-        file_bytes=file_bytes,
-        languages=selected_languages,
-        device=_active_reader_device(reader, cached_device or device),
-    )
-    if not result.text:
-        raise ValueError('PDF OCR completed but produced no positioned text.')
-    return result
 
 
 def _document_ai_layout_text(document_text: str, layout) -> str:
@@ -1629,7 +720,7 @@ def _google_document_ai_cache_path(
     ).encode('utf-8')
     settings_hash = hashlib.sha256(settings).hexdigest()[:12]
     return (
-        POSITIONED_OCR_CACHE_DIRECTORY
+        OCR_CACHE_DIRECTORY
         / f'{document_hash}_{settings_hash}_google_{OCR_PIPELINE_VERSION}.json'
     )
 
@@ -1687,34 +778,6 @@ def _write_google_document_ai_cache(
     finally:
         if temporary_path.exists():
             temporary_path.unlink()
-
-
-class EasyOCRProvider:
-    name = EASYOCR_PROVIDER
-
-    def validate_configuration(self) -> None:
-        return None
-
-    def extract(self, request: DocumentOCRRequest) -> DocumentOCRResult:
-        result = _extract_document_ocr_easyocr(
-            request.file_bytes,
-            source_language=request.source_language,
-            mime_type=request.mime_type,
-            languages=request.languages,
-            ocr_device=request.ocr_device,
-            render_dpi=request.render_dpi,
-            rotations=request.rotations,
-            max_render_dimension=request.max_render_dimension,
-            enhance_low_quality=request.enhance_low_quality,
-            use_cache=request.use_cache,
-            max_file_bytes=request.max_file_bytes,
-            max_pages=request.max_pages,
-            max_image_pixels=request.max_image_pixels,
-            page_numbers=request.page_numbers,
-        )
-        result.provider = self.name
-        result.model_version = EASYOCR_VERSION
-        return result
 
 
 class GoogleDocumentAIProvider:
@@ -1903,12 +966,9 @@ class GoogleDocumentAIProvider:
 
 
 _OCR_PROVIDERS: dict[str, DocumentOCRProvider] = {
-    EASYOCR_PROVIDER: EasyOCRProvider(),
     GOOGLE_DOCUMENT_AI_PROVIDER: GoogleDocumentAIProvider(),
 }
 _OCR_PROVIDER_ALIASES = {
-    'easyocr': EASYOCR_PROVIDER,
-    EASYOCR_PROVIDER: EASYOCR_PROVIDER,
     'google': GOOGLE_DOCUMENT_AI_PROVIDER,
     'google_document_ai': GOOGLE_DOCUMENT_AI_PROVIDER,
     GOOGLE_DOCUMENT_AI_PROVIDER: GOOGLE_DOCUMENT_AI_PROVIDER,
@@ -1952,7 +1012,11 @@ def extract_document_ocr(
     max_image_pixels: int = OCR_MAX_IMAGE_PIXELS,
     page_numbers: Optional[Sequence[int]] = None,
 ) -> DocumentOCRResult:
-    """Extract canonical OCR output through the configured provider."""
+    """Extract canonical OCR output with Google Document AI.
+
+    Render/device options remain accepted for existing callers; managed OCR
+    performs its own rendering and does not initialize a local model.
+    """
 
     if not file_bytes:
         raise ValueError('Document data is empty.')
@@ -1979,7 +1043,7 @@ def extract_document_ocr(
         raise ValueError(
             f'Unsupported OCR mime type: {normalized_mime_type or "unknown"}'
         )
-    selected_languages = list(languages or _get_easyocr_languages(source_language))
+    selected_languages = list(languages or _get_ocr_languages(source_language))
     selected_languages = list(dict.fromkeys(selected_languages))
     if not selected_languages:
         raise ValueError('At least one OCR language is required.')
