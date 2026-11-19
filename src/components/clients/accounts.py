@@ -503,12 +503,23 @@ def get_complex_asset_transfer_brokers() -> dict:
     return ibkr_web_api.get_complex_asset_transfer_brokers()
 
 @handle_exception
-def read_ibkr_account_positions(account_id: str, credential: str | None = None) -> list:
+def read_ibkr_account_positions(account_id: str, credential: str | None = None, include_identifiers: bool = False) -> list:
     """Read current IBKR positions through a short-lived authenticated session."""
-    return ibkr_trading_api.read_account_positions(
+    positions = ibkr_trading_api.read_account_positions(
         account_id=account_id,
         credential=credential,
     )
+    if not include_identifiers or not positions:
+        return positions
+
+    try:
+        from src.components.tools.public.reporting import get_open_positions_report
+        from src.utils.position_identifiers import enrich_position_identifiers
+        reference_rows = get_open_positions_report(account_ids=[account_id])
+        return enrich_position_identifiers(positions, reference_rows, account_id)
+    except Exception:
+        logger.warning('Position identifiers unavailable; preserving live holdings')
+        return [{**position, 'identifierStatus': 'unavailable'} for position in positions]
 
 @handle_exception
 def transfer_positions_externally_complex(
@@ -522,7 +533,7 @@ def transfer_positions_externally_complex(
     pset_bic: str,
     client_instruction_id: int = None,
 ) -> dict:
-    """Submit a Treasury bill Basic FOP request through IBKR."""
+    """Submit a Treasury securities Basic FOP request through IBKR."""
     return ibkr_web_api.transfer_positions_externally_complex(
         account_id=account_id,
         master_account=master_account,

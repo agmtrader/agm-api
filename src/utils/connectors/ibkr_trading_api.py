@@ -1,4 +1,5 @@
 import json
+import math
 import time
 from contextlib import contextmanager
 from urllib.parse import urlsplit
@@ -18,6 +19,13 @@ class IBKRTradingAPI(IBKRWebAPI):
     def __init__(self):
         super().__init__()
         self.sso_token = None
+        self._market_http_session = requests.Session()
+
+    @property
+    def _market_http(self):
+        # Keep IBKR's api/affinity cookies and connections through the lifecycle.
+        # The fallback supports clients constructed without external dependencies.
+        return getattr(self, '_market_http_session', None) or requests
 
     def _require_sso_headers(self, content_type: str | None = "application/json") -> dict:
         if not self.sso_token:
@@ -53,7 +61,10 @@ class IBKRTradingAPI(IBKRWebAPI):
             }
 
             signed_jwt = self.sign_request(payload)
-            response = requests.post(url, data=signed_jwt, headers=headers)
+            transport = getattr(self, '_market_http_session', None)
+            if transport is not None:
+                transport.cookies.clear()
+            response = self._market_http.post(url, data=signed_jwt, headers=headers, timeout=(10, 45))
             if response.status_code != 200:
                 raise_ibkr_response_error(response, validation=False)
             data = response.json()
@@ -93,7 +104,7 @@ class IBKRTradingAPI(IBKRWebAPI):
                 "publish": True,
                 "compete": True,
             }
-            response = requests.post(url, data=json.dumps(payload), headers=headers)
+            response = self._market_http.post(url, data=json.dumps(payload), headers=headers, timeout=(10, 45))
             if response.status_code != 200:
                 raise_ibkr_response_error(response, trading_session=True, account_access=True)
             return response.json()
@@ -109,15 +120,17 @@ class IBKRTradingAPI(IBKRWebAPI):
         context prevents callers from using a half-ready session or leaking a
         brokerage session when an ETL step fails.
         """
-        self.create_sso_session(credential=credential, ip=ip)
         self._market_data_context = {'ip': ip, 'recoveries': [], 'failures': []}
         try:
+            self.create_sso_session(credential=credential, ip=ip)
             self.initialize_brokerage_session()
             # IBKR documents this settlement interval before further /iserver calls.
             time.sleep(2)
             accounts = self.get_brokerage_accounts()
+            readiness = self._wait_for_market_data_ready()
             logger.info(
-                f"IBKR market-data session ready: selected_account={accounts.get('selectedAccount')}"
+                f"IBKR market-data session ready: selected_account={accounts.get('selectedAccount')} "
+                f"established={readiness.get('established', 'unavailable')}"
             )
             yield self
         finally:
@@ -129,18 +142,48 @@ class IBKRTradingAPI(IBKRWebAPI):
                 finally:
                     self.sso_token = None
             self._market_data_context = None
+            transport = getattr(self, '_market_http_session', None)
+            if transport is not None:
+                transport.close()
+                self._market_http_session = requests.Session()
 
     def _market_auth_snapshot(self):
         """Retain only authentication flags; diagnostic failure cannot replace the read error."""
         try:
-            response = requests.post(self.BASE_URL + '/v1/api/iserver/auth/status',
+            response = self._market_http.post(self.BASE_URL + '/v1/api/iserver/auth/status',
                                      headers=self._require_sso_headers(), timeout=(10, 10))
             payload = response.json()
-            flags = {key: payload[key] for key in ('authenticated', 'connected', 'competing')
+            flags = {key: payload[key] for key in ('authenticated', 'connected', 'established', 'competing')
                      if isinstance(payload, dict) and type(payload.get(key)) is bool}
             return {'http_status': response.status_code, **flags}
         except (requests.RequestException, ValueError, ServiceError):
             return {'unavailable': True}
+
+    def _wait_for_market_data_ready(self):
+        """Initial authentication is not final brokerage establishment.
+
+        Some older IBKR responses omit the optional established flag. Honor it
+        whenever supplied; never accept an explicit false or missing auth flags.
+        This polls status only and never competes for/recreates another session.
+        """
+        for attempt in range(20):
+            status = self._market_auth_snapshot()
+            if status.get('competing') is True:
+                raise ServiceError('Another IBKR brokerage session is competing with this session.',
+                                   409, code='ibkr_session_competing')
+            if status.get('http_status') == 401:
+                raise ServiceError('The IBKR trading session has expired. Reconnect to IBKR and try again.',
+                                   409, code='ibkr_session_expired')
+            if (status.get('http_status') == 200 and status.get('authenticated') is True
+                    and status.get('connected') is True and status.get('established') is not False):
+                context = getattr(self, '_market_data_context', None)
+                if context is not None:
+                    context['readiness'] = status
+                return status
+            if attempt < 19:
+                time.sleep(1)
+        raise ServiceError('IBKR brokerage session did not become fully established.',
+                           409, code='ibkr_session_not_ready')
 
     def _request_market_data_json(self, method: str, url: str, **kwargs):
         """Recover one explicitly safe read per extract, retaining its warning.
@@ -157,27 +200,36 @@ class IBKRTradingAPI(IBKRWebAPI):
         kwargs.pop('headers', None)
         kwargs.setdefault('timeout', (10, 45))
         for attempt in range(2):
-            response = requests.request(method, url, headers=self._require_sso_headers(), **kwargs)
+            response = self._market_http.request(method, url, headers=self._require_sso_headers(), **kwargs)
             if response.status_code == 200:
                 return response.json()
             try:
                 raise_ibkr_response_error(response, trading_session=True, account_access=True)
             except ServiceError as error:
                 context = getattr(self, '_market_data_context', None)
+                auth_status = {}
                 if context and error.code in ('ibkr_session_expired', 'ibkr_session_not_ready'):
+                    auth_status = self._market_auth_snapshot()
                     context['failures'].append({'reason': error.code, 'endpoint': endpoint,
-                        'provider_diagnostics': error.details, 'auth_status': self._market_auth_snapshot()})
+                        'provider_diagnostics': error.details, 'auth_status': auth_status})
                 if (attempt or not context or context['recoveries']
                         or error.code not in ('ibkr_session_expired', 'ibkr_session_not_ready')):
+                    raise
+                if auth_status.get('competing') is True:
                     raise
                 record = {'reason': error.code, 'endpoint': endpoint}
                 context['recoveries'].append(record)
                 logger.warning(f'IBKR_MARKET_SESSION_RECOVERY reason={error.code} endpoint={endpoint} attempt=1 limit=1')
-                if error.code == 'ibkr_session_expired':
+                # The accounts-first 500 also occurs after the brokerage session
+                # disconnects. An accounts read cannot restore that session.
+                if (error.code == 'ibkr_session_expired' or auth_status.get('authenticated') is False
+                        or auth_status.get('connected') is False):
+                    record['session_recreated'] = True
                     self.create_sso_session(ip=context['ip'])
                     self.initialize_brokerage_session()
                     time.sleep(2)
                 self.get_brokerage_accounts()
+                self._wait_for_market_data_ready()
                 if endpoint == 'marketdata/history':
                     time.sleep(1.25)
 
@@ -186,7 +238,7 @@ class IBKRTradingAPI(IBKRWebAPI):
         try:
             original_creds = self._apply_credentials("I6413690")
             url = f"{self.BASE_URL}/v1/api/logout"
-            response = requests.post(url, headers=self._require_sso_headers())
+            response = self._market_http.post(url, headers=self._require_sso_headers(), timeout=(10, 20))
             if response.status_code != 200:
                 raise_ibkr_response_error(response, trading_session=True, account_access=True)
             logger.success("Logged out of brokerage session successfully")
@@ -208,7 +260,7 @@ class IBKRTradingAPI(IBKRWebAPI):
             market_context = getattr(self, '_market_data_context', None)
             max_attempts = 20 if market_context else 3
             for attempt in range(1, max_attempts + 1):
-                response = requests.get(url, headers=headers, timeout=(10, 20))
+                response = self._market_http.get(url, headers=headers, timeout=(10, 20))
                 if response.status_code != 200:
                     raise_ibkr_response_error(response, trading_session=True, account_access=True)
 
@@ -258,7 +310,7 @@ class IBKRTradingAPI(IBKRWebAPI):
                 and urlsplit(url).path in ('/v1/api/iserver/watchlists', '/v1/api/iserver/watchlist')):
             return self._request_market_data_json(method, url, **kwargs)
         self._prime_iserver_session(reason)
-        response = requests.request(method, url, headers=headers, **kwargs)
+        response = self._market_http.request(method, url, headers=headers, **kwargs)
 
         should_retry = (
             response.status_code in (410, 500)
@@ -269,7 +321,7 @@ class IBKRTradingAPI(IBKRWebAPI):
         )
         if should_retry:
             self._prime_iserver_session(f"{reason} retry")
-            response = requests.request(method, url, headers=headers, **kwargs)
+            response = self._market_http.request(method, url, headers=headers, **kwargs)
 
         if response.status_code != 200:
             raise_ibkr_response_error(response, trading_session=True, account_access=True)
@@ -415,7 +467,11 @@ class IBKRTradingAPI(IBKRWebAPI):
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 
     @handle_exception
-    def get_market_data_snapshot(self, conids: str):
+    def get_market_data_snapshot(self, conids: str, *, poll_interval: float | None = None,
+                                 timeout: float = 10.0, settle_seconds: float = 0.75):
+        if poll_interval is not None and (not all(math.isfinite(value) for value in (poll_interval, timeout, settle_seconds))
+                                         or poll_interval < 0.1 or timeout <= 0 or settle_seconds < 0):
+            raise ValueError('Snapshot polling requires interval >= 0.1, timeout > 0 and settle_seconds >= 0')
         try:
             original_creds = self._apply_credentials("I6413690")
             url = f"{self.BASE_URL}/v1/api/iserver/marketdata/snapshot?conids={conids}"
@@ -452,35 +508,126 @@ class IBKRTradingAPI(IBKRWebAPI):
                 MarketDataField.BOND_STATE_CODE,
             ]
             fields_str = ",".join(str(field.value) for field in desired_fields)
+            if poll_interval is not None:
+                raw_data = self._poll_market_data_snapshot(
+                    f"{url}&fields={fields_str}", conids.split(','), poll_interval, timeout, settle_seconds)
+                return self._translate_market_data_snapshot(raw_data)
             self._request_market_data_json('GET', f"{url}&fields={fields_str}")
 
             logger.info("Waiting for market data snapshot to be ready")
             time.sleep(10)
+            context = getattr(self, '_market_data_context', None) or {}
+            recovery_count = len(context.get('recoveries', []))
             raw_data = self._request_market_data_json('GET', f"{url}&fields={fields_str}")
-
-            def _translate_fields(item: dict):
-                mapped = {}
-                for key, value in item.items():
-                    if isinstance(key, str) and key.isdigit():
-                        try:
-                            mapped[MarketDataField(int(key)).name] = value
-                        except ValueError:
-                            mapped[key] = value
-                    else:
-                        mapped[key] = value
-                return mapped
-
-            if isinstance(raw_data, list):
-                mapped_data = [_translate_fields(entry) for entry in raw_data]
-            elif isinstance(raw_data, dict):
-                mapped_data = _translate_fields(raw_data)
-            else:
-                mapped_data = raw_data
+            # A recovery during retrieval opens fresh subscriptions. An identity-
+            # only acknowledgement is preflight, not the completed snapshot.
+            recreated = any(record.get('session_recreated') for record in
+                            context.get('recoveries', [])[recovery_count:])
+            if recreated and isinstance(raw_data, list) and any(
+                isinstance(row, dict) and not any(
+                    isinstance(key, str) and key.isdigit() and int(key) not in (6119, 6509)
+                    for key in row
+                ) for row in raw_data
+            ):
+                logger.warning('IBKR_SNAPSHOT_REPRIMED waiting for recovered market-data subscriptions')
+                time.sleep(10)
+                raw_data = self._request_market_data_json('GET', f"{url}&fields={fields_str}")
 
             logger.success("Market data snapshot fetched successfully")
-            return mapped_data
+            return self._translate_market_data_snapshot(raw_data)
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
+
+    @staticmethod
+    def _translate_market_data_snapshot(raw_data):
+        def translate(item):
+            mapped = {}
+            for key, value in item.items():
+                if isinstance(key, str) and key.isdigit():
+                    try:
+                        key = MarketDataField(int(key)).name
+                    except ValueError:
+                        pass
+                mapped[key] = value
+            return mapped
+        if isinstance(raw_data, list):
+            return [translate(row) for row in raw_data]
+        return translate(raw_data) if isinstance(raw_data, dict) else raw_data
+
+    def _poll_market_data_snapshot(self, url, conids, interval, timeout, settle_seconds):
+        """Merge incremental fields; stabilize coverage rather than changing prices.
+
+        A deadline is reported as partial readiness, never as complete quote data.
+        Recreating SSO invalidates all previously accumulated subscription data.
+        """
+        expected = set(conids)
+        if not expected or any(not value.isdigit() for value in expected) or len(expected) > 100:
+            raise ValueError('Snapshot polling accepts 1–100 numeric contract IDs')
+        started = time.monotonic()
+        deadline = started + timeout
+        rows, previous_coverage, stable_since = {}, None, started
+        polls = 0
+        context = getattr(self, '_market_data_context', None) or {}
+        if context:
+            context.pop('snapshot_polling', None)
+        def usable(value):
+            return value is not None and str(value).strip().lower() not in ('', '-', '--', 'n/a', 'nan', 'none', 'null')
+        while True:
+            recoveries_before = len(context.get('recoveries', []))
+            payload = self._request_market_data_json('GET', url)
+            polls += 1
+            if any(record.get('session_recreated') for record in context.get('recoveries', [])[recoveries_before:]):
+                rows.clear()
+                previous_coverage = None
+            if not isinstance(payload, list):
+                raise ValueError('Snapshot polling expected a list of rows')
+            seen = set()
+            for row in payload:
+                conid = str(row.get('conid', '')) if isinstance(row, dict) else ''
+                if conid not in expected or conid in seen:
+                    raise ValueError('Snapshot polling returned an unknown or duplicate contract')
+                seen.add(conid)
+                rows.setdefault(conid, {}).update(row)
+            now = time.monotonic()
+            coverage = frozenset((conid, key) for conid, row in rows.items()
+                                 for key, value in row.items() if key.isdigit() and usable(value))
+            if coverage != previous_coverage:
+                previous_coverage, stable_since = coverage, now
+            quote_ready = {conid for conid, row in rows.items()
+                           if not row.get('error') and usable(row.get('55')) and usable(row.get('7220'))
+                           and any(usable(row.get(key)) for key in ('31', '84', '86'))}
+            ready = quote_ready == expected and now - stable_since >= settle_seconds
+            timed_out = now >= deadline and not ready
+            metrics = {'requests': polls, 'elapsed_seconds': now - started,
+                       'quote_ready_contracts': len(quote_ready), 'requested_contracts': len(expected),
+                       'coverage_stable': ready, 'timed_out': timed_out}
+            if context:
+                context['snapshot_polling'] = metrics
+            if ready or timed_out:
+                logger.info(f"IBKR_SNAPSHOT_POLLING requests={polls} ready={len(quote_ready)}/{len(expected)} "
+                            f"seconds={now - started:.3f} timed_out={timed_out}")
+                return [rows[conid] for conid in conids if conid in rows]
+            time.sleep(min(interval, max(0, deadline - now)))
+
+    @handle_exception
+    def unsubscribe_all_market_data(self):
+        """Release this owned market-data session's streams without reconnecting.
+
+        Subscription cleanup must be confirmed before the next batch. It is not
+        included in automatic safe-read recovery, despite its HTTP GET method.
+        """
+        if not getattr(self, '_market_data_context', None):
+            raise ServiceError('Subscription cleanup requires an owned market-data session.',
+                               409, code='ibkr_session_required')
+        response = self._market_http.get(self.BASE_URL + '/v1/api/iserver/marketdata/unsubscribeall',
+                                        headers=self._require_sso_headers(), timeout=(10, 20))
+        if response.status_code != 200:
+            raise_ibkr_response_error(response, trading_session=True, account_access=True)
+        payload = response.json()
+        if not isinstance(payload, dict) or payload.get('unsubscribed') is not True:
+            raise ServiceError('IBKR did not confirm market-data subscription cleanup.',
+                               502, code='ibkr_market_data_cleanup_unconfirmed')
+        return payload
 
     @handle_exception
     def get_market_scanner_params(self) -> dict:

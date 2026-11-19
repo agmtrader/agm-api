@@ -8,7 +8,7 @@ from pathlib import Path
 from agm_mcp import VERSION
 
 HERE = Path(__file__).resolve().parent
-DEFAULT = Path.home() / "Documents/Codex/agm-marketplace/plugins/agm"
+DEFAULT = Path.home() / "Library/Mobile Documents/com~apple~CloudDocs/Codex/Marketplaces/agm/plugins/agm"
 
 
 def write_json(path, value):
@@ -41,7 +41,7 @@ def main():
     existing.setdefault("mcpServers", {}).update(config["mcpServers"])
     write_json(mcp_path, existing)
     manifest["mcpServers"] = "./.mcp.json"
-    if manifest.get("version") in {"0.1.4", "0.1.5", "0.2.0", VERSION}:
+    if manifest.get("version") in {"0.1.4", "0.1.5", "0.2.0", "0.3.0", "0.3.1", VERSION}:
         manifest["version"] = VERSION
     interface = manifest.get("interface", {})
     old_note = " Includes the AGM API connector for documented routes using your AGM account."

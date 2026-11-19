@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from src.components.clients import accounts
 from src.utils.exception import ServiceError
+from src.utils.treasury import is_treasury_position
 
 
 def now():
@@ -104,7 +105,7 @@ def validate_request(payload, account):
         raise ServiceError('Trade date must be current or within 30 days; settlement cannot precede trade', 400)
     positions = payload.get('positions')
     if not isinstance(positions, list) or not 1 <= len(positions) <= 100:
-        raise ServiceError('Select between 1 and 100 Treasury-bill positions', 400)
+        raise ServiceError('Select between 1 and 100 Treasury positions', 400)
     normalized = []
     seen = set()
     for position in positions:
@@ -126,16 +127,17 @@ def validate_request(payload, account):
 
 def enrich_positions(data):
     """Recheck holdings on submission; never trust browser asset class/quantity labels."""
-    holdings = accounts.read_ibkr_account_positions(data['accountId'])
+    holdings = accounts.read_ibkr_account_positions(data['accountId'], include_identifiers=True)
     positions = {str(p.get('conid')): p for p in holdings if isinstance(p, dict)}
     for selected in data['positions']:
         p = positions.get(selected['conid'], {})
         try:
-            sufficient = Decimal(str(p.get('position', 0))) >= selected['quantity']
+            available = Decimal(str(p.get('position', 0)))
+            sufficient = available.is_finite() and available > 0 and available >= selected['quantity']
         except InvalidOperation:
             sufficient = False
-        if not sufficient or (p.get('secType') or p.get('assetClass')) != 'BILL' or p.get('currency') != data['currency']:
-            raise ServiceError('Selected Treasury-bill holdings or quantities changed; reload positions', 409)
+        if not sufficient or not is_treasury_position(p) or p.get('currency') != data['currency']:
+            raise ServiceError('Select a held Treasury bill, note or bond with sufficient quantity and matching currency; reload positions', 409)
         selected['description'] = str(p.get('description') or '')
         selected['quantityUnit'] = 'IBKR position quantity'
         for key in ('cusip', 'isin', 'maturityDate'):
@@ -231,6 +233,7 @@ def refresh_transfer(payload):
     record = read_record(payload.get('transfer_id'), payload.get('account_id'))
     response = accounts.ibkr_web_api.get_external_transfer_status(master_account=record['master_account'],
         instruction_id=record['instruction_id'], client_instruction_id=str(record['client_instruction_id']))
+    print(response)
     return save_fields(record, response_fields(response, record))
 
 

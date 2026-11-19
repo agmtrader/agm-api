@@ -1427,7 +1427,8 @@ class IBKRWebAPI:
             if response.status_code not in (200, 208):
                 raise_ibkr_response_error(response, account_access="/accounts" in url)
             logger.success(f"Status of instruction fetched successfully")
-            return response.json()
+            data = response.json()
+            return data
         finally:
             self.CLIENT_ID, self.KEY_ID, self.CLIENT_PRIVATE_KEY = original_creds
 

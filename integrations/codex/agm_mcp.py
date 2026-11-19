@@ -16,7 +16,7 @@ from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 ORIGIN = "https://api.agmtechnology.com"
-VERSION = "0.3.0"
+VERSION = "0.3.2"
 DOCS = Path(__file__).with_name("docs.html")
 if not DOCS.is_file():  # Development checkout; installed plugins bundle a snapshot.
     DOCS = Path(__file__).resolve().parents[2] / "public/static/docs.html"

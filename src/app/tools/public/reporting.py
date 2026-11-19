@@ -247,15 +247,20 @@ def get_open_positions_report_route():
 @bp.route('/trades', methods=['GET'])
 @format_response
 def get_trades_report_route():
-    """Read the trades reporting dataset filtered by one or more years and months."""
+    """Read trades for explicit comma-separated years and months (01–12). Use one or two months per request for large reports."""
     years = request.args.get('years', '').split(',')
     months = request.args.get('months', '').split(',')
-    
-    # Clean empty strings if any
     years = [y.strip() for y in years if y.strip()]
     months = [m.strip() for m in months if m.strip()]
-    
-    return get_trades_report(years, months)
+
+    if not years or not months:
+        raise ServiceError('Supply both years and months for the trades report.', 400, code='trade_period_required')
+    if any(not re.fullmatch(r'[0-9]{4}', year) for year in years) or any(
+        not re.fullmatch(r'0?[1-9]|1[0-2]', month) for month in months
+    ):
+        raise ServiceError('Use four-digit years and months from 01 through 12.', 400, code='invalid_trade_period')
+
+    return get_trades_report(list(dict.fromkeys(years)), list(dict.fromkeys(month.zfill(2) for month in months)))
 
 @bp.route('/ibkr_details', methods=['GET'])
 @format_response

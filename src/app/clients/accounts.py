@@ -489,7 +489,8 @@ def read_ibkr_account_positions_route():
     credential = request.args.get('credential') or None
     if not account_id:
         return {"error": "account_id is required"}, 400
-    return read_ibkr_account_positions(account_id=account_id, credential=credential)
+    include_identifiers = request.args.get('include_identifiers', '0') == '1'
+    return read_ibkr_account_positions(account_id=account_id, credential=credential, include_identifiers=include_identifiers)
 
 @bp.route('/ibkr/external_asset_transfer', methods=['POST'])
 @format_response
