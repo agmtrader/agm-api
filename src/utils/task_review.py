@@ -124,6 +124,9 @@ def review_view(feeds, health, args):
             or fresh not in ('all', 'fresh', 'stale', 'unavailable') or restriction not in ('all', 'restricted', 'unrestricted', 'unknown')
             or offset < 0 or not 1 <= limit <= 200 or len(query) > 200 or (master and not re.fullmatch(r'[A-Z]+\d+|unknown', master))):
         raise ValueError('Invalid task review filters')
+    task_type = args.get('task_type', '')
+    if len(task_type) > 1000:
+        raise ValueError('Invalid task type')
     account_id = args.get('account_id', '').strip().upper()
     detail = args.get('detail')
     rows, accounts, raw = build_review(feeds, health, detail)
@@ -142,12 +145,19 @@ def review_view(feeds, health, args):
             and (restriction == 'all' or row['restriction'] == restriction)
             and (not query or query in ' '.join(str(row.get(k) or '') for k in ('account_id', 'account_title', 'title', 'task_number', 'form_number', 'person', 'state', 'action')).lower()))
     filtered = [row for row in rows if common(row)]
+    # Facets cover every matching page and ignore their own selection.
+    type_counts = Counter(row['title'] for row in filtered
+                          if status == 'all' or row['completed'] == (status == 'completed'))
+    if view == 'tasks' and task_type:
+        filtered = [row for row in filtered if row['title'] == task_type]
     counts = Counter('completed' if row['completed'] else 'pending' for row in filtered)
     selected = [row for row in filtered if status == 'all' or row['completed'] == (status == 'completed')]
     selected.sort(key=lambda row: (row['account_id'], row['title'].lower(), row['source'], row['id']))
     account_rows = sorted((a for a in accounts.values() if common(a, True)), key=lambda row: row['account_id'])
     result_rows = selected if view == 'tasks' else account_rows
     return {'schema_version': 1, 'view': view, 'status': status, 'sources': health,
+        'task_types': [{'name': name, 'count': count} for name, count in
+                       sorted(type_counts.items(), key=lambda item: (item[0].casefold(), item[0]))],
         'masters': sorted({a['master_account'] for a in accounts.values() if a['master_account']}),
         'total': len(result_rows), 'offset': offset, 'limit': limit,
         'summary': {'pending': counts['pending'], 'completed': counts['completed'],
