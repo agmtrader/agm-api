@@ -213,6 +213,7 @@ def submit_transfer(payload):
             positions=data['positions'], contra_broker_info=data['contraBrokerInfo'], currency=data['currency'],
             trade_date=data['nonDisclosedDetail']['tradeDate'], settle_date=data['nonDisclosedDetail']['settleDate'],
             pset_bic=data['nonDisclosedDetail']['psetBic'], client_instruction_id=record['client_instruction_id'])
+        print(result)
         fields = response_fields(result, record)
     except ServiceError as error:
         if error.status_code in (400, 403, 422):
