@@ -443,16 +443,42 @@ def kpis(rows):
 
 
 def pdf_text(content, *, ocr=False):
-    if not content.startswith(b'%PDF-'):
+    if not content.startswith(b'%PDF-') or len(content) > MAX_FILE:
         raise StatementError('The original PDF is invalid.')
     try:
         command = [sys.executable, str(Path(__file__).parents[3] / 'utils/accounting_pdf.py')]
-        if ocr:
-            command.append('--ocr')
         result = subprocess.run(command, input=content, capture_output=True, check=True, timeout=90)
-        return json.loads(result.stdout)['text']
-    except (subprocess.SubprocessError, OSError, ValueError, KeyError):
-        raise StatementError('PDF text could not be extracted. Check the original and local OCR availability.') from None
+        extracted = json.loads(result.stdout)
+        text = extracted['text']
+        page_count = int(extracted['page_count'])
+        if not isinstance(text, str) or page_count < 1:
+            raise ValueError('Invalid PDF extraction result.')
+    except (subprocess.SubprocessError, OSError, ValueError, TypeError, KeyError):
+        raise StatementError('PDF text could not be extracted. Check the original PDF.') from None
+    if not ocr:
+        return text
+
+    from src.components.clients.document_processing import extract_document_ocr, GOOGLE_DOCUMENT_AI_PROVIDER
+    try:
+        result = extract_document_ocr(
+            content,
+            source_language='en',
+            languages=['en'],
+            mime_type='application/pdf',
+            provider=GOOGLE_DOCUMENT_AI_PROVIDER,
+            page_numbers=list(range(1, min(page_count, 2) + 1)),
+            max_file_bytes=MAX_FILE,
+            max_pages=2,
+            use_cache=False,
+        )
+    except Exception as exc:
+        raise StatementError(
+            f'Google Document AI OCR failed ({type(exc).__name__}). '
+            'Check processor access and configuration.'
+        ) from exc
+    if not result.text.strip():
+        raise StatementError('Google Document AI OCR returned no text for the statement summary.')
+    return result.text
 
 
 def _summary(account, year, month, row):
@@ -469,7 +495,7 @@ def _summary(account, year, month, row):
         mode = 'native'
         if len(text.strip()) < 80:
             text = pdf_text(content, ocr=True)
-            mode = 'local_ocr'
+            mode = 'google_document_ai'
         result = parse_bank_summary(text, account, year, month)
         result['extraction'] = mode
         return result

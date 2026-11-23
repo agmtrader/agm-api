@@ -3,6 +3,7 @@ pytest==9.1.1
 PyYAML==6.0.3
 
 # Standalone developer reports and QR tooling; excluded from production images.
+Pillow==11.3.0
 reportlab==4.1.0
 pymupdf==1.28.0
 qrcode[pil]==8.2
