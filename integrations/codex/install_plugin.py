@@ -35,13 +35,18 @@ def main():
         shutil.copy2(HERE / name, destination / name)
     shutil.copyfile(HERE.parent.parent / "public/static/docs.html", destination / "docs.html")
     shutil.copyfile(HERE / "README.md", destination / "README.md")
-    skill = root / "skills/agm-api"
-    skill.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(HERE / "skills/agm-api/SKILL.md", skill / "SKILL.md")
-    existing.setdefault("mcpServers", {}).update(config["mcpServers"])
+    # API usage guidance is supplied by the MCP server, not a separate skill.
+    retired_skill = root / "skills/agm-api/SKILL.md"
+    retired_skill.unlink(missing_ok=True)
+    if retired_skill.parent.is_dir() and not any(retired_skill.parent.iterdir()):
+        retired_skill.parent.rmdir()
+    servers = existing.setdefault("mcpServers", {})
+    for legacy_name in ("agm-api", "Agm-api"):
+        servers.pop(legacy_name, None)
+    servers.update(config["mcpServers"])
     write_json(mcp_path, existing)
     manifest["mcpServers"] = "./.mcp.json"
-    if manifest.get("version") in {"0.1.4", "0.1.5", "0.2.0", "0.3.0", "0.3.1", VERSION}:
+    if manifest.get("version") in {"0.1.4", "0.1.5", "0.2.0", "0.3.0", "0.3.1", "0.3.2", "0.3.3", "0.3.4", "0.3.5", "0.3.6", "0.3.7", VERSION}:
         manifest["version"] = VERSION
     interface = manifest.get("interface", {})
     old_note = " Includes the AGM API connector for documented routes using your AGM account."

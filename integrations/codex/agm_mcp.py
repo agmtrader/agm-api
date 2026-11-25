@@ -16,7 +16,7 @@ from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 ORIGIN = "https://api.agmtechnology.com"
-VERSION = "0.3.2"
+VERSION = "0.3.8"
 DOCS = Path(__file__).with_name("docs.html")
 if not DOCS.is_file():  # Development checkout; installed plugins bundle a snapshot.
     DOCS = Path(__file__).resolve().parents[2] / "public/static/docs.html"
@@ -54,6 +54,40 @@ SEGMENT = r"[A-Za-z0-9_-]+"
 VAR = re.compile(r"<(?:(uuid|string|int):)?([A-Za-z_]\w*)>")
 UUID = r"[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}"
 TOKEN = re.compile(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
+
+
+LOGIN_COMMAND = '"$HOME/Library/Mobile Documents/com~apple~CloudDocs/Codex/Marketplaces/agm/plugins/agm/mcp/launch" login'
+SERVER_INSTRUCTIONS = (
+    "Find and describe documented AGM endpoints first; use read_api for data. "
+    "Only reviewed read-only GET routes are available; changing records, sending email "
+    "and triggering ETL are outside this connector. Never ask for an AGM password or JWT "
+    f"in chat. If sign-in is required, ask the user to run {LOGIN_COMMAND} in Terminal "
+    "and refresh the session before further API calls. "
+    "Use GET /reporting/rtd for corporate bonds and GET /reporting/ust_bonds for U.S. Treasuries. "
+    "For broad or historical reports, plan small, nonoverlapping batches using documented "
+    "date filters or pagination, preserving all other filters. If no supported partition "
+    "exists, use the documented report and disclose any size limit reached. "
+    "Use save_response=true for large row sets and run at most two independent requests "
+    "at a time. With cursor pagination, inspect each page before requesting the next. "
+    "If a batch times out or exceeds the download limit, split it using supported filters "
+    "and retain successful results. Read saved private response files locally; verify row "
+    "counts, dates and coverage. Distinguish periods with rows, periods without rows and "
+    "failed reads. No rows does not establish zero activity; rows can represent a partial "
+    "snapshot. Verify freshness using a source timestamp or separate publication evidence; "
+    "otherwise state that freshness could not be verified."
+)
+TRADE_GUIDANCE = (
+    "Use explicit years and months: one year and at most two months per call. "
+    "For a past year, cover all twelve months unless the user narrows the scope; for the "
+    "current year, cover January through the current month in the user's timezone. "
+    "months must be a single comma-separated string, e.g. "
+    'query={"years":"2026","months":"01,02"} with save_response=true. '
+    "Continue with 03,04, 05,06 and the rest of the requested period. Split a two-month "
+    "batch into single months on timeout or download-limit errors. Check returned Year "
+    "and Month against every requested month. Use TradeDate for the last trade date "
+    'actually present. Count only rows where LevelOfDetail == "EXECUTION" when reporting '
+    "executions; the report also includes order, lot and summary rows."
+)
 
 
 class BridgeError(Exception):
@@ -113,6 +147,9 @@ def catalog():
     table.close()
     if not table.routes:
         raise BridgeError("The bundled AGM documentation contains no routes.")
+    trades = table.routes.get(("GET", "/reporting/trades"))
+    if trades is not None:
+        trades["usage_notes"] = TRADE_GUIDANCE
     return table.routes
 
 
@@ -240,7 +277,7 @@ def response_result(response, save_response):
     if 300 <= response.status < 400:
         return {**info, "message": "Upstream redirect blocked; no credentials were forwarded."}
     if response.status == 401:
-        info["session_help"] = "If the AGM session expired, run the local login command again."
+        info["session_help"] = f"Sign in again from Terminal: {LOGIN_COMMAND}"
     if save_response and response.status < 300:
         return {**info, **save_result(response)}
     data = response.read(MAX_INLINE + 1)
@@ -286,7 +323,7 @@ TOOLS = [
           "limit": {"type": "integer", "minimum": 1, "maximum": 30}}),
     tool("describe_endpoint", "Describe one exact AGM API operation and identify the tool needed to invoke it.",
          OP_SCHEMA, ("method", "path")),
-    tool("read_api", "Read data from an AGM API endpoint listed as read_api. Uses the local AGM user's bearer session.",
+    tool("read_api", "Read data from an AGM API endpoint listed as read_api. Uses the local AGM user's bearer session. Batch large reports, verify period coverage, and use save_response for large results.",
          REQUEST_SCHEMA, ("method", "path")),
 ]
 
@@ -319,8 +356,8 @@ def dispatch(message, routes):
         requested = message.get("params", {}).get("protocolVersion")
         return {"protocolVersion": requested if requested in SUPPORTED_PROTOCOLS else SUPPORTED_PROTOCOLS[0],
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "agm-api", "version": VERSION},
-                "instructions": "Find and describe documented AGM endpoints first. Never ask for an AGM password or JWT in chat. Only reviewed read-only GET routes are available."}
+                "serverInfo": {"name": "AGM-API", "version": VERSION},
+                "instructions": SERVER_INSTRUCTIONS}
     if method == "ping":
         return {}
     if method == "tools/list":

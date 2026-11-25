@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "agm-api": {
+    "AGM-API": {
       "command": "./mcp/launch",
       "args": ["serve"],
       "cwd": ".",

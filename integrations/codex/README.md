@@ -1,6 +1,6 @@
 # AGM API connector for Codex
 
-The canonical AGM marketplace is `~/Library/Mobile Documents/com~apple~CloudDocs/Codex/Marketplaces/agm` in iCloud Drive. The AGM plugin includes an `agm-api` skill and a local MCP server for `https://api.agmtechnology.com`. Its catalog intersects the generated API documentation with a list of reviewed GET routes. AGM enforces the signed-in user's existing scopes and ownership rules.
+The canonical AGM marketplace is `~/Library/Mobile Documents/com~apple~CloudDocs/Codex/Marketplaces/agm` in iCloud Drive. The AGM plugin includes a local MCP server for `https://api.agmtechnology.com`. Its catalog intersects the generated API documentation with a list of reviewed GET routes. AGM enforces the signed-in user's existing scopes and ownership rules.
 
 Sign in from Terminal:
 
@@ -14,7 +14,7 @@ The command prompts for email and a hidden password and saves the short-lived JW
 - `describe_endpoint` shows the exact route template and documented parameters.
 - `read_api` retrieves an allowed GET route. Supply template values in `path_parameters`. Array query values repeat the key. Use `save_response` for large results such as the bond report. Inline responses are capped at 256 KiB and private local downloads at 128 MiB.
 
-The AGM API skill describes how to batch large reports with `read_api` and verify the coverage of each response.
+The MCP server supplies report batching, coverage, freshness and sign-in guidance directly. Trade-specific period and execution-row rules are returned by `find_endpoints` and `describe_endpoint` for `GET /reporting/trades`. No separate API skill is needed.
 
 Both write methods and GET routes with operational side effects are excluded. Newly documented routes require review before they are added to the allowed set.
 
@@ -26,4 +26,4 @@ codex plugin marketplace add "$HOME/Library/Mobile Documents/com~apple~CloudDocs
 codex plugin add agm@agm
 ```
 
-The installer requires Python 3.10+, preserves the other AGM skills and bundles the local generated API docs. Open a new Codex chat to load the updated connector.
+The installer requires Python 3.10+, removes the retired API skill, preserves the other AGM skills and bundles the local generated API docs. Open a new Codex chat to load the updated connector.
